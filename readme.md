@@ -127,7 +127,7 @@
 <p>Feel free to fork this repo and submit pull requests for bug fixes, new features, or UI improvements!</p>
 <h2>License</h2>
 <p>This project is under the MIT Licence</p>
-### Included Third-Party Tools
+<h2>Included Third-Party Tools</h2>
 
 This project includes a pre-compiled binary of `yt-dlp` for handling certain video downloads. `yt-dlp` is in the public domain. For more information or to get the latest version, please visit the official [yt-dlp GitHub repository](https://github.com/yt-dlp/yt-dlp).
 
