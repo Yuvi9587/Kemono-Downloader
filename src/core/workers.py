@@ -10,13 +10,13 @@ import http
 import html
 import json
 from collections import deque, defaultdict
-from datetime import datetime 
+from datetime import datetime
 import hashlib
 from concurrent.futures import ThreadPoolExecutor, as_completed, CancelledError, Future
 from io import BytesIO
-from urllib .parse import urlparse 
+from urllib .parse import urlparse
 import requests
-import cloudscraper 
+import cloudscraper
 
 try:
     from PIL import Image
@@ -39,7 +39,7 @@ try:
     from docx import Document
 except ImportError:
     Document = None
-from PyQt5 .QtCore import Qt ,QThread ,pyqtSignal ,QMutex ,QMutexLocker ,QObject ,QTimer ,QSettings ,QStandardPaths ,QCoreApplication ,QUrl ,QSize ,QProcess 
+from PyQt5 .QtCore import Qt ,QThread ,pyqtSignal ,QMutex ,QMutexLocker ,QObject ,QTimer ,QSettings ,QStandardPaths ,QCoreApplication ,QUrl ,QSize ,QProcess
 from .api_client import download_from_api, fetch_post_comments, fetch_single_post_data
 from ..services.multipart_downloader import download_file_in_parts, MULTIPART_DOWNLOADER_AVAILABLE
 from ..services.drive_downloader import (
@@ -52,7 +52,7 @@ from ..utils.file_utils import (
 from ..utils.network_utils import prepare_cookies_for_request, get_link_platform
 from ..utils.text_utils import (
     is_title_match_for_character, is_filename_match_for_character, strip_html_tags,
-    extract_folder_name_from_title, 
+    extract_folder_name_from_title,
     match_folders_from_title, match_folders_from_filename_enhanced
 )
 from ..config.constants import *
@@ -109,7 +109,7 @@ class PostProcessorWorker:
                  creator_download_folder_ignore_words=None,
                  manga_global_file_counter_ref=None,
                  use_date_prefix_for_subfolder=False,
-                 date_prefix_format="YYYY-MM-DD", 
+                 date_prefix_format="YYYY-MM-DD",
                  keep_in_post_duplicates=False,
                  keep_duplicates_mode=DUPLICATE_HANDLING_HASH,
                  keep_duplicates_limit=0,
@@ -122,12 +122,12 @@ class PostProcessorWorker:
                  single_pdf_mode=False,
                  project_root_dir=None,
                  processed_post_ids=None,
-                 multipart_scope='both', 
-                 multipart_parts_count=4, 
+                 multipart_scope='both',
+                 multipart_parts_count=4,
                  multipart_min_size_mb=100,
-                 skip_file_size_mb=None, 
+                 skip_file_size_mb=None,
                  domain_override=None,
-                 archive_only_mode=False,  
+                 archive_only_mode=False,
                  manga_custom_filename_format="{published} {title}",
                  manga_custom_date_format="YYYY-MM-DD" ,
                  sfp_threshold=None,
@@ -184,7 +184,7 @@ class PostProcessorWorker:
         self.scan_content_for_images = scan_content_for_images
         self.creator_download_folder_ignore_words = creator_download_folder_ignore_words
         self.use_date_prefix_for_subfolder = use_date_prefix_for_subfolder
-        self.date_prefix_format = date_prefix_format 
+        self.date_prefix_format = date_prefix_format
         self.keep_in_post_duplicates = keep_in_post_duplicates
         self.keep_duplicates_mode = keep_duplicates_mode
         self.keep_duplicates_limit = keep_duplicates_limit
@@ -197,17 +197,17 @@ class PostProcessorWorker:
         self.single_pdf_mode = single_pdf_mode
         self.project_root_dir = project_root_dir
         self.processed_post_ids = processed_post_ids if processed_post_ids is not None else []
-        self.multipart_scope = multipart_scope 
-        self.multipart_parts_count = multipart_parts_count 
-        self.multipart_min_size_mb = multipart_min_size_mb 
-        self.domain_override = domain_override 
-        self.archive_only_mode = archive_only_mode 
+        self.multipart_scope = multipart_scope
+        self.multipart_parts_count = multipart_parts_count
+        self.multipart_min_size_mb = multipart_min_size_mb
+        self.domain_override = domain_override
+        self.archive_only_mode = archive_only_mode
         self.skip_file_size_mb = skip_file_size_mb
-        self.manga_custom_filename_format = manga_custom_filename_format 
-        self.manga_custom_date_format = manga_custom_date_format 
-        self.sfp_threshold = sfp_threshold 
-        self.handle_unknown_mode = handle_unknown_mode 
-        self.creator_name_cache = creator_name_cache 
+        self.manga_custom_filename_format = manga_custom_filename_format
+        self.manga_custom_date_format = manga_custom_date_format
+        self.sfp_threshold = sfp_threshold
+        self.handle_unknown_mode = handle_unknown_mode
+        self.creator_name_cache = creator_name_cache
         #-- New assign --
         self.add_info_in_pdf = add_info_in_pdf
         #-- New assign --
@@ -226,7 +226,7 @@ class PostProcessorWorker:
             signal_attr .emit (*payload_args )
         else :
             print (f"(Worker Log - Unrecognized Emitter for {signal_type_str }): {payload_args [0 ]if payload_args else ''}")
-    
+
     def logger (self ,message ):
         self ._emit_signal ('progress',message )
     def check_cancel (self ):
@@ -235,14 +235,14 @@ class PostProcessorWorker:
         if self .pause_event and self .pause_event .is_set ():
             while self .pause_event .is_set ():
                 if self .check_cancel ():
-                    return True 
+                    return True
                 time .sleep (0.5 )
         return False
 
     def _get_current_character_filters (self ):
         if self .dynamic_filter_holder :
             return self .dynamic_filter_holder .get_filters ()
-        return self .filter_character_list_objects_initial 
+        return self .filter_character_list_objects_initial
 
     def _find_valid_subdomain(self, url: str, max_subdomains: int = 4) -> str:
         """
@@ -258,17 +258,17 @@ class PostProcessorWorker:
                 base_domain = ".".join(domain_parts[-2:])
                 new_domain = f"n{i}.{base_domain}"
             else:
-                continue 
+                continue
 
             new_url = parsed_url._replace(netloc=new_domain).geturl()
-            
+
             try:
                 with requests.head(new_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5, allow_redirects=True) as resp:
                     if resp.status_code == 200:
                         return new_url
             except requests.RequestException:
                 continue
-        
+
         return url
 
     def _download_single_file(self, file_info, target_folder_path, post_page_url, original_post_id_for_log, skip_event,
@@ -305,7 +305,7 @@ class PostProcessorWorker:
                     file_url = base_override_url
             except Exception as e:
                 self.logger(f"   ⚠️ Domain Override: Failed to rewrite URL '{file_url}': {e}")
-        
+
         # Pre-download duplicate check using URL hash
         try:
             parsed_url_for_hash = urlparse(file_url)
@@ -320,10 +320,10 @@ class PostProcessorWorker:
                     return 0, 1, file_info.get('name'), False, FILE_DOWNLOAD_STATUS_SKIPPED, None
         except Exception as e:
             self.logger(f"   ⚠️ Could not perform pre-download hash check: {e}. Proceeding with normal download.")
-        
+
         if self._check_pause(f"File download prep for '{file_info.get('name', 'unknown file')}'"):
             return 0, 1, "", False, FILE_DOWNLOAD_STATUS_SKIPPED, None
-        
+
         file_download_headers = {
             'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
             'Referer': post_page_url,
@@ -333,7 +333,7 @@ class PostProcessorWorker:
         cookies_to_use_for_file = None
         if self.use_cookie:
             cookies_to_use_for_file = prepare_cookies_for_request(self.use_cookie, self.cookie_text, self.selected_cookie_file, self.app_base_dir, self.logger)
-        
+
         if self.skip_file_size_mb is not None:
                 api_original_filename_for_size_check = file_info.get('_original_name_for_log', file_info.get('name'))
                 try:
@@ -351,7 +351,7 @@ class PostProcessorWorker:
                                         self.logger(f"   ⚠️ Could not determine file size for '{api_original_filename_for_size_check}' to check against size limit. Proceeding with download.")
                 except requests.RequestException as e:
                         self.logger(f"   ⚠️ Could not fetch file headers to check size for '{api_original_filename_for_size_check}': {e}. Proceeding with download.")
-                
+
         api_original_filename = file_info.get('_original_name_for_log', file_info.get('name'))
         filename_to_save_in_main_path = ""
         if forced_filename_override:
@@ -437,7 +437,7 @@ class PostProcessorWorker:
                     else:
                         self.logger(f"⚠️ Renaming Mode (Post ID Style): Post ID missing. Using cleaned original filename '{cleaned_original_api_filename}'.")
                         filename_to_save_in_main_path = cleaned_original_api_filename
-            
+
                 elif self.manga_filename_style == STYLE_CUSTOM:
                     try:
                         def format_date(date_str):
@@ -452,7 +452,7 @@ class PostProcessorWorker:
 
                         service = self.service.lower()
                         user_id = str(self.user_id)
-                        
+
                         # Look up the name in the cache, falling back to the user_id if not found
                         creator_name = user_id # Default to the ID
                         if self.creator_name_cache:
@@ -473,20 +473,20 @@ class PostProcessorWorker:
                             'published': format_date(published_date),
                             'edited': format_date(edited_date or published_date)
                         }
-                        
+
                         custom_base_name = self.manga_custom_filename_format.format(**format_values)
                         cleaned_custom_name = robust_clean_name(custom_base_name)
-                        
+
                         if num_files_in_this_post > 1:
                             filename_to_save_in_main_path = f"{cleaned_custom_name}_{file_index_in_post}{original_ext}"
                         else:
                             filename_to_save_in_main_path = f"{cleaned_custom_name}{original_ext}"
-                            
+
                     except (KeyError, IndexError, ValueError) as e:
                         self.logger(f"⚠️ Custom format error: {e}. Falling back to original filename.")
                         filename_to_save_in_main_path = cleaned_original_api_filename
-            
-            
+
+
                 elif self.manga_filename_style == STYLE_DATE_POST_TITLE:
                     published_date_str = self.post.get('published')
                     added_date_str = self.post.get('added')
@@ -571,18 +571,18 @@ class PostProcessorWorker:
                     filename_to_save_in_main_path = base_name_for_removal + ext_for_removal
 
 
-        MAX_PATH_LENGTH = 240  
-        
+        MAX_PATH_LENGTH = 240
+
         base_name, extension = os.path.splitext(filename_to_save_in_main_path)
-        
+
         potential_full_path = os.path.join(target_folder_path, filename_to_save_in_main_path)
-        
+
         if len(potential_full_path) > MAX_PATH_LENGTH:
             excess_length = len(potential_full_path) - MAX_PATH_LENGTH
-            
+
             if len(base_name) > excess_length:
                 truncated_base_name = base_name[:-excess_length]
-                
+
                 filename_to_save_in_main_path = truncated_base_name.strip() + extension
                 self.logger(f"   ⚠️ Path was too long. Truncating filename to: '{filename_to_save_in_main_path}'")
             else:
@@ -629,15 +629,15 @@ class PostProcessorWorker:
             if os.path.exists(final_save_path_check):
                 try:
                     self.logger(f"   ⚠️ File '{filename_to_save_in_main_path}' exists. Verifying content with URL hash...")
-                    
+
                     parsed_url = urlparse(file_url)
                     hash_from_url = os.path.basename(parsed_url.path).split('.')[0]
-                    
+
                     hash_from_disk = hashlib.sha256()
                     with open(final_save_path_check, 'rb') as f:
                         for chunk in iter(lambda: f.read(8192), b""): # Use a larger buffer for hashing
                             hash_from_disk.update(chunk)
-                    
+
                     if hash_from_url == hash_from_disk.hexdigest():
                         self.logger(f"   -> Skip (Hash Match): The existing file is a perfect match.")
                         return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
@@ -648,7 +648,7 @@ class PostProcessorWorker:
 
                 except Exception as e:
                     self.logger(f"   ⚠️ Could not perform hash check for existing file: {e}. Re-downloading with a suffix to be safe.")
-        
+
         max_retries = 3
         retry_delay = 5
         downloaded_size_bytes = 0
@@ -667,13 +667,13 @@ class PostProcessorWorker:
                 if attempt_num_single_stream > 0:
                     self.logger(f"   Retrying download for '{api_original_filename}' (Overall Attempt {attempt_num_single_stream + 1}/{max_retries + 1})...")
                     time.sleep(retry_delay * (2 ** (attempt_num_single_stream - 1)))
-                
+
                 self._emit_signal('file_download_status', True)
-                
+
                 current_url_to_try = file_url
-                          
+
                 response = requests.get(current_url_to_try, headers=file_download_headers, timeout=(30, 300), stream=True, cookies=cookies_to_use_for_file)
-                
+
                 if response.status_code == 403 and ('kemono.' in current_url_to_try or 'coomer.' in current_url_to_try):
                     self.logger(f"   ⚠️ Got 403 Forbidden for '{api_original_filename}'. Attempting subdomain rotation...")
                     new_url = self._find_valid_subdomain(current_url_to_try)
@@ -684,7 +684,7 @@ class PostProcessorWorker:
                         response = requests.get(new_url, headers=file_download_headers, timeout=(30, 300), stream=True, cookies=cookies_to_use_for_file)
 
                 response.raise_for_status()
-                
+
                 # --- REVISED AND MOVED SIZE CHECK LOGIC ---
                 total_size_bytes = int(response.headers.get('Content-Length', 0))
 
@@ -698,7 +698,7 @@ class PostProcessorWorker:
                 # --- END OF REVISED LOGIC ---
 
                 num_parts_for_file = min(self.multipart_parts_count, MAX_PARTS_FOR_MULTIPART_DOWNLOAD)
-           
+
                 file_is_eligible_by_scope = False
                 if self.multipart_scope == 'videos':
                     if is_video(api_original_filename):
@@ -714,9 +714,9 @@ class PostProcessorWorker:
 
                 attempt_multipart = (self.allow_multipart_download and MULTIPART_DOWNLOADER_AVAILABLE and
                                      file_is_eligible_by_scope and
-                                     num_parts_for_file > 1 and total_size_bytes > min_size_in_bytes and 
+                                     num_parts_for_file > 1 and total_size_bytes > min_size_in_bytes and
                                      'bytes' in response.headers.get('Accept-Ranges', '').lower())
-          
+
                 if self._check_pause(f"Multipart decision for '{api_original_filename}'"): break
 
                 if attempt_multipart:
@@ -809,7 +809,7 @@ class PostProcessorWorker:
             except Exception as e:
                 self.logger(f"   ❌ Unexpected Download Error: {api_original_filename}: {e}\n{traceback.format_exc(limit=2)}")
                 last_exception_for_retry_later = e
-                is_permanent_error = True                
+                is_permanent_error = True
                 break
             finally:
                 if response:
@@ -850,22 +850,22 @@ class PostProcessorWorker:
                         os.remove(downloaded_part_file_path)
                     except OSError: pass
                 return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
-            
+
             if (self.compress_images and downloaded_part_file_path and
                     is_image(api_original_filename) and
                     os.path.getsize(downloaded_part_file_path) > 1.5 * 1024 * 1024):
-                
+
                 self.logger(f"   🔄 Compressing '{api_original_filename}' to WebP...")
                 try:
                     with Image.open(downloaded_part_file_path) as img:
                         if img.mode not in ('RGB', 'RGBA'):
                             img = img.convert('RGBA')
-                        
+
                         output_buffer = BytesIO()
                         img.save(output_buffer, format='WebP', quality=85)
-                        
+
                         data_to_write_io = output_buffer
-                        
+
                         base, _ = os.path.splitext(filename_to_save_in_main_path)
                         filename_to_save_in_main_path = f"{base}.webp"
                         self.logger(f"   ✅ Compression successful. New size: {len(data_to_write_io.getvalue()) / (1024*1024):.2f} MB")
@@ -873,7 +873,7 @@ class PostProcessorWorker:
                 except Exception as e_compress:
                     self.logger(f"   ⚠️ Failed to compress '{api_original_filename}': {e_compress}. Saving original file instead.")
                     data_to_write_io = None
-            
+
             effective_save_folder = target_folder_path
             base_name, extension = os.path.splitext(filename_to_save_in_main_path)
             counter = 1
@@ -884,7 +884,7 @@ class PostProcessorWorker:
                 final_filename_on_disk = f"{base_name}_{counter}{extension}"
                 final_save_path = os.path.join(effective_save_folder, final_filename_on_disk)
                 counter += 1
-            
+
             if counter > 1:
                 self.logger(f"   ⚠️ Filename collision: Saving as '{final_filename_on_disk}' instead.")
 
@@ -903,7 +903,7 @@ class PostProcessorWorker:
                         os.rename(downloaded_part_file_path, final_save_path)
                     else:
                         raise FileNotFoundError(f"Original .part file not found for saving: {downloaded_part_file_path}")
-                
+
                 try:
                     parsed_url_for_hash = urlparse(file_url)
                     url_hash = os.path.basename(parsed_url_for_hash.path).split('.')[0]
@@ -911,7 +911,7 @@ class PostProcessorWorker:
                         self.downloaded_hash_counts[url_hash] += 1
                 except Exception as e:
                     self.logger(f"   ⚠️ Could not update post-download hash count: {e}")
-                
+
                 final_filename_saved_for_return = final_filename_on_disk
                 self.logger(f"✅ Saved: '{final_filename_saved_for_return}' (from '{api_original_filename}', {downloaded_size_bytes / (1024 * 1024):.2f} MB) in '{os.path.basename(effective_save_folder)}'")
 
@@ -963,12 +963,12 @@ class PostProcessorWorker:
         else:
             self.logger(f"->>Download Fail for '{api_original_filename}' (Post ID: {original_post_id_for_log}). No successful download after retries.")
             details_for_failure = {
-                'file_info': file_info, 
-                'target_folder_path': target_folder_path, 
+                'file_info': file_info,
+                'target_folder_path': target_folder_path,
                 'headers': file_download_headers,
-                'original_post_id_for_log': original_post_id_for_log, 
+                'original_post_id_for_log': original_post_id_for_log,
                 'post_title': post_title,
-                'file_index_in_post': file_index_in_post, 
+                'file_index_in_post': file_index_in_post,
                 'num_files_in_this_post': num_files_in_this_post,
                 'forced_filename_override': filename_to_save_in_main_path,
                 'added': self.post.get('added'),
@@ -986,7 +986,7 @@ class PostProcessorWorker:
         if self.manga_filename_style == STYLE_POST_TITLE:
             cleaned_post_title_base = robust_clean_name(post_title.strip() if post_title and post_title.strip() else "post")
             return f"{cleaned_post_title_base}{original_ext}"
-            
+
         elif self.manga_filename_style == STYLE_CUSTOM:
             try:
                 def format_date(date_str):
@@ -1018,16 +1018,16 @@ class PostProcessorWorker:
                     'published': format_date(published_date),
                     'edited': format_date(edited_date or published_date)
                 }
-                
+
                 custom_base_name = self.manga_custom_filename_format.format(**format_values)
                 cleaned_custom_name = robust_clean_name(custom_base_name)
-                
+
                 return f"{cleaned_custom_name}{original_ext}"
-                
+
             except (KeyError, IndexError, ValueError) as e:
                 self.logger(f"⚠️ Custom format error for text export: {e}. Falling back to post title.")
                 return f"{robust_clean_name(post_title.strip() or 'untitled_post')}{original_ext}"
-        
+
         elif self.manga_filename_style == STYLE_DATE_POST_TITLE:
             published_date_str = self.post.get('published')
             added_date_str = self.post.get('added')
@@ -1046,11 +1046,11 @@ class PostProcessorWorker:
             cleaned_post_title_for_filename = robust_clean_name(post_title.strip() or "post")
             base_name_for_style = f"{formatted_date_str}_{cleaned_post_title_for_filename}"
             return f"{base_name_for_style}{original_ext}"
-        
+
         elif self.manga_filename_style == STYLE_POST_ID:
             post_id = str(self.post.get('id', 'unknown_id'))
             return f"{post_id}{original_ext}"
-            
+
         elif self.manga_filename_style == STYLE_ORIGINAL_NAME:
             published_date_str = self.post.get('published') or self.post.get('added')
             formatted_date_str = "nodate"
@@ -1059,7 +1059,7 @@ class PostProcessorWorker:
                     formatted_date_str = published_date_str.split('T')[0]
                 except Exception:
                     pass
-            
+
             # Use post title as the name part, as there is no "original filename" for the text export.
             cleaned_post_title_base = robust_clean_name(post_title.strip() or "untitled_post")
             return f"{formatted_date_str}_{cleaned_post_title_base}{original_ext}"
@@ -1117,10 +1117,24 @@ class PostProcessorWorker:
                 else:
                     self.logger(f"   ⚠️ Failed to fetch full content for post {post_id}. Content-dependent features may not work for this post.")
 
+            if self.skip_words_list and (self.skip_words_scope == SKIP_SCOPE_POSTS or self.skip_words_scope == SKIP_SCOPE_BOTH):
+                if self._check_pause(f"Skip words (post title) for post {post_id}"):
+                    result_tuple = (0, 0, [], [], [], None, None)
+                    self._emit_signal('worker_finished', result_tuple)
+                    return result_tuple
+                post_title_lower = post_title.lower()
+                for skip_word in self.skip_words_list:
+                    if skip_word.lower() in post_title_lower:
+                        self.logger(f"   -> Skip Post (Keyword in Title '{skip_word}'): '{post_title[:50]}...'. Scope: {self.skip_words_scope}")
+                        # No folder determination or creation happens for skipped posts
+                        result_tuple = (0, 0, [], [], [], None, None)
+                        self._emit_signal('worker_finished', result_tuple)
+                        return result_tuple
+
             total_downloaded_this_post = 0
             total_skipped_this_post = 0
             determined_post_save_path_for_history = self.override_output_dir if self.override_output_dir else self.download_root
-            
+
             if self._check_pause(f"{log_prefix} processing for ID {post_id}"):
                 result_tuple = (0, 0, [], [], [], None, None)
                 self._emit_signal('worker_finished', result_tuple)
@@ -1152,7 +1166,7 @@ class PostProcessorWorker:
             link_pattern = re.compile(r"""<a\s+.*?href=["'](https?://[^"']+)["'][^>]*>(.*?)</a>""", re.IGNORECASE | re.DOTALL)
             effective_unwanted_keywords_for_folder_naming = self.unwanted_keywords.copy()
             is_full_creator_download_no_char_filter = not self.target_post_id_from_initial_url and not current_character_filters
-            
+
             if (self.show_external_links or self.extract_links_only):
                 unique_links_data = {}
                 links_emitted_count = 0
@@ -1200,7 +1214,7 @@ class PostProcessorWorker:
                                     key_match_in_content = mega_key_pattern.search(strip_html_tags(post_content_html))
                                     if key_match_in_content:
                                         decryption_key_found = key_match_in_content.group(1)
-                            
+
                             final_link_url_to_emit = link_url
                             if platform == 'mega' and decryption_key_found:
                                 parsed_url = urlparse(link_url)
@@ -1217,14 +1231,14 @@ class PostProcessorWorker:
                         self.logger(f"⚠️ Error parsing post content for links: {e}\n{traceback.format_exc(limit=2)}")
                 elif self.extract_links_only and not unique_links_data:
                      self.logger(f"   ℹ️ Post {post_id} contains no text content to scan for links.")
-            
+
             if is_full_creator_download_no_char_filter and self.creator_download_folder_ignore_words:
                 self.logger(f"   Applying creator download specific folder ignore words ({len(self.creator_download_folder_ignore_words)} words).")
                 effective_unwanted_keywords_for_folder_naming.update(self.creator_download_folder_ignore_words)
 
             if not self.extract_links_only:
                 self.logger(f"\n--- Processing {log_prefix} {post_id} ('{post_title[:50]}...') (Thread: {threading.current_thread().name}) ---")
-            
+
             num_potential_files_in_post = len(post_attachments or []) + (1 if post_main_file_info and post_main_file_info.get('path') else 0)
 
             post_is_candidate_by_title_char_match = False
@@ -1233,6 +1247,7 @@ class PostProcessorWorker:
             post_is_candidate_by_file_char_match_in_comment_scope = False
             char_filter_that_matched_file_in_comment_scope = None
             char_filter_that_matched_comment = None
+            effective_use_subfolders = self.use_subfolders
 
             if current_character_filters and (self.char_filter_scope == CHAR_SCOPE_TITLE or self.char_filter_scope == CHAR_SCOPE_BOTH):
                 if self._check_pause(f"Character title filter for post {post_id}"):
@@ -1362,7 +1377,7 @@ class PostProcessorWorker:
             if self.filter_mode == 'text_only' and not self.extract_links_only:
                 self.logger(f"   Mode: Text Only (Scope: {self.text_only_scope})")
                 post_title_lower = post_title.lower()
-                
+
                 # --- Skip Words Check ---
                 if self.skip_words_list and (self.skip_words_scope == SKIP_SCOPE_POSTS or self.skip_words_scope == SKIP_SCOPE_BOTH):
                     for skip_word in self.skip_words_list:
@@ -1381,7 +1396,7 @@ class PostProcessorWorker:
                 raw_text_content = ""
                 comments_data = []
                 final_post_data = post_data
-                
+
                 # --- Content Fetching ---
                 if self.text_only_scope == 'content' and 'content' not in final_post_data:
                     self.logger(f"   Post {post_id} is missing 'content' field, fetching full data...")
@@ -1391,7 +1406,7 @@ class PostProcessorWorker:
                     full_data = fetch_single_post_data(api_domain, self.service, self.user_id, post_id, headers, self.logger, cookies_dict=cookies)
                     if full_data:
                         final_post_data = full_data
-                
+
                 if self.text_only_scope == 'content':
                     raw_text_content = final_post_data.get('content', '')
                 elif self.text_only_scope == 'comments':
@@ -1400,7 +1415,7 @@ class PostProcessorWorker:
                         api_domain = parsed_url.netloc
                         comments_data = fetch_post_comments(api_domain, self.service, self.user_id, post_id, headers, self.logger, self.cancellation_event, self.pause_event)
                         if comments_data:
-                            # For TXT/DOCX export, we format comments here. 
+                            # For TXT/DOCX export, we format comments here.
                             # For PDF, we pass the raw list to the generator.
                             comment_texts = []
                             for comment in comments_data:
@@ -1422,9 +1437,9 @@ class PostProcessorWorker:
                         text_with_newlines = re.sub(r'(?i)</p>|<br\s*/?>', '\n', raw_text_content)
                         just_text = re.sub(r'<.*?>', '', text_with_newlines)
                         cleaned_text = html.unescape(just_text).strip()
-                else: 
+                else:
                     cleaned_text = raw_text_content
-                
+
                 cleaned_text = cleaned_text.replace('…', '...')
 
                 if not cleaned_text.strip():
@@ -1439,7 +1454,7 @@ class PostProcessorWorker:
                 user_id_str = str(self.user_id)
                 post_id_str = str(post_id)
                 creator_key = (service_str.lower(), user_id_str)
-                
+
                 # Resolve creator name using the cache passed from main_window
                 creator_name = user_id_str
                 if self.creator_name_cache:
@@ -1459,7 +1474,7 @@ class PostProcessorWorker:
                 # --- Single PDF Mode (Save Temp JSON) ---
                 if self.single_pdf_mode:
                     if self.text_only_scope == 'comments':
-                        if not comments_data: 
+                        if not comments_data:
                             result_tuple = (0, 0, [], [], [], None, None)
                             self._emit_signal('worker_finished', result_tuple)
                             return result_tuple
@@ -1487,24 +1502,24 @@ class PostProcessorWorker:
                         result_tuple = (0, 0, [], [], [], None, None)
                         self._emit_signal('worker_finished', result_tuple)
                         return result_tuple
-                
+
                 # --- Individual File Mode ---
                 else:
                     file_extension = self.text_export_format
                     txt_filename = ""
-                                        
+
                     if self.manga_mode_active:
                         txt_filename = self._get_manga_style_filename_for_post(post_title, f".{file_extension}")
                         self.logger(f"   ℹ️ Applying Renaming Mode. Generated filename: '{txt_filename}'")
                     else:
-                        txt_filename = clean_filename(post_title) + f".{file_extension}"                       
-                       
+                        txt_filename = clean_filename(post_title) + f".{file_extension}"
+
                     final_save_path = os.path.join(determined_post_save_path_for_history, txt_filename)
 
                     try:
                         os.makedirs(determined_post_save_path_for_history, exist_ok=True)
-                        base, ext = os.path.splitext(final_save_path)                    
-                    
+                        base, ext = os.path.splitext(final_save_path)
+
                         counter = 1
                         while os.path.exists(final_save_path):
                             final_save_path = f"{base}_{counter}{ext}"
@@ -1516,7 +1531,7 @@ class PostProcessorWorker:
                             font_path = ""
                             if self.project_root_dir:
                                 font_path = os.path.join(self.project_root_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
-                            
+
                             # Add content specific fields for the generator
                             if self.text_only_scope == 'comments':
                                 common_content_data['comments_list_for_pdf'] = comments_data
@@ -1541,7 +1556,7 @@ class PostProcessorWorker:
                                 self.logger(f"   Converting to DOCX...")
                                 document = Document()
                                 # Add simple header info if desired, or keep pure text
-                                if self.add_info_in_pdf: 
+                                if self.add_info_in_pdf:
                                     document.add_heading(post_title, 0)
                                     document.add_paragraph(f"Date: {common_content_data['published']}")
                                     document.add_paragraph(f"Creator: {common_content_data['creator_name']}")
@@ -1554,9 +1569,9 @@ class PostProcessorWorker:
                                 self.logger(f"   ⚠️ Cannot create DOCX: 'python-docx' library not installed. Saving as .txt.")
                                 final_save_path = os.path.splitext(final_save_path)[0] + ".txt"
                                 with open(final_save_path, 'w', encoding='utf-8') as f: f.write(cleaned_text)
-                        
+
                         # --- TXT Generation ---
-                        else: 
+                        else:
                             content_to_write = cleaned_text
                             # Optional: Add simple text header if "Add Info" is checked
                             if self.add_info_in_pdf:
@@ -1569,12 +1584,12 @@ class PostProcessorWorker:
 
                             with open(final_save_path, 'w', encoding='utf-8') as f:
                                 f.write(content_to_write)
-                        
+
                         self.logger(f"✅ Saved Text: '{os.path.basename(final_save_path)}' in '{os.path.basename(determined_post_save_path_for_history)}'")
                         result_tuple = (1, num_potential_files_in_post, [], [], [], history_data_for_this_post, None)
                         self._emit_signal('worker_finished', result_tuple)
                         return result_tuple
-                        
+
                     except Exception as e:
                         self.logger(f"   ❌ Critical error saving text file '{txt_filename}': {e}")
                         result_tuple = (0, num_potential_files_in_post, [], [], [], None, None)
@@ -1595,9 +1610,9 @@ class PostProcessorWorker:
 
             should_create_post_subfolder = self.use_post_subfolders
 
-            if (not self.use_post_subfolders and self.use_subfolders and 
+            if (not self.use_post_subfolders and self.use_subfolders and
                 self.sfp_threshold is not None and num_potential_files_in_post >= self.sfp_threshold):
-                
+
                 self.logger(f"   ℹ️ Post has {num_potential_files_in_post} files (≥{self.sfp_threshold}). Activating Subfolder per Post via [sfp] command.")
                 should_create_post_subfolder = True
 
@@ -1608,7 +1623,7 @@ class PostProcessorWorker:
                     result_tuple = (0, num_potential_files_in_post, [], [], [], None, None)
                     self._emit_signal('worker_finished', result_tuple)
                     return result_tuple
-                
+
                 primary_char_filter_for_folder = None
                 log_reason_for_folder = ""
                 known_name_match_found = False
@@ -1633,13 +1648,13 @@ class PostProcessorWorker:
                     else:
                         base_folder_names_for_post_content = [cleaned_primary_folder_name]
                     self.logger(f"   Base folder name(s) for post content ({log_reason_for_folder}): {', '.join(base_folder_names_for_post_content)}")
-                
+
                 elif not current_character_filters:
                     derived_folders_from_title_via_known_txt = match_folders_from_title(
                         post_title, self.known_names, effective_unwanted_keywords_for_folder_naming
                     )
                     valid_derived_folders_from_title_known_txt = [name for name in derived_folders_from_title_via_known_txt if name and name.strip() and name.lower() != "untitled_folder"]
-                    
+
                     if valid_derived_folders_from_title_known_txt:
                         known_name_match_found = True
                         first_match = valid_derived_folders_from_title_known_txt[0]
@@ -1652,7 +1667,7 @@ class PostProcessorWorker:
                             filename_for_fallback = file_info_for_fallback.get('_original_name_for_log')
                             if not filename_for_fallback:
                                 continue
-                            
+
                             matched_folders_from_filename = match_folders_from_filename_enhanced(
                                 filename_for_fallback, self.known_names, effective_unwanted_keywords_for_folder_naming
                             )
@@ -1666,12 +1681,12 @@ class PostProcessorWorker:
 
                 if self.handle_unknown_mode and not known_name_match_found:
                     self.logger(f"   ℹ️ [unknown] mode: No match in Known.txt. Creating parent folder from post title '{post_title}'.")
-                    
+
                     post_title_as_folder = robust_clean_name(post_title)
                     base_folder_names_for_post_content = [post_title_as_folder]
-                    
-                    should_create_post_subfolder = False 
-                
+
+                    should_create_post_subfolder = False
+
                 else:
                     if not known_name_match_found:
                         extracted_name_from_title_full_ignore = extract_folder_name_from_title(
@@ -1685,7 +1700,7 @@ class PostProcessorWorker:
 
             if not self.extract_links_only and should_create_post_subfolder:
                 cleaned_post_title_for_sub = robust_clean_name(post_title)
-                max_folder_len = 100 
+                max_folder_len = 100
                 if len(cleaned_post_title_for_sub) > max_folder_len:
                     cleaned_post_title_for_sub = cleaned_post_title_for_sub[:max_folder_len].strip()
                 post_id_for_fallback = self.post.get('id', 'unknown_id')
@@ -1712,7 +1727,7 @@ class PostProcessorWorker:
                             final_subfolder_name = final_subfolder_name.replace("DD", dt_obj.strftime("%d"))
                         except (ValueError, TypeError) as e:
                             self.logger(f"   ⚠️ Could not parse date '{published_date_str}'. Date placeholders will be skipped. Error: {e}")
-                    
+
                     # 2. Perform case-insensitive replacement for {post} and {postid}
                     final_subfolder_name = re.sub(r'{post}', original_cleaned_post_title_for_sub, final_subfolder_name, flags=re.IGNORECASE)
                     final_subfolder_name = re.sub(r'{postid}', post_id_for_format, final_subfolder_name, flags=re.IGNORECASE)
@@ -1734,7 +1749,7 @@ class PostProcessorWorker:
                         name_candidate = original_cleaned_post_title_for_sub
                     else:
                         name_candidate = f"{original_cleaned_post_title_for_sub}_{suffix_counter}"
-                    
+
                     potential_post_subfolder_path = os.path.join(base_path_for_post_subfolder, name_candidate)
                     id_file_path = os.path.join(potential_post_subfolder_path, f".postid_{post_id_for_folder}")
 
@@ -1743,7 +1758,7 @@ class PostProcessorWorker:
                             os.makedirs(potential_post_subfolder_path)
                             with open(id_file_path, 'w') as f:
                                 f.write(post_id_for_folder)
-                            
+
                             final_post_subfolder_name = name_candidate
                             folder_creation_successful = True
                             if suffix_counter > 0:
@@ -1843,7 +1858,7 @@ class PostProcessorWorker:
                     file_url = file_info.get('url')
                     if file_url and file_url not in unique_files_by_url:
                         unique_files_by_url[file_url] = file_info
-                
+
                 original_count = len(all_files_from_post_api)
                 all_files_from_post_api = list(unique_files_by_url.values())
                 new_count = len(all_files_from_post_api)
@@ -1906,11 +1921,11 @@ class PostProcessorWorker:
 
             if self.archive_only_mode and not self.extract_links_only:
                 has_archive = any(is_archive(f.get('_original_name_for_log', '')) for f in all_files_from_post_api)
-                
+
                 if has_archive and len(all_files_from_post_api) > 1:
                     self.logger(f"   [AO] Archive found in post {post_id}. Prioritizing archive and skipping other files.")
                     archives_only = [f for f in all_files_from_post_api if is_archive(f.get('_original_name_for_log', ''))]
-                    
+
                     if archives_only:
                         all_files_from_post_api = archives_only
                     else:
@@ -1935,7 +1950,7 @@ class PostProcessorWorker:
                             if dir_contents:
                                 if not all(f.startswith('.postid_') for f in dir_contents):
                                     is_effectively_empty = False
-                            
+
                             if is_effectively_empty:
                                 self.logger(f"   🗑️ Removing empty post-specific subfolder (post had no files): '{path_to_check_for_emptiness}'")
                                 if dir_contents:
@@ -1963,7 +1978,7 @@ class PostProcessorWorker:
                 result_tuple = (0, 0, [], [], [], history_data_for_no_files_post, None)
                 self._emit_signal('worker_finished', result_tuple)
                 return result_tuple
-                
+
             files_to_download_info_list = []
             processed_original_filenames_in_this_post = set()
             if self.keep_in_post_duplicates:
@@ -2072,10 +2087,10 @@ class PostProcessorWorker:
                                     known_name_match_found_for_this_file = True
 
                         if not known_name_match_found_for_this_file:
-                            if self.handle_unknown_mode: 
+                            if self.handle_unknown_mode:
                                 self.logger(f"   ℹ️ [unknown] mode: No match in Known.txt for '{current_api_original_filename}'. Using post title for folder.")
                                 base_folder_for_this_file = robust_clean_name(post_title)
-                            else: 
+                            else:
                                 base_folder_for_this_file = extract_folder_name_from_title(post_title, effective_unwanted_keywords_for_folder_naming)
 
                     final_path_for_this_file = self.override_output_dir if self.override_output_dir else self.download_root
@@ -2085,10 +2100,10 @@ class PostProcessorWorker:
                     effective_spsp = should_create_post_subfolder
                     if self.handle_unknown_mode and not known_name_match_found_for_this_file:
                         effective_spsp = False
-                    
+
                     if effective_spsp:
                         final_path_for_this_file = os.path.join(final_path_for_this_file, final_post_subfolder_name)
-                    
+
                     futures_list.append(file_pool.submit(
                         self._download_single_file,
                         file_info=file_info_to_dl,
@@ -2134,23 +2149,23 @@ class PostProcessorWorker:
                         if os.path.exists(self.session_file_path):
                             with open(self.session_file_path, 'r', encoding='utf-8') as f:
                                 session_data = json.load(f)
-                        
+
                             if 'download_state' not in session_data:
                                 session_data['download_state'] = {}
                             if not isinstance(session_data['download_state'].get('processed_post_ids'), list):
                                 session_data['download_state']['processed_post_ids'] = []
-                            
+
                             session_data['download_state']['processed_post_ids'].append(self.post.get('id'))
 
                             if 'manga_counters' not in session_data['download_state']:
                                 session_data['download_state']['manga_counters'] = {}
-                            
+
                             if self.manga_date_file_counter_ref is not None:
                                 session_data['download_state']['manga_counters']['date_based'] = self.manga_date_file_counter_ref[0]
-                            
+
                             if self.manga_global_file_counter_ref is not None:
                                 session_data['download_state']['manga_counters']['global_numbering'] = self.manga_global_file_counter_ref[0]
-                          
+
                             if permanent_failures_this_post:
                                 if not isinstance(session_data['download_state'].get('permanently_failed_files'), list):
                                     session_data['download_state']['permanently_failed_files'] = []
@@ -2200,7 +2215,7 @@ class PostProcessorWorker:
                             # If there are files, check if ALL of them are .postid files
                             if not all(f.startswith('.postid_') for f in dir_contents):
                                 is_effectively_empty = False
-                        
+
                         if is_effectively_empty:
                             self.logger(f"   🗑️ Removing empty post-specific subfolder (no files downloaded): '{path_to_check_for_emptiness}'")
                             # We must first remove the ID file(s) before removing the dir
@@ -2211,7 +2226,7 @@ class PostProcessorWorker:
                                             os.remove(os.path.join(path_to_check_for_emptiness, id_file))
                                         except OSError as e_rm_id:
                                             self.logger(f"   ⚠️ Could not remove ID file '{id_file}' during cleanup: {e_rm_id}")
-                            
+
                             os.rmdir(path_to_check_for_emptiness) # Now the rmdir should work
                 except OSError as e_rmdir:
                     self.logger(f"   ⚠️ Could not remove empty post-specific subfolder '{path_to_check_for_emptiness}': {e_rmdir}")
@@ -2232,7 +2247,7 @@ class PostProcessorWorker:
                             # If there are files, check if ALL of them are .postid files
                             if not all(f.startswith('.postid_') for f in dir_contents):
                                 is_effectively_empty = False
-                        
+
                         if is_effectively_empty:
                             self.logger(f"   🗑️ Removing empty post-specific subfolder (no files downloaded): '{path_to_check_for_emptiness}'")
                             # We must first remove the ID file(s) before removing the dir
@@ -2243,11 +2258,11 @@ class PostProcessorWorker:
                                             os.remove(os.path.join(path_to_check_for_emptiness, id_file))
                                         except OSError as e_rm_id:
                                             self.logger(f"   ⚠️ Could not remove ID file '{id_file}' during cleanup: {e_rm_id}")
-                            
+
                             os.rmdir(path_to_check_for_emptiness) # Now the rmdir should work
                 except OSError as e_rmdir:
                     self.logger(f"   ⚠️ Could not remove empty post-specific subfolder '{path_to_check_for_emptiness}': {e_rmdir}")
-            
+
             self._emit_signal('worker_finished', result_tuple)
             return result_tuple
 
@@ -2294,8 +2309,8 @@ class DownloadThread(QThread):
                  remove_from_filename_words_list=None,
                  manga_date_prefix='',
                  allow_multipart_download=True,
-                 multipart_parts_count=4, 
-                 multipart_min_size_mb=100, 
+                 multipart_parts_count=4,
+                 multipart_min_size_mb=100,
                  selected_cookie_file=None,
                  override_output_dir=None,
                  app_base_dir=None,
@@ -2305,7 +2320,7 @@ class DownloadThread(QThread):
                  scan_content_for_images=False,
                  creator_download_folder_ignore_words=None,
                  use_date_prefix_for_subfolder=False,
-                 date_prefix_format="YYYY-MM-DD", 
+                 date_prefix_format="YYYY-MM-DD",
                  keep_in_post_duplicates=False,
                  keep_duplicates_mode='hash',
                  keep_duplicates_limit=0,
@@ -2322,14 +2337,14 @@ class DownloadThread(QThread):
                  start_offset=0,
                  fetch_first=False,
                  skip_file_size_mb=None,
-                 domain_override=None, 
-                 archive_only_mode=False, 
+                 domain_override=None,
+                 archive_only_mode=False,
                  manga_custom_filename_format="{published} {title}",
                  manga_custom_date_format="YYYY-MM-DD" ,
                  sfp_threshold=None,
-                 creator_name_cache=None 
+                 creator_name_cache=None
 
-                 ): 
+                 ):
         super().__init__()
         self.api_url_input = api_url_input
         self.output_dir = output_dir
@@ -2369,8 +2384,8 @@ class DownloadThread(QThread):
         self.remove_from_filename_words_list = remove_from_filename_words_list
         self.manga_date_prefix = manga_date_prefix
         self.allow_multipart_download = allow_multipart_download
-        self.multipart_parts_count = multipart_parts_count 
-        self.multipart_min_size_mb = multipart_min_size_mb 
+        self.multipart_parts_count = multipart_parts_count
+        self.multipart_min_size_mb = multipart_min_size_mb
         self.selected_cookie_file = selected_cookie_file
         self.app_base_dir = app_base_dir
         self.cookie_text = cookie_text
@@ -2380,7 +2395,7 @@ class DownloadThread(QThread):
         self.scan_content_for_images = scan_content_for_images
         self.creator_download_folder_ignore_words = creator_download_folder_ignore_words
         self.use_date_prefix_for_subfolder = use_date_prefix_for_subfolder
-        self.date_prefix_format = date_prefix_format 
+        self.date_prefix_format = date_prefix_format
         self.keep_in_post_duplicates = keep_in_post_duplicates
         self.keep_duplicates_mode = keep_duplicates_mode
         self.keep_duplicates_limit = keep_duplicates_limit
@@ -2394,16 +2409,16 @@ class DownloadThread(QThread):
         self.text_export_format = text_export_format
         self.single_pdf_mode = single_pdf_mode
         self.project_root_dir = project_root_dir
-        self.processed_post_ids_set = set(processed_post_ids) if processed_post_ids is not None else set() 
-        self.start_offset = start_offset 
+        self.processed_post_ids_set = set(processed_post_ids) if processed_post_ids is not None else set()
+        self.start_offset = start_offset
         self.fetch_first = fetch_first
         self.skip_file_size_mb = skip_file_size_mb
-        self.archive_only_mode = archive_only_mode 
-        self.manga_custom_filename_format = manga_custom_filename_format 
-        self.manga_custom_date_format = manga_custom_date_format     
-        self.domain_override = domain_override 
-        self.sfp_threshold = sfp_threshold 
-        self.creator_name_cache = creator_name_cache 
+        self.archive_only_mode = archive_only_mode
+        self.manga_custom_filename_format = manga_custom_filename_format
+        self.manga_custom_date_format = manga_custom_date_format
+        self.domain_override = domain_override
+        self.sfp_threshold = sfp_threshold
+        self.creator_name_cache = creator_name_cache
 
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found (DownloadThread).")
@@ -2451,7 +2466,7 @@ class DownloadThread(QThread):
                 app_base_dir=self.app_base_dir,
                 manga_filename_style_for_sort_check=self.manga_filename_style if self.manga_mode_active else None,
                 processed_post_ids=self.processed_post_ids_set,
-                fetch_all_first=self.fetch_first 
+                fetch_all_first=self.fetch_first
             )
 
             for posts_batch_data in post_generator:
@@ -2467,7 +2482,7 @@ class DownloadThread(QThread):
                     worker_args = {
                         'post_data': individual_post_data,
                         'emitter': worker_signals_obj,
-                        'creator_name_cache': self.creator_name_cache, 
+                        'creator_name_cache': self.creator_name_cache,
                         'download_root': self.output_dir,
                         'known_names': self.known_names,
                         'filter_character_list': self.filter_character_list_objects_initial,
@@ -2513,7 +2528,7 @@ class DownloadThread(QThread):
                         'creator_download_folder_ignore_words': self.creator_download_folder_ignore_words,
                         'manga_global_file_counter_ref': self.manga_global_file_counter_ref,
                         'use_date_prefix_for_subfolder': self.use_date_prefix_for_subfolder,
-                        'date_prefix_format': self.date_prefix_format, 
+                        'date_prefix_format': self.date_prefix_format,
                         'keep_in_post_duplicates': self.keep_in_post_duplicates,
                         'keep_duplicates_mode': self.keep_duplicates_mode,
                         'keep_duplicates_limit': self.keep_duplicates_limit,
@@ -2524,15 +2539,15 @@ class DownloadThread(QThread):
                         'text_only_scope': self.text_only_scope,
                         'text_export_format': self.text_export_format,
                         'single_pdf_mode': self.single_pdf_mode,
-                        'multipart_parts_count': self.multipart_parts_count, 
-                        'multipart_min_size_mb': self.multipart_min_size_mb, 
-                        'skip_file_size_mb': self.skip_file_size_mb, 
+                        'multipart_parts_count': self.multipart_parts_count,
+                        'multipart_min_size_mb': self.multipart_min_size_mb,
+                        'skip_file_size_mb': self.skip_file_size_mb,
                         'project_root_dir': self.project_root_dir,
                         'domain_override': self.domain_override,
-                        'archive_only_mode': self.archive_only_mode, 
+                        'archive_only_mode': self.archive_only_mode,
                         'manga_custom_filename_format': self.manga_custom_filename_format,
                         'manga_custom_date_format': self.manga_custom_date_format,
-                        'sfp_threshold': self.sfp_threshold 
+                        'sfp_threshold': self.sfp_threshold
                     }
 
                     post_processing_worker = PostProcessorWorker(**worker_args)
@@ -2556,7 +2571,7 @@ class DownloadThread(QThread):
 
                 if was_process_cancelled:
                     break
-            
+
             if not was_process_cancelled and not self.isInterruptionRequested():
                 self.logger("✅ All posts processed or end of content reached by DownloadThread.")
 
@@ -2575,7 +2590,7 @@ class DownloadThread(QThread):
                     worker_signals_obj.file_successfully_downloaded_signal.disconnect(self.file_successfully_downloaded_signal)
             except (TypeError, RuntimeError) as e:
                 self.logger(f"ℹ️ Note during DownloadThread signal disconnection: {e}")
-            
+
             self.finished_signal.emit(grand_total_downloaded_files, grand_total_skipped_files, self.isInterruptionRequested(), grand_list_of_kept_original_filenames)
 
 class InterruptedError(Exception):
