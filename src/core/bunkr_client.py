@@ -81,8 +81,9 @@ class Extractor:
         self.url = match.string
         self.match = match
         self.groups = match.groups()
-        self.session = requests.Session()
-        self.session.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:102.0) Gecko/20100101 Firefox/102.0"
+        
+        from curl_cffi import requests as cffi_requests
+        self.session = cffi_requests.Session(impersonate="chrome120")
     @classmethod
     def from_url(cls, url, logger):
         if isinstance(cls.pattern, str): cls.pattern = re.compile(cls.pattern)
@@ -114,8 +115,8 @@ class Extractor:
             if not kwargs.get("fatal", True): return {}
             raise
 
-BASE_PATTERN_BUNKR = r"(?:https?://)?(?:[a-zA-Z0-9-]+\.)?(bunkr\.(?:si|la|ws|red|black|media|site|is|to|ac|cr|ci|fi|pk|ps|sk|ph|su)|bunkrr\.ru)"
-DOMAINS = ["bunkr.si", "bunkr.ws", "bunkr.la", "bunkr.red", "bunkr.black", "bunkr.media", "bunkr.site"]
+BASE_PATTERN_BUNKR = r"(?:https?://)?(?:[a-zA-Z0-9-]+\.)?(bunkr\.[a-z]+|bunkrr\.[a-z]+|bunkr-albums\.[a-z]+|balbums\.[a-z]+)"
+DOMAINS = ["bunkr.si", "bunkr.ws", "bunkr.la", "bunkr.red", "bunkr.black", "bunkr.media", "bunkr.site", "balbums.st"]
 CF_DOMAINS = set()
 
 class BunkrAlbumExtractor(Extractor):
@@ -159,7 +160,7 @@ class BunkrAlbumExtractor(Extractor):
                 
                 yield MockMessage.Url, file_data, {}
             except Exception as exc:
-                self.log.error("%s: %s", exc.__class__.__name__, exc)
+                self.log.error(f"{exc.__class__.__name__}: {exc}")
 
     def _extract_file(self, webpage_url):
         page = self.request(webpage_url).text
@@ -172,19 +173,49 @@ class BunkrAlbumExtractor(Extractor):
         file_url = decrypt_xor(data["url"], f"SECRET_KEY_{data['timestamp'] // 3600}".encode()) if data.get("encrypted") else data["url"]
         
         file_name = extr(page, "<h1", "<").rpartition(">")[2]
+        file_name_clean = unescape(file_name)
+
+        # Bunkr's new URL Signing Logic
+        try:
+            parsed = urllib.parse.urlparse(file_url)
+            sign_path = urllib.parse.quote(parsed.path, safe="")
+            sign_url = f"https://glb-apisign.cdn.cr/sign?path={sign_path}"
+            sign_data = self.request_json(sign_url, method="GET")
+            
+            token = sign_data.get("token")
+            ex = sign_data.get("ex")
+            
+            if token and ex:
+                query = urllib.parse.parse_qs(parsed.query)
+                query["token"] = [token]
+                query["ex"] = [str(ex)]
+                if file_name_clean:
+                    query["n"] = [file_name_clean]
+                
+                new_query = urllib.parse.urlencode(query, doseq=True)
+                file_url = urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+        except Exception as e:
+            self.log.warning(f"Failed to sign Bunkr URL: {e}")
 
         
         user_agent = self.session.headers.get("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:102.0) Gecko/20100101 Firefox/102.0")
         
-        download_referer = self.url 
+        # Bunkr's CDN requires the Referer to be the exact API file endpoint
+        download_referer = api_referer
+        
+        headers_dict = {
+            "Referer": download_referer,
+            "User-Agent": user_agent
+        }
+        
+        cookie_str = "; ".join([f"{k}={v}" for k, v in self.session.cookies.get_dict().items()])
+        if cookie_str:
+            headers_dict["Cookie"] = cookie_str
 
         return {
             "url": file_url, 
             "name": unescape(file_name), 
-            "_http_headers": {
-                "Referer": download_referer,
-                "User-Agent": user_agent
-            }
+            "_http_headers": headers_dict
         }
 
 class BunkrMediaExtractor(BunkrAlbumExtractor):
@@ -199,7 +230,7 @@ class BunkrMediaExtractor(BunkrAlbumExtractor):
             yield MockMessage.Url, file_data, {}
 
         except Exception as exc:
-            self.log.error("%s: %s", exc.__class__.__name__, exc)
+            self.log.error(f"{exc.__class__.__name__}: {exc}")
             yield MockMessage.Directory, {"album_name": "error", "count": 0}, {}
 
 def get_bunkr_extractor(url, logger):
@@ -227,20 +258,23 @@ def fetch_bunkr_data(url, logger):
     """
     try:
         parsed_url = urllib.parse.urlparse(url)
+        
+        # Bunkr constantly changes domains and puts strict Cloudflare Turnstile on some (like bunkr.black).
+        # However, older/alternative domains like bunkr.cr often remain unprotected by Turnstile.
+        # We forcibly rewrite the host to bunkr.cr to guarantee HTML scraping works.
+        if parsed_url.hostname and 'bunkr' in parsed_url.hostname and 'cdn' not in parsed_url.hostname:
+            parsed_url = parsed_url._replace(netloc='bunkr.cr')
+            url = urllib.parse.urlunparse(parsed_url)
+
         is_direct_cdn_file = (parsed_url.hostname and 'cdn' in parsed_url.hostname and 'bunkr' in parsed_url.hostname and
                               any(parsed_url.path.lower().endswith(ext) for ext in ['.mp4', '.mkv', '.webm', '.jpg', '.jpeg', '.png', '.gif', '.zip', '.rar']))
 
         if is_direct_cdn_file:
-            logger.info("Bunkr direct file URL detected.")
+            # Direct CDN links without tokens now get blocked by Cloudflare or return 403.
+            # We rewrite them into proper Bunkr Media URLs to force token extraction.
             filename = os.path.basename(parsed_url.path)
-            album_name = os.path.splitext(filename)[0]
-            
-            files_to_download = [{
-                'url': url,
-                'name': filename,
-                '_http_headers': {'Referer': 'https://bunkr.ru/'}
-            }]
-            return album_name, files_to_download
+            url = f"https://bunkr.cr/f/{filename}"
+            logger.info(f"Converted direct CDN link to Media URL: {url}")
     except Exception as e:
         logger.warning(f"Could not parse Bunkr URL for direct file check: {e}")
 

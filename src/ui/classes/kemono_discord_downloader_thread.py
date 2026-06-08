@@ -67,52 +67,52 @@ class KemonoDiscordDownloadThread(QThread):
                  self.num_file_threads = max(1, min(thread_count_ui, 20))
         except (ValueError, AttributeError, TypeError):
              try: self.progress_signal.emit("⚠️ Warning: Could not read thread count setting, defaulting to 1.")
-             except: pass
+             except Exception: pass
              self.num_file_threads = 1
 
         try:
             self.scraper = cloudscraper.create_scraper(browser={'browser': 'firefox', 'platform': 'windows', 'mobile': False})
         except Exception as e:
              try: self.progress_signal.emit(f"❌ ERROR: Failed to initialize cloudscraper: {e}")
-             except: pass
+             except Exception: pass
              self.scraper = None
 
     def cancel(self):
         self._is_cancelled_internal = True
         self.cancellation_event.set()
         try: self.progress_signal.emit("   Cancellation requested for Kemono Discord download.")
-        except: pass
+        except Exception: pass
 
     def pause(self):
         if not self.pause_event.is_set():
             self.pause_event.set()
             try: self.progress_signal.emit("   Pausing Kemono Discord download...")
-            except: pass
+            except Exception: pass
 
     def resume(self):
         if self.pause_event.is_set():
             self.pause_event.clear()
             try: self.progress_signal.emit("   Resuming Kemono Discord download...")
-            except: pass
+            except Exception: pass
 
     def _check_events(self):
         if self._is_cancelled_internal or self.cancellation_event.is_set():
             if not self._is_cancelled_internal:
                 self._is_cancelled_internal = True
                 try: self.progress_signal.emit("   Cancellation detected by Kemono Discord thread check.")
-                except: pass
+                except Exception: pass
             return True
 
         was_paused = False
         while self.pause_event.is_set():
             if not was_paused:
                  try: self.progress_signal.emit("   Kemono Discord operation paused...")
-                 except: pass
+                 except Exception: pass
                  was_paused = True
             if self.cancellation_event.is_set():
                 self._is_cancelled_internal = True
                 try: self.progress_signal.emit("   Cancellation detected while paused.")
-                except: pass
+                except Exception: pass
                 return True
             time.sleep(0.5)
         return False
@@ -138,7 +138,7 @@ class KemonoDiscordDownloadThread(QThread):
 
         if not self.scraper:
              try: self.progress_signal.emit(f"   ❌ Cannot download '{original_filename}': Cloudscraper not initialized.")
-             except: pass
+             except Exception: pass
              failure_details = { 'file_info': {'url': file_url, 'name': original_filename}, 'post_title': post_title, 'original_post_id_for_log': original_post_id_for_log, 'target_folder_path': channel_dir, 'error': 'Cloudscraper not initialized', 'service': 'discord', 'user_id': self.server_id }
              return False, failure_details
 
@@ -160,7 +160,7 @@ class KemonoDiscordDownloadThread(QThread):
                 if self._check_events(): raise InterruptedError("Cancelled/Paused before attempt")
                 if attempt == 2 and should_retry:
                     try: self.progress_signal.emit(f"   ⏳ Retrying '{original_filename}' (Attempt {attempt}/{MAX_ATTEMPTS}) after {RETRY_DELAY_SECONDS}s...")
-                    except: pass
+                    except Exception: pass
                     for _ in range(RETRY_DELAY_SECONDS):
                         if self._check_events(): raise InterruptedError("Cancelled/Paused during retry delay")
                         time.sleep(1)
@@ -169,10 +169,10 @@ class KemonoDiscordDownloadThread(QThread):
 
                 log_prefix = f"   ⬇️ Downloading:" if attempt == 1 else f"   🔄 Retrying:"
                 try: self.progress_signal.emit(f"{log_prefix} '{original_filename}' (Attempt {attempt}/{MAX_ATTEMPTS})...")
-                except: pass
+                except Exception: pass
                 if attempt == 1:
                     try: self.file_progress_signal.emit(original_filename, (0, 0))
-                    except: pass
+                    except Exception: pass
 
                 headers = { 'User-Agent': 'Mozilla/5.0 ...', 'Referer': f'https://{base_kemono_domain}/discord/channel/{channel_id}'}
                 response = self.scraper.get(file_url, headers=headers, cookies=self.cookies_dict, stream=True, timeout=(15, 120))
@@ -191,11 +191,11 @@ class KemonoDiscordDownloadThread(QThread):
                             current_time = time.time()
                             if total_size > 0 and (current_time - last_progress_emit_time > 0.5 or downloaded_size == total_size):
                                 try: self.file_progress_signal.emit(original_filename, (downloaded_size, total_size))
-                                except: pass
+                                except Exception: pass
                                 last_progress_emit_time = current_time
                             elif total_size == 0 and (current_time - last_progress_emit_time > 0.5):
                                 try: self.file_progress_signal.emit(original_filename, (downloaded_size, 0))
-                                except: pass
+                                except Exception: pass
                                 last_progress_emit_time = current_time
                 response.close()
 
@@ -203,7 +203,7 @@ class KemonoDiscordDownloadThread(QThread):
 
                 if total_size > 0 and downloaded_size != total_size:
                     try: self.progress_signal.emit(f"   ⚠️ Size mismatch on attempt {attempt} for '{original_filename}'. Expected {total_size}, got {downloaded_size}.")
-                    except: pass
+                    except Exception: pass
                     last_exception = IOError(f"Size mismatch: Expected {total_size}, got {downloaded_size}")
                     if os.path.exists(temp_filepath):
                          try: os.remove(temp_filepath)
@@ -221,31 +221,31 @@ class KemonoDiscordDownloadThread(QThread):
             except (requests.exceptions.Timeout, requests.exceptions.ConnectionError, cloudscraper.exceptions.CloudflareException) as e:
                 last_exception = e
                 try: self.progress_signal.emit(f"   ❌ Network/Cloudflare error on attempt {attempt} for '{original_filename}': {e}")
-                except: pass
+                except Exception: pass
                 should_retry = (attempt == 1)
             except requests.exceptions.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None)
                 if status_code and 500 <= status_code <= 599:
                     last_exception = e
                     try: self.progress_signal.emit(f"   ❌ Server error ({status_code}) on attempt {attempt} for '{original_filename}'. Will retry...")
-                    except: pass
+                    except Exception: pass
                     should_retry = (attempt == 1)
                 else:
                     last_exception = e
                     try: self.progress_signal.emit(f"   ❌ Non-retryable HTTP error for '{original_filename}': {e}")
-                    except: pass
+                    except Exception: pass
                     should_retry = False
                     break
             except OSError as e:
                 last_exception = e
                 try: self.progress_signal.emit(f"   ❌ OS error during download attempt {attempt} for '{original_filename}': {e}")
-                except: pass
+                except Exception: pass
                 should_retry = False
                 break
             except Exception as e:
                 last_exception = e
                 try: self.progress_signal.emit(f"   ❌ Unexpected error on attempt {attempt} for '{original_filename}': {e}")
-                except: pass
+                except Exception: pass
                 should_retry = False
                 break
             finally:
@@ -254,7 +254,7 @@ class KemonoDiscordDownloadThread(QThread):
                     except Exception: pass
 
         try: self.file_progress_signal.emit(original_filename, None)
-        except: pass
+        except Exception: pass
 
         if download_successful:
             final_filename_to_use = intended_final_filename
@@ -267,15 +267,15 @@ class KemonoDiscordDownloadThread(QThread):
                 counter += 1
             if final_filename_to_use != intended_final_filename:
                  try: self.progress_signal.emit(f"   -> Name conflict for '{intended_final_filename}'. Renaming to '{final_filename_to_use}'.")
-                 except: pass
+                 except Exception: pass
             try:
                 os.rename(temp_filepath, final_filepath_on_disk)
                 try: self.progress_signal.emit(f"   ✅ Saved: '{final_filename_to_use}'")
-                except: pass
+                except Exception: pass
                 return True, None
             except OSError as e:
                 try: self.progress_signal.emit(f"   ❌ OS error renaming temp file to '{final_filename_to_use}': {e}")
-                except: pass
+                except Exception: pass
                 if os.path.exists(temp_filepath):
                      try: os.remove(temp_filepath)
                      except OSError: pass
@@ -284,12 +284,12 @@ class KemonoDiscordDownloadThread(QThread):
         else:
             if not isinstance(last_exception, InterruptedError):
                 try: self.progress_signal.emit(f"   ❌ FAILED to download '{original_filename}' after {MAX_ATTEMPTS} attempts. Last error: {last_exception}")
-                except: pass
+                except Exception: pass
             if os.path.exists(temp_filepath):
                 try: os.remove(temp_filepath)
                 except OSError as e_rem:
                      try: self.progress_signal.emit(f"    (Failed to remove temp file '{temp_filename}': {e_rem})")
-                     except: pass
+                     except Exception: pass
             failure_details = None
             if not isinstance(last_exception, InterruptedError):
                 failure_details = {
@@ -313,7 +313,7 @@ class KemonoDiscordDownloadThread(QThread):
 
         if not self.scraper:
              try: self.progress_signal.emit("❌ Aborting Kemono Discord download: Cloudscraper failed to initialize.")
-             except: pass
+             except Exception: pass
              self.finished_signal.emit(0, 0, False, [])
              return
 
@@ -322,25 +322,25 @@ class KemonoDiscordDownloadThread(QThread):
                 self.progress_signal.emit("=" * 40)
                 self.progress_signal.emit(f"🚀 Starting Kemono Discord download for server: {self.server_id}")
                 self.progress_signal.emit(f"   Using {self.num_file_threads} thread(s) for file downloads.")
-            except: pass
+            except Exception: pass
 
             channels_to_process = []
             if self.target_channel_id:
                 channels_to_process.append({'id': self.target_channel_id, 'name': self.target_channel_id})
                 try: self.progress_signal.emit(f"   Targeting specific channel: {self.target_channel_id}")
-                except: pass
+                except Exception: pass
             else:
                 try: self.progress_label_signal.emit("Fetching server channels via Kemono API...")
-                except: pass
+                except Exception: pass
                 channels_data = fetch_server_channels(self.server_id, logger=self.progress_signal.emit, cookies_dict=self.cookies_dict)
                 if self._check_events(): return
                 if channels_data is not None:
                     channels_to_process = channels_data
                     try: self.progress_signal.emit(f"   Found {len(channels_to_process)} channels.")
-                    except: pass
+                    except Exception: pass
                 else:
                     try: self.progress_signal.emit(f"   ❌ Failed to fetch channels for server {self.server_id} via Kemono API.")
-                    except: pass
+                    except Exception: pass
                     return
 
             for channel in channels_to_process:
@@ -353,13 +353,13 @@ class KemonoDiscordDownloadThread(QThread):
                     os.makedirs(channel_dir, exist_ok=True)
                 except OSError as e:
                     try: self.progress_signal.emit(f"   ❌ Failed to create directory for channel '{channel_name}': {e}. Skipping channel.")
-                    except: pass
+                    except Exception: pass
                     continue
 
                 try:
                     self.progress_signal.emit(f"\n--- Processing Channel: #{channel_name} ({channel_id}) ---")
                     self.progress_label_signal.emit(f"Fetching messages for #{channel_name}...")
-                except: pass
+                except Exception: pass
 
                 file_tasks = []
                 message_generator = fetch_channel_messages(
@@ -399,24 +399,24 @@ class KemonoDiscordDownloadThread(QThread):
                         if self._check_events(): raise InterruptedError
                 except InterruptedError:
                      try: self.progress_signal.emit("   Interrupted while collecting file tasks.")
-                     except: pass
+                     except Exception: pass
                      break
                 except Exception as e_msg:
                      try: self.progress_signal.emit(f"   ❌ Error fetching messages for channel {channel_name}: {e_msg}")
-                     except: pass
+                     except Exception: pass
                      continue
 
                 if self._check_events(): break
 
                 if not file_tasks:
                     try: self.progress_signal.emit("   No downloadable file attachments found in this channel's messages.")
-                    except: pass
+                    except Exception: pass
                     continue
 
                 try:
                     self.progress_signal.emit(f"   Found {len(file_tasks)} potential file attachments. Starting downloads...")
                     self.progress_label_signal.emit(f"Downloading {len(file_tasks)} files for #{channel_name}...")
-                except: pass
+                except Exception: pass
 
                 files_processed_in_channel = 0
                 with ThreadPoolExecutor(max_workers=self.num_file_threads, thread_name_prefix=f"KDC_{channel_id[:4]}_") as executor:
@@ -437,23 +437,23 @@ class KemonoDiscordDownloadThread(QThread):
                             except Exception as e_future:
                                 filename = task_info.get('original_filename', 'unknown file')
                                 try: self.progress_signal.emit(f"   ❌ System error processing download future for '{filename}': {e_future}")
-                                except: pass
+                                except Exception: pass
                                 with self.count_lock:
                                     self.skip_count += 1
                                 failure_details = { 'file_info': {'url': task_info.get('file_url'), 'name': filename}, 'post_title': task_info.get('post_title', 'N/A'), 'original_post_id_for_log': task_info.get('message_id', 'N/A'), 'target_folder_path': task_info.get('channel_dir'), 'error': f"Future execution error: {e_future}", 'service': 'discord', 'user_id': self.server_id, 'forced_filename_override': clean_filename(filename), 'file_index_in_post': task_info.get('file_index', 0), 'num_files_in_this_post': task_info.get('num_files', 1) }
                                 self.permanently_failed_details.append(failure_details)
 
                             try: self.progress_label_signal.emit(f"#{channel_name}: {files_processed_in_channel}/{len(file_tasks)} files processed")
-                            except: pass
+                            except Exception: pass
 
                             if self._check_events():
                                  try: self.progress_signal.emit("   Cancelling remaining file downloads for this channel...")
-                                 except: pass
+                                 except Exception: pass
                                  executor.shutdown(wait=False, cancel_futures=True)
                                  break
                     except InterruptedError:
                          try: self.progress_signal.emit("   Download processing loop interrupted.")
-                         except: pass
+                         except Exception: pass
                          executor.shutdown(wait=False, cancel_futures=True)
 
                 if self._check_events(): break
@@ -464,11 +464,11 @@ class KemonoDiscordDownloadThread(QThread):
                 self.progress_signal.emit(f"❌ Unexpected critical error in Kemono Discord thread run loop: {e}")
                 import traceback
                 self.progress_signal.emit(traceback.format_exc())
-            except: pass
+            except Exception: pass
         finally:
             try:
                 try: self.progress_signal.emit("=" * 40)
-                except: pass
+                except Exception: pass
                 cancelled = self._is_cancelled_internal or self.cancellation_event.is_set()
 
                 if self.permanently_failed_details:
@@ -485,10 +485,10 @@ class KemonoDiscordDownloadThread(QThread):
                         self.progress_signal.emit("   Kemono Discord download finished due to cancellation.")
                     else:
                          self.progress_signal.emit("✅ Kemono Discord download process finished.")
-                except: pass
+                except Exception: pass
 
                 try: self.file_progress_signal.emit("", None)
-                except: pass
+                except Exception: pass
 
                 with self.count_lock:
                      final_download_count = self.download_count

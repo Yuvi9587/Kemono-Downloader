@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Back of folder -->
+  <path fill="#FFA000" d="M10 4H4C2.9 4 2 4.9 2 6v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+  
+  <!-- Papers inside -->
+  <path fill="#FAFAFA" d="M4 7h16v5H4z"/>
+  <path fill="#E0E0E0" d="M5 8h10v1H5z M5 10h14v1H5z"/>
+  
+  <!-- Front flap of folder -->
+  <path fill="#FFCA28" d="M2.5 9h19.1L19.5 20H4.5Z"/>
+  
+  <!-- Volume/Highlight for front flap -->
+  <path fill="#FFE082" d="M4.5 9L2.5 9 4.5 10.5 19.5 10.5 21.6 9 19.5 9Z"/>
+</svg>

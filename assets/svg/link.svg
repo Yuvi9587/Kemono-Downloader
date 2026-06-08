@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none">
+  <g transform="rotate(-30, 12, 12)">
+    <!-- Chain link left -->
+    <path d="M9 17H7a5 5 0 0 1 0-10h2" stroke="#2196F3" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+    <!-- Chain link right -->
+    <path d="M15 7h2a5 5 0 0 1 0 10h-2" stroke="#2196F3" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+    <!-- Middle connector -->
+    <line x1="8" y1="12" x2="16" y2="12" stroke="#42A5F5" stroke-width="2.2" stroke-linecap="round"/>
+    <!-- Shine dots -->
+    <circle cx="7" cy="10" r="0.8" fill="#90CAF9" opacity="0.7"/>
+    <circle cx="17" cy="14" r="0.8" fill="#90CAF9" opacity="0.7"/>
+  </g>
+</svg>

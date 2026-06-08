@@ -33,6 +33,20 @@ def strip_html_tags(text):
     clean = re.compile('<.*?>')
     return re.sub(clean, '', text)
 
+def write_text_with_links(pdf, text, font_family, font_size=12, line_height=7):
+    if not text: return
+    parts = re.split(r'(https?://[^\s\]\)\>]+)', text)
+    pdf.set_font(font_family, '', font_size)
+    for part in parts:
+        if part.startswith('http://') or part.startswith('https://'):
+            pdf.set_text_color(0, 0, 255)
+            pdf.set_font(font_family, 'U', font_size)
+            pdf.write(line_height, part, part)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font(font_family, '', font_size)
+        else:
+            pdf.write(line_height, part)
+
 def _setup_pdf_fonts(pdf, font_path, logger=print):
     """Helper to setup fonts for the PDF instance."""
     bold_font_path = ""
@@ -70,6 +84,31 @@ def add_metadata_page(pdf, post, font_family):
         pdf.set_font(font_family, 'B', 11)
         pdf.write(8, f"{label}: ")
         
+        if label == "Service" and value != "Unknown" and value != "kemono":
+            labels = value.split(', ')
+            for lbl in labels:
+                lbl_lower = lbl.lower()
+                if 'patreon' in lbl_lower:
+                    pdf.set_fill_color(249, 104, 84)
+                elif 'request' in lbl_lower:
+                    pdf.set_fill_color(0, 123, 255)
+                elif 'onlyfans' in lbl_lower:
+                    pdf.set_fill_color(0, 175, 240)
+                elif 'mega' in lbl_lower:
+                    pdf.set_fill_color(217, 39, 46)
+                elif 'fansly' in lbl_lower:
+                    pdf.set_fill_color(46, 164, 255)
+                else:
+                    pdf.set_fill_color(100, 100, 100)
+                
+                pdf.set_text_color(255, 255, 255)
+                w = pdf.get_string_width(" " + lbl + " ")
+                pdf.cell(w, 8, " " + lbl + " ", 0, 0, 'C', fill=True)
+                pdf.set_text_color(0, 0, 0)
+                pdf.set_x(pdf.get_x() + 2)
+            pdf.ln(8)
+            return
+            
         if link_url:
             pdf.set_text_color(0, 0, 255)
             pdf.set_font(font_family, 'U', 11) 
@@ -136,8 +175,7 @@ def create_individual_pdf(post_data, output_filename, font_path, add_info_page=F
     comments_list = post_data.get('comments_list_for_pdf')
 
     if content_text:
-        pdf.set_font(font_family, '', 12)
-        pdf.multi_cell(w=0, h=7, txt=content_text)
+        write_text_with_links(pdf, content_text, font_family, font_size=12, line_height=7)
         pdf.ln(10)
 
     if comments_list and (add_comments or not content_text):
@@ -176,7 +214,7 @@ def create_individual_pdf(post_data, output_filename, font_path, add_info_page=F
         logger(f"❌ Error saving PDF '{os.path.basename(output_filename)}': {e}")
         return False
 
-def create_single_pdf_from_content(posts_data, output_filename, font_path, add_info_page=False, logger=print):
+def create_single_pdf_from_content(posts_data, output_filename, font_path, add_info_page=False, continuous=False, logger=print):
     """
     Creates a single, continuous PDF from multiple posts.
     """
@@ -194,6 +232,31 @@ def create_single_pdf_from_content(posts_data, output_filename, font_path, add_i
     logger(f"   Starting continuous PDF creation with content from {len(posts_data)} posts...")
 
     for i, post in enumerate(posts_data):
+        is_first = (i == 0)
+        
+        if continuous and not is_first:
+            pdf.ln(5)
+            pdf.set_draw_color(200, 200, 200)
+            pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+            pdf.ln(5)
+            
+            # Sub-header for comment
+            author = post.get('creator_name', 'Unknown User')
+            date = post.get('published', '')
+            pdf.set_font(font_family, 'B', 12)
+            pdf.write(8, str(author))
+            if date:
+                pdf.set_font(font_family, '', 10)
+                pdf.write(8, f" on {date}")
+            pdf.ln(8)
+            
+            content_text = post.get('content_text_for_pdf') or post.get('content', '')
+            if content_text:
+                write_text_with_links(pdf, content_text, font_family, font_size=11, line_height=7)
+                pdf.ln(5)
+                
+            continue
+
         if add_info_page:
             add_metadata_page(pdf, post, font_family)
         else:
@@ -203,6 +266,11 @@ def create_single_pdf_from_content(posts_data, output_filename, font_path, add_i
             pdf.set_font(font_family, 'B', 16)
             pdf.multi_cell(w=0, h=10, txt=post.get('title', 'Untitled Post'), align='L')
             pdf.ln(5)
+            
+        content_text = post.get('content_text_for_pdf') or post.get('content', '')
+        if content_text:
+            write_text_with_links(pdf, content_text, font_family, font_size=12, line_height=7)
+            pdf.ln(7)
 
         if 'comments' in post and post['comments']:
             comments_list = post['comments']
@@ -228,9 +296,6 @@ def create_single_pdf_from_content(posts_data, output_filename, font_path, add_i
                     pdf.ln(3)
                     pdf.cell(w=0, h=0, border='T')
                     pdf.ln(3)
-        elif 'content' in post:
-            pdf.set_font(font_family, '', 12)
-            pdf.multi_cell(w=0, h=7, txt=post.get('content', 'No Content'))
     
     try:
         output_dir = os.path.dirname(output_filename)

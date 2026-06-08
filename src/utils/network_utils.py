@@ -158,7 +158,7 @@ def extract_post_info(url_string):
         return 'gelbooru', None, None
 
     bunkr_pattern = re.compile(
-        r"(?:https?://)?(?:[a-zA-Z0-9-]+\.)?bunkr\.(?:si|la|ws|red|black|media|site|is|to|ac|cr|ci|fi|pk|ps|sk|ph|su|ru)|bunkrr\.ru"
+        r"(?:https?://)?(?:[a-zA-Z0-9-]+\.)?(bunkr\.[a-z]+|bunkrr\.[a-z]+|bunkr-albums\.[a-z]+|balbums\.[a-z]+)", re.IGNORECASE
     )
     if bunkr_pattern.search(stripped_url):
         return 'bunkr', stripped_url, None

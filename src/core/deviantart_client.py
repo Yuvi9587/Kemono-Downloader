@@ -168,14 +168,14 @@ class DeviantArtClient:
             data = self._api_call(f"/deviation/download/{uuid}")
             if 'src' in data:
                 return data
-        except:
+        except Exception:
             pass
         
         try:
             meta = self._api_call(f"/deviation/{uuid}")
             if 'content' in meta:
                 return meta['content']
-        except:
+        except Exception:
             pass
         return None
 

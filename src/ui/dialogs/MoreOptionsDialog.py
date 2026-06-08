@@ -11,9 +11,10 @@ class MoreOptionsDialog(QDialog):
     SCOPE_CONTENT = "content"
     SCOPE_COMMENTS = "comments"
 
-    def __init__(self, parent=None, current_scope=None, current_format=None, single_pdf_checked=False, add_info_checked=False):
+    def __init__(self, parent=None, current_scope=None, current_format=None, single_pdf_checked=False, add_info_checked=False, is_simpcity=False):
         super().__init__(parent)
         self.parent_app = parent
+        self.is_simpcity = is_simpcity
         self.setWindowTitle("More Options")
         self.setMinimumWidth(350)
 
@@ -29,7 +30,12 @@ class MoreOptionsDialog(QDialog):
         layout.addWidget(self.radio_content)
         layout.addWidget(self.radio_comments)
 
-        if current_scope == self.SCOPE_COMMENTS:
+        if self.is_simpcity:
+            self.radio_comments.setVisible(False)
+            self.radio_content.setVisible(False)
+            self.description_label.setText("Please choose the export format:")
+
+        if current_scope == self.SCOPE_COMMENTS and not self.is_simpcity:
             self.radio_comments.setChecked(True)
         else:
             self.radio_content.setChecked(True)
@@ -59,6 +65,9 @@ class MoreOptionsDialog(QDialog):
         self.add_info_checkbox.setChecked(add_info_checked)
         layout.addWidget(self.add_info_checkbox)
 
+        if self.is_simpcity:
+            self.add_info_checkbox.setVisible(False)
+
         self.format_combo.currentTextChanged.connect(self.update_checkbox_states)
         self.update_checkbox_states(self.format_combo.currentText())
 
@@ -73,13 +82,15 @@ class MoreOptionsDialog(QDialog):
         """Enable PDF-specific checkboxes only if the format is PDF."""
         is_pdf = (text.upper() == "PDF")
         self.single_pdf_checkbox.setEnabled(is_pdf)
-        self.add_info_checkbox.setEnabled(is_pdf)
+        self.add_info_checkbox.setEnabled(is_pdf and not self.is_simpcity)
         
         if not is_pdf:
             self.single_pdf_checkbox.setChecked(False)
             self.add_info_checkbox.setChecked(False)
 
     def get_selected_scope(self):
+        if self.is_simpcity:
+            return self.SCOPE_CONTENT
         if self.radio_comments.isChecked():
             return self.SCOPE_COMMENTS
         return self.SCOPE_CONTENT
@@ -93,6 +104,8 @@ class MoreOptionsDialog(QDialog):
 
     def get_add_info_state(self):
         """Returns the state of the Add Info checkbox."""
+        if self.is_simpcity:
+            return False
         return self.add_info_checkbox.isChecked() and self.add_info_checkbox.isEnabled()
 
     def _apply_theme(self):

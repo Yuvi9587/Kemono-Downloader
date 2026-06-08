@@ -317,8 +317,8 @@ class Rule34SettingsDialog(QDialog):
         limit_layout.addWidget(self.limit_spin)
         filters_layout.addLayout(limit_layout)
         
-        self.dl_images_cb = QCheckBox("Download Images (JPG, PNG)")
-        self.dl_videos_cb = QCheckBox("Download Videos (MP4, WEBM)")
+        self.dl_images_cb = QCheckBox("Download Images (JPG, PNG, GIF, WEBP…)")
+        self.dl_videos_cb = QCheckBox("Download Videos (MP4, WEBM, MKV, AVI…)")
         filters_layout.addWidget(self.dl_images_cb)
         filters_layout.addWidget(self.dl_videos_cb)
         filters_group.setLayout(filters_layout)

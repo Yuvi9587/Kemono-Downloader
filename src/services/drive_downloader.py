@@ -575,6 +575,15 @@ def download_gofile_folder(
         logger_func(f"   [Gofile] ❌ Account creation failed: {e}")
         return
 
+    user_agent = session.headers.get('User-Agent', 'Mozilla/5.0')
+    lang = "en-US"
+    data = (f"{user_agent}::"
+            f"{lang}::"
+            f"{token}::"
+            f"{int(time.time() / 14400)}::"
+            f"5d4f7g8sd45fsd")
+    wt_token = hashlib.sha256(data.encode()).hexdigest()
+
     try:
         api_url = f"https://api.gofile.io/contents/{content_id}?cache=true&sortField=createTime&sortDirection=1"
 
@@ -582,7 +591,10 @@ def download_gofile_folder(
 
         response = session.get(
             api_url,
-            headers={"X-Website-Token": "4fd6sg89d7s6"},
+            headers={
+                "X-Website-Token": wt_token,
+                "X-BL": lang
+            },
             timeout=30
         )
         response.raise_for_status()

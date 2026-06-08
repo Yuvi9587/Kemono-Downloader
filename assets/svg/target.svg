@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Target (Perspective / Elliptical to look tilted) -->
+  <g transform="rotate(-15 10 14)">
+    <!-- Outer circle (Red) -->
+    <ellipse cx="10" cy="14" rx="9" ry="10" fill="#F44336" />
+    <!-- Middle circle (White) -->
+    <ellipse cx="10" cy="14" r="6" ry="6.7" fill="#FFFFFF" />
+    <!-- Inner circle (Blue) -->
+    <ellipse cx="10" cy="14" rx="3" ry="3.3" fill="#2196F3" />
+  </g>
+  
+  <!-- Dart / Pin -->
+  <!-- Shaft -->
+  <line x1="20" y1="4" x2="10.5" y2="13.5" stroke="#5D4037" stroke-width="2" stroke-linecap="round"/>
+  
+  <!-- Tip -->
+  <polygon points="9,15 11,12.5 11.5,13" fill="#9E9E9E" />
+  
+  <!-- Feathers (Yellow) -->
+  <polygon points="20,4 23,2 21,5 22,7 19,5 17,6 19,3 18,1" fill="#FFC107" />
+</svg>

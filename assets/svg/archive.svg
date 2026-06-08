@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Box body -->
+  <path fill="#8D6E63" d="M3 10h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10z"/>
+  <!-- Box top flap left -->
+  <path fill="#A1887F" d="M3 10l2-6h6l-2 6H3z"/>
+  <!-- Box top flap right -->
+  <path fill="#795548" d="M21 10l-2-6h-6l2 6h6z"/>
+  <!-- Tape / seal strip -->
+  <rect x="9" y="4" width="6" height="8" rx="0.5" fill="#FFC107" opacity="0.85"/>
+  <!-- Shine on tape -->
+  <rect x="10" y="5" width="2" height="1" rx="0.3" fill="#FFE082" opacity="0.6"/>
+  <!-- Bottom shadow -->
+  <path fill="#5D4037" d="M3 19h18v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2z"/>
+</svg>

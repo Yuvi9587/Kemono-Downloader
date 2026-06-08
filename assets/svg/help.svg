@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none">
+  <!-- Circle background -->
+  <circle cx="12" cy="12" r="10" fill="#546E7A" stroke="#37474F" stroke-width="0.8"/>
+  <!-- Highlight arc -->
+  <path d="M7 8 Q9 5 14 6.5" stroke="#90A4AE" stroke-width="1.2" stroke-linecap="round" opacity="0.5" fill="none"/>
+  <!-- Question mark -->
+  <path d="M9.5 9.5 Q9.5 7 12 7 Q14.5 7 14.5 9.5 Q14.5 11.5 12 12.5 L12 14" stroke="#ECEFF1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- Dot -->
+  <circle cx="12" cy="16.5" r="1.2" fill="#ECEFF1"/>
+</svg>

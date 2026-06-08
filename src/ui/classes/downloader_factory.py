@@ -75,7 +75,7 @@ def create_downloader_thread(main_app, api_url, service, id1, id2, effective_out
     if service == 'simpcity':
         cookies = prepare_cookies_for_request(
             use_cookie_flag=True,
-            cookie_text_input=main_app.simpcity_cookie_text_input.text(),
+            cookie_text_input=main_app.cookie_text_input.text(),
             selected_cookie_file_path=main_app.selected_cookie_filepath,
             app_base_dir=main_app.app_base_dir,
             logger_func=main_app.log_signal.emit,

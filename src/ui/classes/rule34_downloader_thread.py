@@ -9,6 +9,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse, parse_qs
 from PyQt5.QtCore import QThread, pyqtSignal
+from ...config.constants import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 
 from PIL import Image
 import imagehash
@@ -62,7 +63,7 @@ class Rule34DownloadThread(QThread):
             self.active_blacklist.extend(['necrophilia', 'dead', 'corpse', 'zombie', 'rotting', 'decay'])
             
         self.active_blacklist.extend([
-            'rape', 'gore', 'blood',
+            'rape', 'gore', 
             'literal_spitroast', 'scaphism', 'what_the_fuck', 'itt', 
             'where_is_your_god_now', 'what_has_science_done', 'abortion_mark'
         ])
@@ -382,9 +383,11 @@ class Rule34DownloadThread(QThread):
                     if not file_url: continue
 
                     ext = os.path.splitext(urlparse(file_url).path)[1].lower()
-                    is_video = ext in ['.mp4', '.webm', '.mov', '.mkv']
-                    if is_video and not self.dl_videos: continue 
-                    if not is_video and not self.dl_images: continue 
+                    is_video = ext in VIDEO_EXTENSIONS
+                    is_image = ext in IMAGE_EXTENSIONS
+                    if is_video and not self.dl_videos: continue
+                    if is_image and not self.dl_images: continue
+                    if not is_video and not is_image: continue  # skip audio/archive/unknown
 
                     file_hash = post.get('hash', '')
                     post_id = post.get('id', 'Unknown')

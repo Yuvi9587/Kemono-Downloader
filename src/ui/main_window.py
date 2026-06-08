@@ -16,11 +16,12 @@ import requests
 import cloudscraper
 import unicodedata
 import itertools
-from urllib.parse import urlparse
+import uuid
+import sip
+from urllib.parse import urlparse, parse_qs
 from collections import deque, defaultdict, Counter
 import threading
-from concurrent.futures import Future, ThreadPoolExecutor ,CancelledError
-from urllib .parse import urlparse 
+from concurrent.futures import Future, ThreadPoolExecutor, CancelledError
 
 from PyQt5.QtGui import QIcon, QIntValidator, QDesktopServices, QTextCharFormat
 from PyQt5.QtWidgets import (
@@ -42,10 +43,8 @@ from ..services.drive_downloader import (
     download_dropbox_file,
     download_gofile_folder  
 )
-from ..core.workers import DownloadThread as BackendDownloadThread
+from ..core.workers import DownloadThread as BackendDownloadThread, PostProcessorWorker, PostProcessorSignals
 from ..services.multipart_downloader import download_file_in_parts, MULTIPART_DOWNLOADER_AVAILABLE
-from ..core.workers import PostProcessorWorker  
-from ..core.workers import PostProcessorSignals
 from ..core.api_client import download_from_api
 from ..core.discord_client import fetch_server_channels, fetch_channel_messages 
 from ..core.manager import DownloadManager
@@ -65,8 +64,7 @@ from .assets import get_app_icon_object
 from ..config.constants import *
 from ..utils.file_utils import KNOWN_NAMES, clean_folder_name
 from ..utils.network_utils import extract_post_info, prepare_cookies_for_request
-from ..utils.resolution import setup_ui
-from ..utils.resolution import get_dark_theme
+from ..utils.resolution import setup_ui, get_dark_theme, get_dark_theme as get_theme_stylesheet
 from ..utils.command import parse_commands_from_text
 from ..i18n.translator import get_translation
 from .dialogs.EmptyPopupDialog import EmptyPopupDialog
@@ -79,7 +77,6 @@ from .dialogs.ErrorFilesDialog import ErrorFilesDialog
 from .dialogs.DownloadHistoryDialog import DownloadHistoryDialog
 from .dialogs.DownloadExtractedLinksDialog import DownloadExtractedLinksDialog
 from .dialogs.FavoritePostsDialog import FavoritePostsDialog
-from .dialogs.FavoriteArtistsDialog import FavoriteArtistsDialog
 from .dialogs.ConfirmAddAllDialog import ConfirmAddAllDialog
 from .dialogs.MoreOptionsDialog import MoreOptionsDialog
 from .dialogs.SinglePDF import create_single_pdf_from_content
@@ -90,6 +87,7 @@ from .dialogs.MultipartScopeDialog import MultipartScopeDialog
 from .dialogs.ExportLinksDialog import ExportLinksDialog
 from .dialogs.CustomFilenameDialog import CustomFilenameDialog
 from .dialogs.VisualSortDownloadDialog import VisualSortSetupDialog
+from .dialogs.Rule34SettingsDialog import Rule34SettingsDialog
 from .classes.erome_downloader_thread import EromeDownloadThread
 from .classes.saint2_downloader_thread import Saint2DownloadThread
 from .classes.discord_downloader_thread import DiscordDownloadThread
@@ -295,6 +293,7 @@ class DownloaderApp (QWidget ):
         self.manga_filename_style = self.settings.value(MANGA_FILENAME_STYLE_KEY, STYLE_POST_TITLE, type=str)
         self.custom_manga_filename_format = self.settings.value(MANGA_CUSTOM_FORMAT_KEY, "{published} {title}", type=str)        
         self.manga_custom_date_format = self.settings.value(MANGA_CUSTOM_DATE_FORMAT_KEY, "YYYY-MM-DD", type=str) 
+        self.custom_manga_suffix_format = self.settings.value(MANGA_CUSTOM_SUFFIX_FORMAT_KEY, "001", type=str)
         self.current_theme = self.settings.value(THEME_KEY, "dark", type=str)
         self.only_links_log_display_mode = LOG_DISPLAY_LINKS
         self.mega_download_log_preserved_once = False
@@ -507,7 +506,6 @@ class DownloaderApp (QWidget ):
         Generates a unique filename and safely writes a job settings dictionary 
         to the disk inside the 'appdata/jobs' folder.
         """
-        import uuid
         timestamp = int(time.time())
         unique_id = uuid.uuid4().hex[:6]
         
@@ -720,13 +718,7 @@ class DownloaderApp (QWidget ):
         finally:
             self.finished_signal.emit(download_count, skip_count, self.cancellation_event.is_set(), [])
 
-    def _sync_cookie_inputs(self, text):
-        """Keeps the two cookie input fields synchronized."""
-        sender = self.sender()
-        if sender is self.cookie_text_input and self.simpcity_cookie_text_input.text() != text:
-            self.simpcity_cookie_text_input.setText(text)
-        elif sender is self.simpcity_cookie_text_input and self.cookie_text_input.text() != text:
-            self.cookie_text_input.setText(text)
+
 
     def _cleanup_after_update(self):
         """Deletes the old executable after a successful update."""
@@ -1060,37 +1052,41 @@ class DownloaderApp (QWidget ):
 
         if self.is_ready_to_download_fetched:
             num_posts = len(self.fetched_posts_for_download)
-            self.download_btn.setText(f"⬇️ Start Download ({num_posts} Posts)")
+            self.download_btn.setText(f"Start Download ({num_posts} Posts)")
+            self.download_btn.setIcon(QIcon("assets/Svg/download.svg"))
             self.download_btn.setEnabled(True)
             self.download_btn.clicked.connect(self.start_download)
             self.pause_btn.setEnabled(False)
-            self.cancel_btn.setText("🗑️ Clear Fetch")
+            self.cancel_btn.setText("Clear Fetch")
             self.cancel_btn.setEnabled(True)
             self.cancel_btn.clicked.connect(self.reset_application_state)
             return
 
         elif self.is_ready_to_download_batch_update:
             num_posts = len(self.fetched_posts_for_batch_update)
-            self.download_btn.setText(f"⬇️ Start Download ({num_posts} New Posts)")
+            self.download_btn.setText(f"Start Download ({num_posts} New Posts)")
+            self.download_btn.setIcon(QIcon("assets/Svg/download.svg"))
             self.download_btn.setEnabled(True)
             self.download_btn.clicked.connect(self.start_download)
             self.pause_btn.setEnabled(False)
-            self.cancel_btn.setText("🗑️ Clear Update")
+            self.cancel_btn.setText("Clear Update")
             self.cancel_btn.setEnabled(True)
             self.cancel_btn.clicked.connect(self.reset_application_state)
             return
 
         if self.active_update_profile and self.new_posts_for_update and not is_download_active:
             num_new = len(self.new_posts_for_update)
-            self.download_btn.setText(self._tr("start_download_new_button_text", f"⬇️ Start Download ({num_new} new)"))
+            self.download_btn.setText(self._tr("start_download_new_button_text", f"Start Download ({num_new} new)"))
+            self.download_btn.setIcon(QIcon("assets/Svg/download.svg"))
             self.download_btn.setEnabled(True)
             self.download_btn.clicked.connect(self.start_download)
             self.download_btn.setToolTip(self._tr("start_download_new_tooltip", "Click to download the new posts found."))
 
-            self.pause_btn.setText(self._tr("pause_download_button_text", "⏸️ Pause Download"))
+            self.pause_btn.setText(self._tr("pause_download_button_text", "Pause Download"))
+            self.pause_btn.setIcon(QIcon("assets/Svg/pause.svg"))
             self.pause_btn.setEnabled(False)
 
-            self.cancel_btn.setText(self._tr("clear_selection_button_text", "🗑️ Clear Selection"))
+            self.cancel_btn.setText(self._tr("clear_selection_button_text", "Clear Selection"))
             self.cancel_btn.setEnabled(True)
             self.cancel_btn.clicked.connect(self._clear_update_selection)
             self.cancel_btn.setToolTip(self._tr("clear_selection_tooltip", "Click to cancel the update and clear the selection."))
@@ -1101,26 +1097,29 @@ class DownloaderApp (QWidget ):
             self.download_btn.clicked.connect(self.start_download)
             self.download_btn.setToolTip(self._tr("check_for_updates_tooltip", "Click to check for new posts from this creator."))
 
-            self.pause_btn.setText(self._tr("pause_download_button_text", "⏸️ Pause Download"))
+            self.pause_btn.setText(self._tr("pause_download_button_text", "Pause Download"))
+            self.pause_btn.setIcon(QIcon("assets/Svg/pause.svg"))
             self.pause_btn.setEnabled(False)
 
-            self.cancel_btn.setText(self._tr("clear_selection_button_text", "🗑️ Clear Selection"))
+            self.cancel_btn.setText(self._tr("clear_selection_button_text", "Clear Selection"))
             self.cancel_btn.setEnabled(True)
             self.cancel_btn.clicked.connect(self._clear_update_selection)
             self.cancel_btn.setToolTip(self._tr("clear_selection_tooltip", "Click to clear the loaded creator profile and return to normal mode."))
 
         elif self.is_restore_pending:
-            self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+            self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
+            self.download_btn.setIcon(QIcon("assets/Svg/download.svg"))
             self.download_btn.setEnabled(True)
             self.download_btn.clicked.connect(self.start_download)
             self.download_btn.setToolTip(self._tr("start_download_discard_tooltip", "Click to start a new download, discarding the previous session."))
 
-            self.pause_btn.setText(self._tr("restore_download_button_text", "🔄 Restore Download"))
+            self.pause_btn.setText(self._tr("restore_download_button_text", "Restore Download"))
+            self.pause_btn.setIcon(QIcon("assets/Svg/resume.svg"))
             self.pause_btn.setEnabled(True)
             self.pause_btn.clicked.connect(self.restore_download)
             self.pause_btn.setToolTip(self._tr("restore_download_button_tooltip", "Click to restore the interrupted download."))
 
-            self.cancel_btn.setText(self._tr("discard_session_button_text", "🗑️ Discard Session"))
+            self.cancel_btn.setText(self._tr("discard_session_button_text", "Discard Session"))
             self.cancel_btn.setEnabled(True)
             self.cancel_btn.clicked.connect(self._clear_session_and_reset_ui)
             self.cancel_btn.setToolTip(self._tr("discard_session_tooltip", "Click to discard the interrupted session and reset the UI."))
@@ -1134,22 +1133,25 @@ class DownloaderApp (QWidget ):
             else:
                 if self.is_ready_to_download_fetched:
                     num_posts = len(self.fetched_posts_for_download)
-                    self.download_btn.setText(f"⬇️ Start Download ({num_posts} Posts)")
+                    self.download_btn.setText(f"Start Download ({num_posts} Posts)")
+                    self.download_btn.setIcon(QIcon("assets/Svg/download.svg"))
                     self.download_btn.setEnabled(True)
                 else:
                     if hasattr(self, 'is_running_job_queue') and self.is_running_job_queue:
                          self.download_btn.setText("🔄 Processing Queue...")
                     else:
-                         self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+                         self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
+                         self.download_btn.setIcon(QIcon("assets/Svg/download.svg"))
                     
                     self.download_btn.setEnabled(False)
                 
-                self.pause_btn.setText(self._tr("resume_download_button_text", "▶️ Resume Download") if self.is_paused else self._tr("pause_download_button_text", "⏸️ Pause Download"))
+                self.pause_btn.setText(self._tr("resume_download_button_text", "Resume Download") if self.is_paused else self._tr("pause_download_button_text", "Pause Download"))
+                self.pause_btn.setIcon(QIcon("assets/Svg/resume.svg") if self.is_paused else QIcon("assets/Svg/pause.svg"))
                 self.pause_btn.setEnabled(True)
                 self.pause_btn.clicked.connect(self._handle_pause_resume_action)
             print("  --> Button state: IDLE")
 
-            self.cancel_btn.setText(self._tr("cancel_button_text", "❌ Cancel & Reset UI"))
+            self.cancel_btn.setText(self._tr("cancel_button_text", "Cancel & Reset UI"))
             self.cancel_btn.setEnabled(True)
             self.cancel_btn.clicked.connect(self.cancel_download_button_action)
         
@@ -1166,14 +1168,16 @@ class DownloaderApp (QWidget ):
                 if fetch_first_enabled and not is_single_post and url_text:
                     self.download_btn.setText("📄 Fetch Pages")
                 else:
-                    self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+                    self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
+                    self.download_btn.setIcon(QIcon("assets/Svg/download.svg"))
                 
                 self.download_btn.setEnabled(True)
                 self.download_btn.clicked.connect(self.start_download)
 
-            self.pause_btn.setText(self._tr("pause_download_button_text", "⏸️ Pause Download"))
+            self.pause_btn.setText(self._tr("pause_download_button_text", "Pause Download"))
+            self.pause_btn.setIcon(QIcon("assets/Svg/pause.svg"))
             self.pause_btn.setEnabled(False)
-            self.cancel_btn.setText(self._tr("cancel_button_text", "❌ Cancel & Reset UI"))
+            self.cancel_btn.setText(self._tr("cancel_button_text", "Cancel & Reset UI"))
             self.cancel_btn.setEnabled(False)
 
         
@@ -1239,11 +1243,12 @@ class DownloaderApp (QWidget ):
         args_template['domain_override'] = domain_override
         
         self.set_ui_enabled(False)
-        self.download_btn.setText("⬇️ Downloading...")
+        self.download_btn.setText("Downloading...")
+        self.download_btn.setIcon(QIcon("assets/Svg/download.svg"))
         self.download_btn.setEnabled(False)
         self.pause_btn.setEnabled(True)
         self.cancel_btn.setEnabled(True)
-        self.cancel_btn.setText("❌ Cancel & Reset UI")
+        self.cancel_btn.setText("Cancel & Reset UI")
         try:
             self.cancel_btn.clicked.disconnect()
             self.pause_btn.clicked.disconnect()
@@ -1298,20 +1303,20 @@ class DownloaderApp (QWidget ):
         if self .url_label_widget :
             self .url_label_widget .setText (self ._tr ("creator_post_url_label","URL:"))
         if self .download_location_label_widget :
-            self .download_location_label_widget .setText (self ._tr ("download_location_label","📁 Download Location:"))
+            self .download_location_label_widget .setText (self ._tr ("download_location_label","<img src='assets/Svg/folder.svg' width='13' height='13' align='top'> Download Location:"))
         if hasattr (self ,'character_label')and self .character_label :
-            self .character_label .setText (self ._tr ("filter_by_character_label","🎯 Filter by Character(s) (comma-separated):"))
+            self .character_label .setText (self ._tr ("filter_by_character_label","<img src='assets/Svg/target.svg' width='13' height='13' align='top'> Filter by Character(s) (comma-separated):"))
         if self .skip_words_label_widget :
-            self .skip_words_label_widget .setText (self ._tr ("skip_with_words_label","🚫 Skip with Words (comma-separated):"))
+            self .skip_words_label_widget .setText (self ._tr ("skip_with_words_label","<img src='assets/Svg/block.svg' width='13' height='13' align='top'> Skip with Words (comma-separated):"))
         if self .remove_from_filename_label_widget :
             self .remove_from_filename_label_widget .setText (self ._tr ("remove_words_from_name_label","✂️ Remove Words from name:"))
         if hasattr (self ,'radio_all'):self .radio_all .setText (self ._tr ("filter_all_radio","All"))
         if hasattr (self ,'radio_images'):self .radio_images .setText (self ._tr ("filter_images_radio","Images/GIFs"))
         if hasattr (self ,'radio_videos'):self .radio_videos .setText (self ._tr ("filter_videos_radio","Videos"))
-        if hasattr (self ,'radio_only_archives'):self .radio_only_archives .setText (self ._tr ("filter_archives_radio","📦 Only Archives"))
-        if hasattr (self ,'radio_only_links'):self .radio_only_links .setText (self ._tr ("filter_links_radio","🔗 Only Links"))
-        if hasattr (self ,'radio_only_audio'):self .radio_only_audio .setText (self ._tr ("filter_audio_radio","🎧 Only Audio"))
-        if hasattr (self ,'favorite_mode_checkbox'):self .favorite_mode_checkbox .setText (self ._tr ("favorite_mode_checkbox_label","⭐ Favorite Mode"))
+        if hasattr (self ,'radio_only_archives'):self .radio_only_archives .setText (self ._tr ("filter_archives_radio","Only Archives"))
+        if hasattr (self ,'radio_only_links'):self .radio_only_links .setText (self ._tr ("filter_links_radio","Only Links"))
+        if hasattr (self ,'radio_only_audio'):self .radio_only_audio .setText (self ._tr ("filter_audio_radio","Only Audio"))
+        if hasattr (self ,'favorite_mode_checkbox'):self .favorite_mode_checkbox .setText (self ._tr ("favorite_mode_checkbox_label","Favorite Mode"))
         if hasattr (self ,'dir_button'):self .dir_button .setText (self ._tr ("browse_button_text","Browse..."))
         self ._update_char_filter_scope_button_text ()
         self ._update_skip_scope_button_text ()
@@ -1339,17 +1344,17 @@ class DownloaderApp (QWidget ):
         current_download_is_active =self ._is_download_active ()if hasattr (self ,'_is_download_active')else False 
         self .set_ui_enabled (not current_download_is_active )
 
-        if hasattr (self ,'known_chars_label'):self .known_chars_label .setText (self ._tr ("known_chars_label_text","🎭 Known Shows/Characters (for Folder Names):"))
+        if hasattr (self ,'known_chars_label'):self .known_chars_label .setText (self ._tr ("known_chars_label_text","<img src='assets/Svg/mask.svg' width='13' height='13' align='top'> Known Shows/Characters (for Folder Names):"))
         if hasattr (self ,'open_known_txt_button'):self .open_known_txt_button .setText (self ._tr ("open_known_txt_button_text","Open Known.txt"));self .open_known_txt_button .setToolTip (self ._tr ("open_known_txt_button_tooltip","Open the 'Known.txt' file..."))
-        if hasattr (self ,'add_char_button'):self .add_char_button .setText (self ._tr ("add_char_button_text","➕ Add"));self .add_char_button .setToolTip (self ._tr ("add_char_button_tooltip","Add the name from the input field..."))
-        if hasattr (self ,'add_to_filter_button'):self .add_to_filter_button .setText (self ._tr ("add_to_filter_button_text","⤵️ Add to Filter"));self .add_to_filter_button .setToolTip (self ._tr ("add_to_filter_button_tooltip","Select names from 'Known Shows/Characters' list..."))
+        if hasattr (self ,'add_char_button'):self .add_char_button .setText (self ._tr ("add_char_button_text","Add"));self .add_char_button .setToolTip (self ._tr ("add_char_button_tooltip","Add the name from the input field..."))
+        if hasattr (self ,'add_to_filter_button'):self .add_to_filter_button .setText (self ._tr ("add_to_filter_button_text","Add to Filter"));self .add_to_filter_button .setToolTip (self ._tr ("add_to_filter_button_tooltip","Select names from 'Known Shows/Characters' list..."))
         if hasattr (self ,'character_list'):
-            self .character_list .setToolTip (self ._tr ("known_chars_list_tooltip","This list displays all names and groups from your 'Known.txt' file.\nThese entries are used by the 'Separate Folder by Known.txt' option to create folders automatically from post titles.\n\nYou can select items here and use the '⤵️ Add to Filter' button to quickly add them to the character filter field."))
-        if hasattr (self ,'delete_char_button'):self .delete_char_button .setText (self ._tr ("delete_char_button_text","🗑️ Delete Selected"));self .delete_char_button .setToolTip (self ._tr ("delete_char_button_tooltip","Delete the selected name(s)..."))
+            self .character_list .setToolTip (self ._tr ("known_chars_list_tooltip","This list displays all names and groups from your 'Known.txt' file.\nThese entries are used by the 'Separate Folder by Known.txt' option to create folders automatically from post titles.\n\nYou can select items here and use the 'Add to Filter' button to quickly add them to the character filter field."))
+        if hasattr (self ,'delete_char_button'):self .delete_char_button .setText (self ._tr ("delete_char_button_text","Delete Selected"));self .delete_char_button .setToolTip (self ._tr ("delete_char_button_tooltip","Delete the selected name(s)..."))
 
         if hasattr (self ,'cancel_btn'):self .cancel_btn .setToolTip (self ._tr ("cancel_button_tooltip","Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory)."))
         if hasattr (self ,'error_btn'):self .error_btn .setText (self ._tr ("error_button_text","Error"));self .error_btn .setToolTip (self ._tr ("error_button_tooltip","View files skipped due to errors and optionally retry them."))
-        if hasattr (self ,'progress_log_label'):self .progress_log_label .setText (self ._tr ("progress_log_label_text","📜 Progress Log:"))
+        if hasattr (self ,'progress_log_label'):self .progress_log_label .setText (self ._tr ("progress_log_label_text","<img src='assets/Svg/scroll.svg' width='13' height='13' align='top'> Progress Log:"))
         if hasattr (self ,'reset_button'):self .reset_button .setText (self ._tr ("reset_button_text","🔄 Reset"));self .reset_button .setToolTip (self ._tr ("reset_button_tooltip","Reset all inputs and logs to default state (only when idle)."))
         self ._update_multipart_toggle_button_text ()
         if hasattr (self ,'progress_label')and not self ._is_download_active ():self .progress_label .setText (self ._tr ("progress_idle_text","Progress: Idle"))
@@ -1365,7 +1370,7 @@ class DownloaderApp (QWidget ):
             self .end_page_input .setPlaceholderText (self ._tr ("end_page_input_placeholder","End"))
             self .end_page_input .setToolTip (self ._tr ("end_page_input_tooltip","For creator URLs: Specify the ending page number..."))
         if hasattr (self ,'fav_mode_active_label'):
-            self .fav_mode_active_label .setText (self ._tr ("fav_mode_active_label_text","⭐ Favorite Mode is active..."))
+            self .fav_mode_active_label .setText (self ._tr ("fav_mode_active_label_text","<img src='assets/Svg/star.svg' width='13' height='13' align='top'> Favorite Mode is active..."))
         if hasattr (self ,'cookie_browse_button'):
             self .cookie_browse_button .setToolTip (self ._tr ("cookie_browse_button_tooltip","Browse for a cookie file..."))
         if hasattr(self, 'rule34_settings_btn'):
@@ -1475,11 +1480,7 @@ class DownloaderApp (QWidget ):
             self .cookie_browse_button .clicked .connect (self ._browse_cookie_file )
         if hasattr (self ,'cookie_text_input'):
             self .cookie_text_input .textChanged .connect (self ._handle_cookie_text_manual_change )
-        if hasattr(self, 'simpcity_cookie_text_input'):
-            self.cookie_text_input.textChanged.connect(self._sync_cookie_inputs)
-            self.simpcity_cookie_text_input.textChanged.connect(self._sync_cookie_inputs)
-        if hasattr(self, 'simpcity_cookie_browse_button'):
-            self.simpcity_cookie_browse_button.clicked.connect(self._browse_cookie_file)
+
 
         if hasattr(self, 'keep_duplicates_checkbox'):
             self.keep_duplicates_checkbox.toggled.connect(self._handle_keep_duplicates_toggled)
@@ -1508,6 +1509,9 @@ class DownloaderApp (QWidget ):
             self .link_search_input .returnPressed .connect (self ._filter_links_log )
             self .link_search_input .textChanged .connect (self ._filter_links_log )
         if self .export_links_button :self .export_links_button .clicked .connect (self ._export_links_to_file )
+
+        if hasattr(self, 'simpcity_save_external_links_cb'):
+            self.simpcity_save_external_links_cb.toggled.connect(self._handle_simpcity_save_external_links_toggled)
 
         if self .manga_mode_checkbox :self .manga_mode_checkbox .toggled .connect (self .update_ui_for_manga_mode )
 
@@ -1567,7 +1571,6 @@ class DownloaderApp (QWidget ):
             self._enforce_visual_sort_pipeline_rules(False)
             return
         try:
-            from .dialogs.VisualSortDownloadDialog import VisualSortSetupDialog 
             
             dialog = VisualSortSetupDialog(self)
             if dialog.exec_() == QDialog.Accepted:
@@ -1617,7 +1620,6 @@ class DownloaderApp (QWidget ):
 
     def get_booru_credentials(self):
         """Extracts the api_key and user_id from the unified pasted string."""
-        from urllib.parse import parse_qs
         
         raw_creds = ""
         if hasattr(self, 'booru_creds_input'):
@@ -1659,7 +1661,88 @@ class DownloaderApp (QWidget ):
 
             self .dynamic_character_filter_holder .set_filters (parsed_filters )
 
-    def _parse_character_filters (self ,raw_text ):
+    def _parse_single_filter_part(self, part_str):
+        part_str = part_str.strip()
+        if not part_str: return None
+        
+        is_tilde_group = part_str.startswith("(") and part_str.endswith(")~")
+        is_standard_group = part_str.startswith("(") and part_str.endswith(")") and not is_tilde_group
+        
+        if is_tilde_group:
+            inner_content = part_str[1:-2].strip()
+            components_distinct = False
+        elif is_standard_group:
+            inner_content = part_str[1:-1].strip()
+            components_distinct = True
+        else:
+            inner_content = part_str
+            components_distinct = False
+
+        and_parts = []
+        current_buffer = ""
+        depth = 0
+        for char in inner_content:
+            if char == '(': depth += 1; current_buffer += char
+            elif char == ')':
+                if depth > 0: depth -= 1
+                current_buffer += char
+            elif char == '+' and depth == 0:
+                if current_buffer.strip(): and_parts.append(current_buffer.strip())
+                current_buffer = ""
+            else:
+                current_buffer += char
+        if current_buffer.strip():
+            and_parts.append(current_buffer.strip())
+
+        if len(and_parts) > 1:
+            and_components = []
+            for sub_part in and_parts:
+                sub_obj = self._parse_single_filter_part(sub_part)
+                if sub_obj:
+                    and_components.append(sub_obj)
+            
+            if not and_components: return None
+            
+            folder_name = " + ".join([c["name"] for c in and_components])
+            
+            return {
+                "name": folder_name,
+                "is_group": is_standard_group or is_tilde_group,
+                "is_and_condition": True,
+                "and_components": and_components,
+                "aliases": [folder_name],
+                "components_are_distinct_for_known_txt": components_distinct
+            }
+        else:
+            or_parts = []
+            current_buffer = ""
+            depth = 0
+            for char in inner_content:
+                if char == '(': depth += 1; current_buffer += char
+                elif char == ')':
+                    if depth > 0: depth -= 1
+                    current_buffer += char
+                elif char == ',' and depth == 0:
+                    if current_buffer.strip(): or_parts.append(current_buffer.strip())
+                    current_buffer = ""
+                else:
+                    current_buffer += char
+            if current_buffer.strip():
+                or_parts.append(current_buffer.strip())
+
+            aliases = [p for p in or_parts if p]
+            if not aliases: return None
+            
+            folder_name = " ".join(aliases)
+            return {
+                "name": folder_name,
+                "is_group": is_standard_group or is_tilde_group or len(aliases) > 1,
+                "is_and_condition": False,
+                "aliases": aliases,
+                "components_are_distinct_for_known_txt": components_distinct
+            }
+
+    def _parse_character_filters(self, raw_text):
         """
         Helper to parse character filter string into a list of filter objects
         and extract special commands.
@@ -1667,51 +1750,30 @@ class DownloaderApp (QWidget ):
         """
         text_without_commands, commands = parse_commands_from_text(raw_text)
 
-        parsed_character_filter_objects =[]
-        if text_without_commands :
-            raw_parts =[]
-            current_part_buffer =""
-            in_group_parsing =False
-            for char_token in text_without_commands :
-                if char_token =='('and not in_group_parsing :
-                    in_group_parsing =True
-                    current_part_buffer +=char_token
-                elif char_token ==')'and in_group_parsing :
-                    in_group_parsing =False
-                    current_part_buffer +=char_token
-                elif char_token ==','and not in_group_parsing :
-                    if current_part_buffer .strip ():raw_parts .append (current_part_buffer .strip ())
-                    current_part_buffer =""
-                else :
-                    current_part_buffer +=char_token
-            if current_part_buffer .strip ():raw_parts .append (current_part_buffer .strip ())
+        parsed_character_filter_objects = []
+        if text_without_commands:
+            raw_parts = []
+            current_part_buffer = ""
+            depth = 0
+            for char_token in text_without_commands:
+                if char_token == '(':
+                    depth += 1
+                    current_part_buffer += char_token
+                elif char_token == ')':
+                    if depth > 0: depth -= 1
+                    current_part_buffer += char_token
+                elif char_token == ',' and depth == 0:
+                    if current_part_buffer.strip(): raw_parts.append(current_part_buffer.strip())
+                    current_part_buffer = ""
+                else:
+                    current_part_buffer += char_token
+            if current_part_buffer.strip(): raw_parts.append(current_part_buffer.strip())
 
-            for part_str in raw_parts :
-                part_str =part_str .strip ()
-                if not part_str :continue
+            for part_str in raw_parts:
+                obj = self._parse_single_filter_part(part_str)
+                if obj:
+                    parsed_character_filter_objects.append(obj)
 
-                is_tilde_group =part_str .startswith ("(")and part_str .endswith (")~")
-                is_standard_group_for_splitting =part_str .startswith ("(")and part_str .endswith (")")and not is_tilde_group
-
-                if is_tilde_group :
-                    group_content_str =part_str [1 :-2 ].strip ()
-                    aliases_in_group =[alias .strip ()for alias in group_content_str .split (',')if alias .strip ()]
-                    if aliases_in_group :
-                        group_folder_name =" ".join (aliases_in_group )
-                        parsed_character_filter_objects .append ({"name":group_folder_name ,"is_group":True ,"aliases":aliases_in_group })
-                elif is_standard_group_for_splitting :
-                    group_content_str =part_str [1 :-1 ].strip ()
-                    aliases_in_group =[alias .strip ()for alias in group_content_str .split (',')if alias .strip ()]
-                    if aliases_in_group :
-                        group_folder_name =" ".join (aliases_in_group )
-                        parsed_character_filter_objects .append ({
-                        "name":group_folder_name ,
-                        "is_group":True ,
-                        "aliases":aliases_in_group ,
-                        "components_are_distinct_for_known_txt":True
-                        })
-                else :
-                    parsed_character_filter_objects .append ({"name":part_str ,"is_group":False ,"aliases":[part_str ],"components_are_distinct_for_known_txt":False })
         return parsed_character_filter_objects, commands
 
     def _process_worker_queue (self ):
@@ -1922,7 +1984,6 @@ class DownloaderApp (QWidget ):
             all_messages.sort(key=lambda x: x.get('published', ''))
         except Exception:
             all_messages.reverse()
-        import sys
         font_base_dir = getattr(sys, '_MEIPASS', self.app_base_dir)
         font_path = os.path.join(font_base_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
 
@@ -2088,7 +2149,7 @@ class DownloaderApp (QWidget ):
 
     def _load_persistent_history (self ):
         """Loads download history from a persistent file."""
-        self .log_signal .emit (f"📜 Attempting to load history from: {self .persistent_history_file }")
+        self .log_signal .emit (f"<img src='assets/Svg/scroll.svg' width='13' height='13' align='top'> Attempting to load history from: {self .persistent_history_file }")
         if os .path .exists (self .persistent_history_file ):
             try :
                 with open (self .persistent_history_file ,'r',encoding ='utf-8')as f :
@@ -2125,7 +2186,7 @@ class DownloaderApp (QWidget ):
 
     def _save_persistent_history(self):
         """Saves download history to a persistent file."""
-        self.log_signal.emit(f"📜 Attempting to save history to: {self.persistent_history_file}")
+        self.log_signal.emit(f"<img src='assets/Svg/scroll.svg' width='13' height='13' align='top'> Attempting to save history to: {self.persistent_history_file}")
         try:
             history_dir = os.path.dirname(self.persistent_history_file)
             self.log_signal.emit(f"   History directory: {history_dir}")
@@ -2395,7 +2456,6 @@ class DownloaderApp (QWidget ):
     def _show_rule34_settings_dialog(self):
         """Opens the dedicated settings dialog for Rule34 downloads."""
         try:
-            from .dialogs.Rule34SettingsDialog import Rule34SettingsDialog
             
             dialog = Rule34SettingsDialog(self)
             
@@ -2471,8 +2531,7 @@ class DownloaderApp (QWidget ):
             all_cookie_inputs = []
             if hasattr(self, 'cookie_text_input'):
                 all_cookie_inputs.append(self.cookie_text_input)
-            if hasattr(self, 'simpcity_cookie_text_input'):
-                all_cookie_inputs.append(self.simpcity_cookie_text_input)
+
 
             for text_input in all_cookie_inputs:
                 text_input.blockSignals(True)
@@ -2998,9 +3057,11 @@ class DownloaderApp (QWidget ):
                 return 
 
             if is_only_links:
-                self.download_btn.setText(self._tr("extract_links_button_text", "🔗 Extract Links"))
+                self.download_btn.setText(self._tr("extract_links_button_text", "Extract Links"))
+                self.download_btn.setIcon(QIcon("assets/Svg/link.svg"))
             else:
-                self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+                self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
+                self.download_btn.setIcon(QIcon("assets/Svg/download.svg"))
         if not is_only_links and self.link_search_input: self.link_search_input.clear()
 
         file_download_mode_active = not is_only_links
@@ -3027,9 +3088,9 @@ class DownloaderApp (QWidget ):
                 self.external_links_checkbox.setChecked(False)
 
         if is_only_links:
-            self.progress_log_label.setText("📜 Extracted Links Log:")
+            self.progress_log_label.setText("<img src='assets/Svg/scroll.svg' width='13' height='13' align='top'> Extracted Links Log:")
         else:
-            self.progress_log_label.setText(self._tr("progress_log_label_text", "📜 Progress Log:"))
+            self.progress_log_label.setText(self._tr("progress_log_label_text", "<img src='assets/Svg/scroll.svg' width='13' height='13' align='top'> Progress Log:"))
         
         self.update_external_links_setting(self.external_links_checkbox.isChecked() if self.external_links_checkbox else False)
         
@@ -3154,6 +3215,27 @@ class DownloaderApp (QWidget ):
         self ._is_processing_external_link_queue =False
         self ._try_process_next_external_link ()
 
+    def _handle_simpcity_save_external_links_toggled(self, checked):
+        if checked:
+            self._open_simpcity_external_links_config_dialog()
+        else:
+            self.simpcity_external_links_config = None
+            self.log_signal.emit("ℹ️ 'Save External Links' disabled.")
+
+    def _open_simpcity_external_links_config_dialog(self):
+        from .dialogs.ExportLinksDialog import ExportLinksDialog
+        dialog = ExportLinksDialog(links_data=None, parent=self, default_config=getattr(self, 'simpcity_external_links_config', None), context='simpcity')
+        from PyQt5.QtWidgets import QDialog
+        if dialog.exec_() == QDialog.Accepted:
+            self.simpcity_external_links_config = dialog.get_config()
+            self.log_signal.emit("✅ 'Save External Links' configured.")
+        else:
+            if not getattr(self, 'simpcity_external_links_config', None):
+                self.simpcity_save_external_links_cb.blockSignals(True)
+                self.simpcity_save_external_links_cb.setChecked(False)
+                self.simpcity_save_external_links_cb.blockSignals(False)
+            self.log_signal.emit("ℹ️ External Links configuration cancelled.")
+
     def _export_links_to_file(self):
         """
         Opens a new, advanced dialog to handle exporting extracted links in various formats.
@@ -3166,7 +3248,7 @@ class DownloaderApp (QWidget ):
             QMessageBox.information(self, "Export Links", "No links have been extracted yet.")
             return
 
-        dialog = ExportLinksDialog(self.extracted_links_cache, self)
+        dialog = ExportLinksDialog(self.extracted_links_cache, self, context='kemono')
         
         if dialog.exec_() == QDialog.Accepted:
             self.log_signal.emit("✅ Links successfully exported with selected options.")
@@ -3415,12 +3497,17 @@ class DownloaderApp (QWidget ):
             current_scope = self.more_filter_scope or MoreOptionsDialog.SCOPE_CONTENT
             current_format = self.text_export_format or 'pdf'
 
+            url_text = self.link_input.text().strip() if self.link_input else ""
+            service, _, _ = extract_post_info(url_text)
+            is_simpcity = (service == 'simpcity')
+
             dialog = MoreOptionsDialog(
                 self,
                 current_scope=current_scope,
                 current_format=current_format,
                 single_pdf_checked=self.single_pdf_setting,
-                add_info_checked=self.add_info_in_pdf_setting
+                add_info_checked=self.add_info_in_pdf_setting,
+                is_simpcity=is_simpcity
             )
 
             if dialog.exec_() == QDialog.Accepted:
@@ -3508,7 +3595,7 @@ class DownloaderApp (QWidget ):
             removed_count =original_count -len (KNOWN_NAMES )
 
             if removed_count >0 :
-                self .log_signal .emit (f"🗑️ Removed {removed_count } name(s).")
+                self .log_signal .emit (f"Removed {removed_count } name(s).")
                 self .character_list .clear ()
                 self .character_list .addItems ([entry ["name"]for entry in KNOWN_NAMES ])
                 self .filter_character_list (self .character_search_input .text ())
@@ -3521,7 +3608,21 @@ class DownloaderApp (QWidget ):
         if url_text is None :
             url_text =self .link_input .text ()
 
-        _ ,_ ,post_id =extract_post_info (url_text .strip ())
+        service ,_ ,post_id =extract_post_info (url_text .strip ())
+
+        if service == 'simpcity' and getattr(self, 'radio_more', None) and self.radio_more.isChecked():
+            from .dialogs.MoreOptionsDialog import MoreOptionsDialog
+            if getattr(self, 'more_filter_scope', None) == MoreOptionsDialog.SCOPE_COMMENTS or getattr(self, 'add_info_in_pdf_setting', False):
+                self.more_filter_scope = MoreOptionsDialog.SCOPE_CONTENT
+                self.add_info_in_pdf_setting = False
+                
+                is_any_pdf_mode = (self.text_export_format == 'pdf')
+                format_extras = []
+                if self.single_pdf_setting:
+                    format_extras.append("Single")
+                extra_str = f" [{'+'.join(format_extras)}]" if format_extras else ""
+                format_display = f" ({self.text_export_format.upper()}{extra_str})"
+                self.radio_more.setText(f"Description{format_display}")
 
         is_single_post_url =bool (post_id )
         
@@ -3596,9 +3697,6 @@ class DownloaderApp (QWidget ):
 
             if cookie_browse_button_exists :self .cookie_browse_button .setEnabled (enable_state_for_fields )
 
-            if not checked :
-                self .selected_cookie_filepath =None 
-
 
     def update_page_range_enabled_state (self ):
         url_text =self .link_input .text ().strip ()if self .link_input else ""
@@ -3651,6 +3749,17 @@ class DownloaderApp (QWidget ):
 
         if service == 'deviantart':
             self.log_signal.emit("ℹ️ DeviantArt mode allows only Custom Renaming format.")
+            
+            self.manga_filename_style = STYLE_CUSTOM
+            self.settings.setValue(MANGA_FILENAME_STYLE_KEY, self.manga_filename_style)
+            self.settings.sync()
+            self._update_manga_filename_style_button_text()
+            
+            self._show_custom_rename_dialog()
+            return
+
+        if service == 'simpcity':
+            self.log_signal.emit("ℹ️ SimpCity mode allows only Custom Renaming format.")
             
             self.manga_filename_style = STYLE_CUSTOM
             self.settings.setValue(MANGA_FILENAME_STYLE_KEY, self.manga_filename_style)
@@ -3846,21 +3955,27 @@ class DownloaderApp (QWidget ):
         url_text = self.link_input.text().strip() if self.link_input else ""
         service, _, _ = extract_post_info(url_text)
         is_deviantart = (service == 'deviantart')
+        is_simpcity = (service == 'simpcity')
 
         dialog = CustomFilenameDialog(
             self.custom_manga_filename_format, 
             self.manga_custom_date_format, 
+            self.custom_manga_suffix_format,
             self, 
-            is_deviantart=is_deviantart
+            is_deviantart=is_deviantart,
+            is_simpcity=is_simpcity
         )
         
         if dialog.exec_() == QDialog.Accepted:
             self.custom_manga_filename_format = dialog.get_format_string()
             self.manga_custom_date_format = dialog.get_date_format_string()
+            self.custom_manga_suffix_format = dialog.get_suffix_format_string()
             self.settings.setValue(MANGA_CUSTOM_FORMAT_KEY, self.custom_manga_filename_format)
             self.settings.setValue(MANGA_CUSTOM_DATE_FORMAT_KEY, self.manga_custom_date_format)
+            self.settings.setValue(MANGA_CUSTOM_SUFFIX_FORMAT_KEY, self.custom_manga_suffix_format)
             self.log_signal.emit(f"ℹ️ Custom filename format set to: '{self.custom_manga_filename_format}'")
             self.log_signal.emit(f"ℹ️ Custom date format set to: '{self.manga_custom_date_format}'")
+            self.log_signal.emit(f"ℹ️ Custom suffix format set to: '{self.custom_manga_suffix_format}'")
             self._update_manga_filename_style_button_text()
 
     def update_multithreading_label (self ,text ):
@@ -4005,7 +4120,6 @@ class DownloaderApp (QWidget ):
             adv_widget.setEnabled(profile['advanced_enabled'])
             
             if profile['advanced_enabled']:
-                from PyQt5.QtWidgets import QCheckBox
                 
                 if 'allowed_advanced' in profile:
                     for chk in adv_widget.findChildren(QCheckBox):
@@ -4056,15 +4170,12 @@ class DownloaderApp (QWidget ):
       
         self._set_ui_for_specialized_downloader(is_specialized_for_disabling)
 
-        if hasattr(self, 'advanced_settings_widget'):
-            self.advanced_settings_widget.setVisible(not is_simpcity)
         if hasattr(self, 'simpcity_settings_widget'):
             self.simpcity_settings_widget.setVisible(is_simpcity)
         
         if service == 'deviantart':
             self._apply_ui_profile('deviantart')
             
-            from ..config.constants import STYLE_CUSTOM
             
             if getattr(self, 'manga_filename_style', None) != STYLE_CUSTOM:
                 self.log_signal.emit("ℹ️ DeviantArt mode allows only Custom Renaming format. Switched to Custom.")
@@ -4137,7 +4248,6 @@ class DownloaderApp (QWidget ):
             self.remove_from_filename_label_widget.setText("🔑 Discord Token:")
             self.remove_from_filename_input.setPlaceholderText("Enter your Discord Authorization Token here")
             self.remove_from_filename_input.setEchoMode(QLineEdit.Password) 
-            from ..config.constants import DISCORD_TOKEN_KEY
             saved_token = self.settings.value(DISCORD_TOKEN_KEY, "")
             if saved_token:
                 self.remove_from_filename_input.setText(saved_token)
@@ -4156,13 +4266,23 @@ class DownloaderApp (QWidget ):
                 self._update_discord_scope_button_text()
         elif not is_specialized:
             if hasattr(self, 'download_btn'):
-                 self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+                 self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
+                 self.download_btn.setIcon(QIcon("assets/Svg/download.svg"))
+
+        # Apply SimpCity-specific overrides last to ensure they aren't undone by generic UI profiles
+        if hasattr(self, 'use_cookie_checkbox'):
+            if is_simpcity:
+                self.use_cookie_checkbox.setChecked(True)
+                self.use_cookie_checkbox.setEnabled(False)
+            elif not is_specialized_for_disabling:
+                self.use_cookie_checkbox.setEnabled(True)
 
     def _update_discord_scope_button_text(self):
         """Updates the text of the discord scope button and the main download button."""
         if self.discord_download_scope == 'files':
             self.discord_scope_toggle_button.setText("Scope: Files")
-            self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+            self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
+            self.download_btn.setIcon(QIcon("assets/Svg/download.svg"))
         else:
              self.discord_scope_toggle_button.setText("Scope: Messages")
              self.download_btn.setText("📄 Save Messages as PDF")
@@ -4176,7 +4296,6 @@ class DownloaderApp (QWidget ):
         """
         Wrapper method to make the dark theme function accessible to child dialogs.
         """
-        from ..utils.resolution import get_dark_theme as get_theme_stylesheet
         
         actual_scale = getattr(self, 'scale_factor', scale)
         return get_theme_stylesheet(actual_scale)
@@ -4201,8 +4320,6 @@ class DownloaderApp (QWidget ):
 
         self.is_main_download_active = True
 
-        from ..utils.file_utils import clean_folder_name, KNOWN_NAMES
-        from ..config.constants import FOLDER_NAME_STOP_WORDS
 
         if not is_restore and not is_continuation:
             if self.main_log_output: self.main_log_output.clear()
@@ -4531,7 +4648,6 @@ class DownloaderApp (QWidget ):
 
         if specialized_thread:
             if specialized_thread == "COOKIE_ERROR":
-                from .dialogs.CookieHelpDialog import CookieHelpDialog
                 cookie_dialog = CookieHelpDialog(self, offer_download_without_option=False)
                 cookie_dialog.exec_()
                 return False
@@ -4816,22 +4932,28 @@ class DownloaderApp (QWidget ):
                         if dialog_result:
                             self.log_signal.emit(f"ℹ️ User chose to add {len(dialog_result)} new entry/entries to Known.txt.")
                             for filter_obj_to_add in dialog_result:
-                                if filter_obj_to_add.get("components_are_distinct_for_known_txt"):
-                                    self.log_signal.emit(f"    Processing group '{filter_obj_to_add['name']}' to add its components individually to Known.txt.")
-                                    for alias_component in filter_obj_to_add["aliases"]:
+                                def add_filter_obj(obj_to_add):
+                                    if obj_to_add.get("is_and_condition") and obj_to_add.get("components_are_distinct_for_known_txt"):
+                                        self.log_signal.emit(f"    Processing AND group '{obj_to_add['name']}' to add its components individually.")
+                                        for comp in obj_to_add["and_components"]:
+                                            add_filter_obj(comp)
+                                    elif obj_to_add.get("components_are_distinct_for_known_txt"):
+                                        self.log_signal.emit(f"    Processing group '{obj_to_add['name']}' to add its components individually to Known.txt.")
+                                        for alias_component in obj_to_add["aliases"]:
+                                            self.add_new_character(
+                                                name_to_add=alias_component,
+                                                is_group_to_add=False,
+                                                aliases_to_add=[alias_component],
+                                                suppress_similarity_prompt=True
+                                            )
+                                    else:
                                         self.add_new_character(
-                                            name_to_add=alias_component,
-                                            is_group_to_add=False,
-                                            aliases_to_add=[alias_component],
+                                            name_to_add=obj_to_add["name"],
+                                            is_group_to_add=obj_to_add["is_group"],
+                                            aliases_to_add=obj_to_add["aliases"],
                                             suppress_similarity_prompt=True
                                         )
-                                else:
-                                    self.add_new_character(
-                                        name_to_add=filter_obj_to_add["name"],
-                                        is_group_to_add=filter_obj_to_add["is_group"],
-                                        aliases_to_add=filter_obj_to_add["aliases"],
-                                        suppress_similarity_prompt=True
-                                    )
+                                add_filter_obj(filter_obj_to_add)
                         else:
                             self.log_signal.emit("ℹ️ User confirmed adding, but no names were selected in the dialog. No new names added to Known.txt.")
                     elif dialog_result == CONFIRM_ADD_ALL_SKIP_ADDING:
@@ -4859,7 +4981,7 @@ class DownloaderApp (QWidget ):
 
         self.main_log_output.clear()
         if extract_links_only: self.main_log_output.append("🔗 Extracting Links...");
-        elif backend_filter_mode == 'archive': self.main_log_output.append("📦 Downloading Archives Only...")
+        elif backend_filter_mode == 'archive': self.main_log_output.append("Downloading Archives Only...")
 
         if self.external_log_output: self.external_log_output.clear()
         if self.show_external_links and not extract_links_only and backend_filter_mode != 'archive':
@@ -5012,7 +5134,6 @@ class DownloaderApp (QWidget ):
 
         self.set_ui_enabled(False)
 
-        from src.config.constants import FOLDER_NAME_STOP_WORDS
         current_proxies = self._get_current_ui_settings_as_dict().get('proxies')
         args_template = {
             'api_url_input': api_url,
@@ -5080,6 +5201,7 @@ class DownloaderApp (QWidget ):
             'keep_duplicates_limit': self.keep_duplicates_limit,
             'manga_custom_filename_format': self.custom_manga_filename_format, 
             'manga_custom_date_format': self.manga_custom_date_format,
+            'manga_custom_suffix_format': self.custom_manga_suffix_format,
     
             'downloaded_hash_counts': self.downloaded_hash_counts,
             'downloaded_hash_counts_lock': self.downloaded_hash_counts_lock,
@@ -5155,7 +5277,7 @@ class DownloaderApp (QWidget ):
                     'keep_duplicates_limit', 'downloaded_hash_counts', 'downloaded_hash_counts_lock',
                     'processed_post_ids', 'domain_override',
                     'archive_only_mode', 'skip_file_size_mb', 
-                    'manga_custom_filename_format','manga_custom_date_format', 'sfp_threshold', 'download_revisions', 'creator_name_cache',
+                    'manga_custom_filename_format','manga_custom_date_format', 'manga_custom_suffix_format', 'sfp_threshold', 'download_revisions', 'creator_name_cache',
                     'proxies', 'visual_sort_active', 'user_data_path'
 
                 ]
@@ -5223,8 +5345,9 @@ class DownloaderApp (QWidget ):
         ]
 
         if service in ['bunkr', 'nhentai']:
-            self.progress_log_label.setText("📜 Progress Log:")
-            self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+            self.progress_log_label.setText("<img src='assets/Svg/scroll.svg' width='13' height='13' align='top'> Progress Log:")
+            self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
+            self.download_btn.setIcon(QIcon("assets/Svg/download.svg"))
             
             for widget in widgets_to_manage:
                 if widget:
@@ -5255,7 +5378,8 @@ class DownloaderApp (QWidget ):
         if is_discord:
             self._update_discord_scope_button_text()
         else:
-            self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+            self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
+            self.download_btn.setIcon(QIcon("assets/Svg/download.svg"))
 
         is_manga_checked = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
         is_subfolder_checked = self.use_subfolders_checkbox.isChecked() if self.use_subfolders_checkbox else False
@@ -5749,7 +5873,6 @@ class DownloaderApp (QWidget ):
             self.add_info_in_pdf_setting = settings.get('add_info_in_pdf', False)
             
             if self.radio_more.isChecked() and self.more_filter_scope:
-                from .dialogs.MoreOptionsDialog import MoreOptionsDialog
                 scope_text = "Comments" if self.more_filter_scope == MoreOptionsDialog.SCOPE_COMMENTS else "Description"
                 format_display = f" ({self.text_export_format.upper()})"
                 if self.single_pdf_setting:
@@ -5828,7 +5951,6 @@ class DownloaderApp (QWidget ):
         worker_args_template = fetcher_args['worker_args_template']
         def logger_func(msg):
             try:
-                import sip
                 if not sip.isdeleted(self):
                     self.log_signal.emit(f"[Fetcher] {msg}")
             except (RuntimeError, ImportError, AttributeError):
@@ -5979,7 +6101,6 @@ class DownloaderApp (QWidget ):
              
         output_path = os.path.join(base_dir, filename)
 
-        import sys
         font_base_dir = getattr(sys, '_MEIPASS', self.app_base_dir)
         font_path = os.path.join(font_base_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
         add_info = True 
@@ -6187,10 +6308,12 @@ class DownloaderApp (QWidget ):
         if self .pause_btn :
             self .pause_btn .setEnabled (download_is_active_or_paused )
             if download_is_active_or_paused :
-                self .pause_btn .setText (self ._tr ("resume_download_button_text","▶️ Resume Download")if self .is_paused else self ._tr ("pause_download_button_text","⏸️ Pause Download"))
+                self .pause_btn .setText (self ._tr ("resume_download_button_text","Resume Download")if self .is_paused else self ._tr ("pause_download_button_text","Pause Download"))
+                self.pause_btn.setIcon(QIcon("assets/Svg/resume.svg") if self.is_paused else QIcon("assets/Svg/pause.svg"))
                 self .pause_btn .setToolTip (self ._tr ("resume_download_button_tooltip","Click to resume the download.")if self .is_paused else self ._tr ("pause_download_button_tooltip","Click to pause the download."))
             else :
-                self .pause_btn .setText (self ._tr ("pause_download_button_text","⏸️ Pause Download"))
+                self .pause_btn .setText (self ._tr ("pause_download_button_text","Pause Download"))
+                self.pause_btn.setIcon(QIcon("assets/Svg/pause.svg"))
                 self .pause_btn .setToolTip (self ._tr ("pause_download_button_tooltip","Click to pause the ongoing download process."))
                 self .is_paused =False 
         if self .cancel_btn :self .cancel_btn .setText (self ._tr ("cancel_button_text","❌ Cancel & Reset UI"))
@@ -6244,8 +6367,6 @@ class DownloaderApp (QWidget ):
         self .external_links_checkbox .setChecked (False )
         if self .manga_mode_checkbox :self .manga_mode_checkbox .setChecked (False )
         if hasattr (self ,'use_cookie_checkbox'):self .use_cookie_checkbox .setChecked (self .use_cookie_setting )
-        if not (hasattr (self ,'use_cookie_checkbox')and self .use_cookie_checkbox .isChecked ()):
-            self .selected_cookie_filepath =None 
         if hasattr (self ,'cookie_text_input'):self .cookie_text_input .setText (self .cookie_text_setting if self .use_cookie_setting else "")
         self .allow_multipart_download_setting =False 
         self ._update_multipart_toggle_button_text ()
@@ -6644,21 +6765,21 @@ class DownloaderApp (QWidget ):
             try:
                 if sys.platform == "win32":
                     if action == "sleep":
-                        os.system("powercfg -hibernate off")
-                        os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
-                        os.system("powercfg -hibernate on")
+                        subprocess.run(["powercfg", "-hibernate", "off"])
+                        subprocess.run(["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"])
+                        subprocess.run(["powercfg", "-hibernate", "on"])
                     elif action == "shutdown":
-                        os.system("shutdown /s /t 1")
+                        subprocess.run(["shutdown", "/s", "/t", "1"])
                 elif sys.platform == "darwin":
                     if action == "sleep":
-                        os.system("pmset sleepnow")
+                        subprocess.run(["pmset", "sleepnow"])
                     elif action == "shutdown":
-                        os.system("osascript -e 'tell app \"System Events\" to shut down'")
+                        subprocess.run(["osascript", "-e", "tell app \"System Events\" to shut down"])
                 else:
                     if action == "sleep":
-                        os.system("systemctl suspend")
+                        subprocess.run(["systemctl", "suspend"])
                     elif action == "shutdown":
-                        os.system("systemctl poweroff")
+                        subprocess.run(["systemctl", "poweroff"])
             except Exception as e:
                 self.log_signal.emit(f"❌ Failed to execute post-download action '{action}': {e}")
         else:
@@ -6761,7 +6882,7 @@ class DownloaderApp (QWidget ):
         self.log_signal.emit(f"🔄 Starting retry session for {len(self.files_for_current_retry_session)} unique file(s)...")
         self.set_ui_enabled(False)
         if self.cancel_btn: 
-            self.cancel_btn.setText(self._tr("cancel_retry_button_text", "❌ Cancel Retry"))
+            self.cancel_btn.setText(self._tr("cancel_retry_button_text", "Cancel Retry"))
 
         raw_character_filters_text = self.character_input.text().strip()
         _, download_commands = self._parse_character_filters(raw_character_filters_text)
@@ -6844,10 +6965,6 @@ class DownloaderApp (QWidget ):
         Reconstructs the original environment (Known.txt rules, AI rules, output paths) 
         for a single failed file and forces the PostProcessorWorker to try downloading it again.
         """
-        import os
-        from urllib.parse import urlparse
-        from ..core.workers import PostProcessorWorker
-        from ..utils.file_utils import clean_folder_name
 
         file_info = job_details.get('file_info', {})
         file_url = file_info.get('url', '')
@@ -6985,7 +7102,7 @@ class DownloaderApp (QWidget ):
 
         self.set_ui_enabled(not self._is_download_active())
         if self.cancel_btn:
-            self.cancel_btn.setText(self._tr("cancel_button_text", "❌ Cancel & Reset UI"))
+            self.cancel_btn.setText(self._tr("cancel_button_text", "Cancel & Reset UI"))
             
         self.progress_label.setText(
             f"{self._tr('retry_finished_text','Retry Finished')}. "
@@ -7006,16 +7123,16 @@ class DownloaderApp (QWidget ):
             self .current_log_view ='missed_character'
             if self .log_view_stack :self .log_view_stack .setCurrentIndex (1 )
             if self .log_verbosity_toggle_button :
-                self .log_verbosity_toggle_button .setText (self .CLOSED_EYE_ICON )
+                self .log_verbosity_toggle_button .setIcon (QIcon (self .CLOSED_EYE_ICON_PATH ))
                 self .log_verbosity_toggle_button .setToolTip ("Current View: Missed Character Log. Click to switch to Progress Log.")
-            if self .progress_log_label :self .progress_log_label .setText (self ._tr ("missed_character_log_label_text","🚫 Missed Character Log:"))
+            if self .progress_log_label :self .progress_log_label .setText (self ._tr ("missed_character_log_label_text","<img src='assets/Svg/block.svg' width='13' height='13' align='top'> Missed Character Log:"))
         else :
             self .current_log_view ='progress'
             if self .log_view_stack :self .log_view_stack .setCurrentIndex (0 )
             if self .log_verbosity_toggle_button :
-                self .log_verbosity_toggle_button .setText (self .EYE_ICON )
+                self .log_verbosity_toggle_button .setIcon (QIcon (self .EYE_ICON_PATH ))
                 self .log_verbosity_toggle_button .setToolTip ("Current View: Progress Log. Click to switch to Missed Character Log.")
-            if self .progress_log_label :self .progress_log_label .setText (self ._tr ("progress_log_label_text","📜 Progress Log:"))
+            if self .progress_log_label :self .progress_log_label .setText (self ._tr ("progress_log_label_text","<img src='assets/Svg/scroll.svg' width='13' height='13' align='top'> Progress Log:"))
 
     def reset_application_state(self):
         """
@@ -7058,9 +7175,9 @@ class DownloaderApp (QWidget ):
         if self.log_view_stack:
             self.log_view_stack.setCurrentIndex(0)
         if self.progress_log_label:
-            self.progress_log_label.setText(self._tr("progress_log_label_text", "📜 Progress Log:"))
+            self.progress_log_label.setText(self._tr("progress_log_label_text", "<img src='assets/Svg/scroll.svg' width='13' height='13' align='top'> Progress Log:"))
         if self.log_verbosity_toggle_button:
-            self.log_verbosity_toggle_button.setText(self.EYE_ICON)
+            self.log_verbosity_toggle_button.setIcon(QIcon(self.EYE_ICON_PATH))
             self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
         self.external_link_queue.clear()
         self.extracted_links_cache = []
@@ -7337,7 +7454,6 @@ class DownloaderApp (QWidget ):
         self.log_signal.emit(f"✅ User confirmed. Starting download for {len(self.new_posts_for_update)} new post(s).")
         self.main_log_output.clear()
         
-        from src.config.constants import FOLDER_NAME_STOP_WORDS
         update_url = self.active_update_profile['creator_url'][0]
         service, user_id, _ = extract_post_info(update_url)
 
@@ -7508,11 +7624,11 @@ class DownloaderApp (QWidget ):
     def _load_saved_cookie_settings(self):
         """Loads and applies saved cookie settings on startup."""
         try:
-            use_cookie_saved = self.settings.value(USE_COOKIE_KEY, False, type=bool)
             cookie_content_saved = self.settings.value(COOKIE_TEXT_KEY, "", type=str)
 
-            if use_cookie_saved and cookie_content_saved:
-                self.use_cookie_checkbox.setChecked(True)
+            self.use_cookie_checkbox.setChecked(False)
+
+            if cookie_content_saved:
                 self.cookie_text_input.setText(cookie_content_saved)
                 
                 if os.path.exists(cookie_content_saved):
@@ -7520,7 +7636,7 @@ class DownloaderApp (QWidget ):
                     self.cookie_text_input.setReadOnly(True)
                     self._update_cookie_input_placeholders_and_tooltips()
                 
-                self.log_signal.emit(f"ℹ️ Loaded saved cookie settings.")
+                self.log_signal.emit(f"ℹ️ Loaded saved cookie path, but kept 'Use Cookies' unchecked by default.")
         except Exception as e:
             self.log_signal.emit(f"⚠️ Could not load saved cookie settings: {e}")
 
@@ -7759,7 +7875,6 @@ class PdfGenerationThread(QThread):
 
     def run(self):
         try:
-            from .dialogs.SinglePDF import create_single_pdf_from_content
             self.logger_func("📄 Background Task: Generating Single PDF... (This may take a while)")
             
             success = create_single_pdf_from_content(

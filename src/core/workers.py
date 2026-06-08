@@ -50,7 +50,7 @@ from ..services.drive_downloader import (
 )
 from ..utils.file_utils import (
     is_image, is_video, is_zip, is_rar, is_archive, is_audio, KNOWN_NAMES,
-    clean_filename, clean_folder_name
+    clean_filename, clean_folder_name, format_custom_suffix, format_custom_date
 )
 from ..utils.network_utils import prepare_cookies_for_request, get_link_platform
 from ..utils.text_utils import (
@@ -135,6 +135,7 @@ class PostProcessorWorker:
                  archive_only_mode=False,  
                  manga_custom_filename_format="{published} {title}",
                  manga_custom_date_format="YYYY-MM-DD" ,
+                 manga_custom_suffix_format="001",
                  sfp_threshold=None,
                  handle_unknown_mode=False,
                  creator_name_cache=None,
@@ -213,6 +214,7 @@ class PostProcessorWorker:
         self.skip_file_size_mb = skip_file_size_mb
         self.manga_custom_filename_format = manga_custom_filename_format 
         self.manga_custom_date_format = manga_custom_date_format 
+        self.manga_custom_suffix_format = manga_custom_suffix_format
         self.sfp_threshold = sfp_threshold 
         self.handle_unknown_mode = handle_unknown_mode 
         self.creator_name_cache = creator_name_cache 
@@ -253,6 +255,22 @@ class PostProcessorWorker:
                     return True 
                 time .sleep (0.5 )
         return False
+
+    def _check_char_filter_match(self, filter_item_obj, text, match_func):
+        if filter_item_obj.get("is_and_condition"):
+            for comp in filter_item_obj.get("and_components", []):
+                matched, _ = self._check_char_filter_match(comp, text, match_func)
+                if not matched:
+                    return False, None
+            return True, filter_item_obj
+        else:
+            terms_to_check = list(filter_item_obj.get("aliases", []))
+            if filter_item_obj.get("is_group") and filter_item_obj.get("name") not in terms_to_check:
+                terms_to_check.append(filter_item_obj["name"])
+            for term in set(terms_to_check):
+                if match_func(text, term):
+                    return True, filter_item_obj
+            return False, None
 
     def _get_current_character_filters (self ):
         if self .dynamic_filter_holder :
@@ -457,14 +475,7 @@ class PostProcessorWorker:
                 elif self.manga_filename_style == STYLE_CUSTOM:
                     try:
                         def format_date(date_str):
-                            if not date_str or 'NoDate' in date_str:
-                                return "NoDate"
-                            try:
-                                dt_obj = datetime.fromisoformat(date_str)
-                                strftime_format = self.manga_custom_date_format.replace("YYYY", "%Y").replace("MM", "%m").replace("DD", "%d")
-                                return dt_obj.strftime(strftime_format)
-                            except (ValueError, TypeError):
-                                return date_str.split('T')[0]
+                            return format_custom_date(date_str, self.manga_custom_date_format)
 
                         service = self.service.lower()
                         user_id = str(self.user_id)
@@ -490,13 +501,16 @@ class PostProcessorWorker:
                             'added': format_date(added_date or published_date),
                             'published': format_date(published_date),
                             'edited': format_date(edited_date or published_date),
-                            'content': clean_content 
+                            'content': clean_content,
+                            'suffix': format_custom_suffix(self.manga_custom_suffix_format, file_index_in_post + 1)
                         }
                         
                         custom_base_name = self.manga_custom_filename_format.format(**format_values)
                         cleaned_custom_name = robust_clean_name(custom_base_name)
                         
-                        if num_files_in_this_post > 1:
+                        has_suffix_placeholder = '{suffix}' in self.manga_custom_filename_format
+                        
+                        if num_files_in_this_post > 1 and not has_suffix_placeholder:
                             filename_to_save_in_main_path = f"{cleaned_custom_name}_{file_index_in_post}{original_ext}"
                         else:
                             filename_to_save_in_main_path = f"{cleaned_custom_name}{original_ext}"
@@ -1075,14 +1089,7 @@ class PostProcessorWorker:
         elif self.manga_filename_style == STYLE_CUSTOM:
             try:
                 def format_date(date_str):
-                    if not date_str or 'NoDate' in date_str:
-                        return "NoDate"
-                    try:
-                        dt_obj = datetime.fromisoformat(date_str)
-                        strftime_format = self.manga_custom_date_format.replace("YYYY", "%Y").replace("MM", "%m").replace("DD", "%d")
-                        return dt_obj.strftime(strftime_format)
-                    except (ValueError, TypeError):
-                        return date_str.split('T')[0]
+                    return format_custom_date(date_str, self.manga_custom_date_format)
 
                 service = self.service.lower()
                 user_id = str(self.user_id)
@@ -1371,19 +1378,12 @@ class PostProcessorWorker:
                     return result_tuple
                 for idx, filter_item_obj in enumerate(current_character_filters):
                     if self.check_cancel(): break
-                    terms_to_check_for_title = list(filter_item_obj["aliases"])
-                    if filter_item_obj["is_group"]:
-                        if filter_item_obj["name"] not in terms_to_check_for_title:
-                            terms_to_check_for_title.append(filter_item_obj["name"])
-                    unique_terms_for_title_check = list(set(terms_to_check_for_title))
-                    for term_to_match in unique_terms_for_title_check:
-                        match_found_for_term = is_title_match_for_character(post_title, term_to_match)
-                        if match_found_for_term:
-                            post_is_candidate_by_title_char_match = True
-                            char_filter_that_matched_title = filter_item_obj
-                            self.logger(f"   Post title matches char filter term '{term_to_match}' (from group/name '{filter_item_obj['name']}', Scope: {self.char_filter_scope}). Post is candidate.")
-                            break
-                    if post_is_candidate_by_title_char_match: break
+                    matched, matched_filter = self._check_char_filter_match(filter_item_obj, post_title, is_title_match_for_character)
+                    if matched:
+                        post_is_candidate_by_title_char_match = True
+                        char_filter_that_matched_title = filter_item_obj
+                        self.logger(f"   Post title matches char filter '{filter_item_obj['name']}' (Scope: {self.char_filter_scope}). Post is candidate.")
+                        break
 
             all_files_from_post_api_for_char_check = []
             api_file_domain_for_char_check = urlparse(self.api_url_input).netloc
@@ -1410,16 +1410,12 @@ class PostProcessorWorker:
                     current_api_original_filename_for_check = file_info_item.get('_original_name_for_log')
                     if not current_api_original_filename_for_check: continue
                     for filter_item_obj in current_character_filters:
-                        terms_to_check = list(filter_item_obj["aliases"])
-                        if filter_item_obj["is_group"] and filter_item_obj["name"] not in terms_to_check:
-                            terms_to_check.append(filter_item_obj["name"])
-                        for term_to_match in terms_to_check:
-                            if is_filename_match_for_character(current_api_original_filename_for_check, term_to_match):
-                                post_is_candidate_by_file_char_match_in_comment_scope = True
-                                char_filter_that_matched_file_in_comment_scope = filter_item_obj
-                                self.logger(f"     Match Found (File in Comments Scope): File '{current_api_original_filename_for_check}' matches char filter term '{term_to_match}' (from group/name '{filter_item_obj['name']}'). Post is candidate.")
-                                break
-                        if post_is_candidate_by_file_char_match_in_comment_scope: break
+                        matched, matched_filter = self._check_char_filter_match(filter_item_obj, current_api_original_filename_for_check, is_filename_match_for_character)
+                        if matched:
+                            post_is_candidate_by_file_char_match_in_comment_scope = True
+                            char_filter_that_matched_file_in_comment_scope = filter_item_obj
+                            self.logger(f"     Match Found (File in Comments Scope): File '{current_api_original_filename_for_check}' matches char filter '{filter_item_obj['name']}'. Post is candidate.")
+                            break
                     if post_is_candidate_by_file_char_match_in_comment_scope: break
                 self.logger(f"   [Char Scope: Comments] Phase 1 Result: post_is_candidate_by_file_char_match_in_comment_scope = {post_is_candidate_by_file_char_match_in_comment_scope}")
 
@@ -1455,17 +1451,13 @@ class PostProcessorWorker:
                                 cleaned_comment_text = strip_html_tags(raw_comment_content)
                                 if not cleaned_comment_text.strip(): continue
                                 for filter_item_obj in current_character_filters:
-                                    terms_to_check_comment = list(filter_item_obj["aliases"])
-                                    if filter_item_obj["is_group"] and filter_item_obj["name"] not in terms_to_check_comment:
-                                        terms_to_check_comment.append(filter_item_obj["name"])
-                                    for term_to_match_comment in terms_to_check_comment:
-                                        if is_title_match_for_character(cleaned_comment_text, term_to_match_comment):
-                                            post_is_candidate_by_comment_char_match = True
-                                            char_filter_that_matched_comment = filter_item_obj
-                                            self.logger(f"     Match Found (Comment in Comments Scope): Comment in post {post_id} matches char filter term '{term_to_match_comment}' (from group/name '{filter_item_obj['name']}'). Post is candidate.")
-                                            self.logger(f"       Matching comment (first 100 chars): '{cleaned_comment_text[:100]}...'")
-                                            break
-                                    if post_is_candidate_by_comment_char_match: break
+                                    matched, matched_filter = self._check_char_filter_match(filter_item_obj, cleaned_comment_text, is_title_match_for_character)
+                                    if matched:
+                                        post_is_candidate_by_comment_char_match = True
+                                        char_filter_that_matched_comment = filter_item_obj
+                                        self.logger(f"     Match Found (Comment in Comments Scope): Comment in post {post_id} matches char filter '{filter_item_obj['name']}'. Post is candidate.")
+                                        self.logger(f"       Matching comment (first 100 chars): '{cleaned_comment_text[:100]}...'")
+                                        break
                                 if post_is_candidate_by_comment_char_match: break
                         else:
                             self.logger(f"     No comments found or fetched for post {post_id} to check against character filters.")
@@ -2236,13 +2228,22 @@ class PostProcessorWorker:
                                 candidate_chars_for_ai = filename_folders
 
                         elif char_filter_info_that_matched_file:
-                            base_folder_for_this_file = clean_folder_name(char_filter_info_that_matched_file["name"])
+                            if char_filter_info_that_matched_file.get("is_and_condition"):
+                                base_folder_for_this_file = extract_folder_name_from_title(post_title, effective_unwanted_keywords_for_folder_naming)
+                            else:
+                                base_folder_for_this_file = clean_folder_name(char_filter_info_that_matched_file["name"])
                             known_name_match_found_for_this_file = False
                         elif char_filter_that_matched_title:
-                            base_folder_for_this_file = clean_folder_name(char_filter_that_matched_title["name"])
+                            if char_filter_that_matched_title.get("is_and_condition"):
+                                base_folder_for_this_file = extract_folder_name_from_title(post_title, effective_unwanted_keywords_for_folder_naming)
+                            else:
+                                base_folder_for_this_file = clean_folder_name(char_filter_that_matched_title["name"])
                             known_name_match_found_for_this_file = False
                         elif char_filter_that_matched_comment:
-                            base_folder_for_this_file = clean_folder_name(char_filter_that_matched_comment["name"])
+                            if char_filter_that_matched_comment.get("is_and_condition"):
+                                base_folder_for_this_file = extract_folder_name_from_title(post_title, effective_unwanted_keywords_for_folder_naming)
+                            else:
+                                base_folder_for_this_file = clean_folder_name(char_filter_that_matched_comment["name"])
                             known_name_match_found_for_this_file = False
 
                         if not known_name_match_found_for_this_file:
@@ -2498,6 +2499,7 @@ class DownloadThread(QThread):
                  archive_only_mode=False, 
                  manga_custom_filename_format="{published} {title}",
                  manga_custom_date_format="YYYY-MM-DD" ,
+                 manga_custom_suffix_format="001",
                  sfp_threshold=None,
                  creator_name_cache=None,
                  proxies=None,
@@ -2577,6 +2579,7 @@ class DownloadThread(QThread):
         self.archive_only_mode = archive_only_mode 
         self.manga_custom_filename_format = manga_custom_filename_format 
         self.manga_custom_date_format = manga_custom_date_format     
+        self.manga_custom_suffix_format = manga_custom_suffix_format
         self.domain_override = domain_override 
         self.sfp_threshold = sfp_threshold 
         self.creator_name_cache = creator_name_cache 

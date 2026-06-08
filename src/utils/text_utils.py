@@ -1,7 +1,8 @@
 import re
 import html
 
-from .file_utils import clean_folder_name, FOLDER_NAME_STOP_WORDS
+from .file_utils import clean_folder_name
+from ..config.constants import FOLDER_NAME_STOP_WORDS
 
 
 KNOWN_TXT_MATCH_CLEANUP_PATTERNS = [

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 26" width="24" height="26" fill="none">
+  <!-- Headband - clean U arch -->
+  <path d="M4 11 C4 4 20 4 20 11" stroke="#9E9E9E" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+  <!-- Headband top highlight -->
+  <path d="M5.5 9 C5.5 5.5 18.5 5.5 18.5 9" stroke="#E0E0E0" stroke-width="0.8" stroke-linecap="round" fill="none" opacity="0.7"/>
+
+  <!-- Left ear cup body - taller -->
+  <rect x="2" y="11" width="5" height="12" rx="2" fill="#757575"/>
+  <!-- Left ear cup highlight -->
+  <rect x="2.8" y="12.5" width="1.5" height="4" rx="0.7" fill="#BDBDBD" opacity="0.8"/>
+  <!-- Left ear cup shadow -->
+  <rect x="2" y="21" width="5" height="2" rx="2" fill="#424242" opacity="0.5"/>
+
+  <!-- Right ear cup body - taller -->
+  <rect x="17" y="11" width="5" height="12" rx="2" fill="#757575"/>
+  <!-- Right ear cup highlight -->
+  <rect x="17.8" y="12.5" width="1.5" height="4" rx="0.7" fill="#BDBDBD" opacity="0.8"/>
+  <!-- Right ear cup shadow -->
+  <rect x="17" y="21" width="5" height="2" rx="2" fill="#424242" opacity="0.5"/>
+</svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none">
+  <!-- Closed eyelid arc -->
+  <path d="M1 12 C4 6 9 3 12 3 C15 3 20 6 23 12"
+    fill="#C0CAD6" stroke="#7A8FA6" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Lower lid / closed line -->
+  <path d="M1 12 C4 15 9 17 12 17 C15 17 20 15 23 12"
+    fill="none" stroke="#7A8FA6" stroke-width="1" stroke-linecap="round"/>
+  <!-- Lashes on top -->
+  <line x1="6"  y1="8.5" x2="5"  y2="6.5"  stroke="#5A6A7A" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="9"  y1="6.5" x2="8.5" y2="4.5" stroke="#5A6A7A" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="12" y1="5.8" x2="12" y2="3.5"  stroke="#5A6A7A" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="15" y1="6.5" x2="15.5" y2="4.5" stroke="#5A6A7A" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="18" y1="8.5" x2="19" y2="6.5"  stroke="#5A6A7A" stroke-width="1.2" stroke-linecap="round"/>
+</svg>

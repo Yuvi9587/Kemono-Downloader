@@ -43,6 +43,7 @@ TOUR_SHOWN_KEY = "neverShowTourAgainV19"
 MANGA_FILENAME_STYLE_KEY = "mangaFilenameStyleV1"
 MANGA_CUSTOM_FORMAT_KEY = "mangaCustomFormatV1" 
 MANGA_CUSTOM_DATE_FORMAT_KEY = "mangaCustomDateFormatV1" 
+MANGA_CUSTOM_SUFFIX_FORMAT_KEY = "mangaCustomSuffixFormatV1"
 SKIP_WORDS_SCOPE_KEY = "skipWordsScopeV1"
 ALLOW_MULTIPART_DOWNLOAD_KEY = "allowMultipartDownloadV1"
 USE_COOKIE_KEY = "useCookieV1"
@@ -97,11 +98,11 @@ AUDIO_EXTENSIONS = {
 MAX_FILENAME_COMPONENT_LENGTH = 150
 
 FOLDER_NAME_STOP_WORDS = {
-    "a", "alone", "am", "an", "and", "at", "be", "by", "com",
-    "for", "he", "her", "his", "i", "im", "in", "is", "it", "its",
-    "me", "my", "net", "not", "of", "on", "or", "org", "our",
-    "s", "she", "so", "the", "their", "they", "this",
-    "to", "ve", "was", "we", "were", "with", "www", "you", "your", "nsfw", "sfw",
+    "a", "alone", "am", "an", "and", "at", "be", "blues", "but", "by", "com",
+    "for", "grown", "hard", "he", "her", "his", "hitting", "i", "im", "in", "is", "it", "its",
+    "me", "much", "my", "net", "not", "of", "on", "or", "org", "our", "please",
+    "right", "s", "she", "so", "technically", "tell", "the", "their", "they", "this",
+    "to", "ve", "was", "we", "well", "were", "with", "www", "year", "you", "your", "nsfw", "sfw",
 }
 
 CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS = {

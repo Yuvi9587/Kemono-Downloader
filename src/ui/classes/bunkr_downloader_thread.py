@@ -72,7 +72,22 @@ class BunkrDownloadThread(QThread):
 
             self.progress_signal.emit(f"   Downloading ({current_file_num}/{total_files}): '{filename}'...")
             
-            response = requests.get(file_url, stream=True, headers=headers, timeout=60)
+            from curl_cffi import requests as cffi_requests
+            session = cffi_requests.Session(impersonate="chrome120")
+            
+            if headers and 'User-Agent' in headers:
+                headers = dict(headers)
+                headers.pop('User-Agent')
+                
+            response = session.get(file_url, stream=True, headers=headers, timeout=60)
+            
+            content_type = response.headers.get('Content-Type', '')
+            if 'text/html' in content_type:
+                self.progress_signal.emit(f"   ❌ Blocked by CDN! Downloaded a 42KB HTML page instead of the video.")
+                if os.path.exists(filepath): os.remove(filepath)
+                with self.lock: self.skip_count += 1
+                return
+                
             response.raise_for_status()
 
             total_size = int(response.headers.get('content-length', 0))

@@ -1,34 +1,12 @@
 import os
 import re
-
+from datetime import datetime
+from ..config.constants import (
+    MAX_FILENAME_COMPONENT_LENGTH, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS,
+    ARCHIVE_EXTENSIONS, AUDIO_EXTENSIONS, FOLDER_NAME_STOP_WORDS
+)
 
 KNOWN_NAMES = []
-
-MAX_FILENAME_COMPONENT_LENGTH = 150
-
-IMAGE_EXTENSIONS = {
-    '.jpg', '.jpeg', '.jpe', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp',
-    '.heic', '.heif', '.svg', '.ico', '.jfif', '.pjpeg', '.pjp', '.avif'
-}
-VIDEO_EXTENSIONS = {
-    '.mp4', '.mov', '.mkv', '.webm', '.avi', '.wmv', '.flv', '.mpeg',
-    '.mpg', '.m4v', '.3gp', '.ogv', '.ts', '.vob'
-}
-ARCHIVE_EXTENSIONS = {
-    '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.bin'
-}
-AUDIO_EXTENSIONS = {
-    '.mp3', '.wav', '.aac', '.flac', '.ogg', '.wma', '.m4a', '.opus',
-    '.aiff', '.ape', '.mid', '.midi'
-}
-
-FOLDER_NAME_STOP_WORDS = {
-    "a", "alone", "am", "an", "and", "at", "be", "blues", "but", "by", "com",
-    "for", "grown", "hard", "he", "her", "his", "hitting", "i", "im", "in", "is", "it", "its",
-    "me", "much", "my", "net", "not", "of", "on", "or", "org", "our", "please",
-    "right", "s", "she", "so", "technically", "tell", "the", "their", "they", "this",
-    "to", "ve", "was", "we", "well", "were", "with", "www", "year", "you", "your",
-}
 
 
 def clean_folder_name(name):
@@ -79,8 +57,24 @@ def clean_filename(name):
     
     return base_name + ext
 
-
-
+def format_custom_suffix(suffix_format, file_index):
+    """
+    Parses a user-defined suffix format (e.g. '001', 'Image1', 'Pg01')
+    and returns a formatted string replacing the numeric part with the 
+    current file index, preserving zero-padding.
+    """
+    if not isinstance(suffix_format, str):
+        suffix_format = str(suffix_format)
+        
+    match = re.search(r'(\d+)$', suffix_format)
+    if match:
+        num_str = match.group(1)
+        padding = len(num_str) if num_str.startswith('0') else 0
+        prefix = suffix_format[:-len(num_str)]
+        formatted_num = str(file_index).zfill(padding) if padding > 0 else str(file_index)
+        return prefix + formatted_num
+    else:
+        return f"{suffix_format}{file_index}"
 def is_image(filename):
     if not filename: return False
     _, ext = os.path.splitext(filename)
@@ -144,3 +138,39 @@ def get_known_names(filepath):
     except FileNotFoundError:
         print(f"Warning: Could not find {filepath}")
         return []
+
+def format_custom_date(date_str, format_string):
+    """
+    Parses a date string from various formats and formats it according to format_string.
+    """
+    if not date_str or 'NoDate' in date_str:
+        return "NoDate"
+        
+    clean_str = date_str.split('T')[0]
+    dt_obj = None
+    
+    formats = [
+        "%Y-%m-%d", "%d-%m-%Y", 
+        "%Y/%m/%d", "%d/%m/%Y",
+        "%m-%d-%Y", "%m/%d/%Y",
+        "%Y.%m.%d", "%d.%m.%Y"
+    ]
+    
+    for fmt in formats:
+        try:
+            dt_obj = datetime.strptime(clean_str, fmt)
+            break
+        except ValueError:
+            continue
+            
+    if not dt_obj:
+        try:
+            dt_obj = datetime.fromisoformat(date_str)
+        except (ValueError, TypeError):
+            pass
+            
+    if dt_obj:
+        strftime_format = format_string.replace("YYYY", "%Y").replace("MM", "%m").replace("DD", "%d")
+        return dt_obj.strftime(strftime_format)
+        
+    return clean_str
