@@ -1157,7 +1157,8 @@ class DownloaderApp (QWidget ):
         
         else:
             if is_queue_command:
-                self.download_btn.setText("🚀 Execute Queue")
+                self.download_btn.setText("Execute Queue")
+                self.download_btn.setIcon(QIcon("assets/Svg/resume.svg"))
                 self.download_btn.setEnabled(True)
                 if hasattr(self, 'execute_job_queue'):
                     self.download_btn.clicked.connect(self.execute_job_queue)

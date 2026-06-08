@@ -300,7 +300,7 @@ class HelpGuideDialog(QDialog):
              <p>To start processing the queue:</p>
              <ol>
                  <li>In the Link Input box, type exactly: <code>start queue</code></li>
-                 <li>The main "Start Download" button will change to <b>"🚀 Execute Queue"</b>.</li>
+                 <li>The main "Start Download" button will change to <b>"Execute Queue"</b>.</li>
                  <li>Click that button to begin.</li>
              </ol>
 
