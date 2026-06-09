@@ -2,6 +2,8 @@ import sys
 import os
 import requests
 import subprocess
+import zipfile
+import shutil
 from packaging.version import parse as parse_version
 from PyQt5.QtCore import QThread, pyqtSignal
 
@@ -30,10 +32,10 @@ class UpdateChecker(QThread):
 
             if latest_version > current_version:
                 for asset in data.get('assets', []):
-                    if asset['name'] == EXE_NAME:
+                    if asset['name'].endswith('.zip'):
                         self.update_available.emit(latest_version_str, asset['browser_download_url'])
                         return
-                self.update_error.emit(f"Update found, but '{EXE_NAME}' is missing from the release assets.")
+                self.update_error.emit(f"Update found, but no '.zip' release asset was found.")
             else:
                 self.up_to_date.emit("You are on the latest version.")
 
@@ -60,24 +62,42 @@ class UpdateDownloader(QThread):
         try:
             app_path = sys.executable
             app_dir = os.path.dirname(app_path)
-            temp_path = os.path.join(app_dir, f"{EXE_NAME}.tmp")
-            old_path = os.path.join(app_dir, f"{EXE_NAME}.old")
+            zip_path = os.path.join(app_dir, "update.zip")
+            extract_dir = os.path.join(app_dir, "update_extracted")
             updater_script_path = os.path.join(app_dir, "updater.bat")
             
             pid_file_path = os.path.join(app_dir, "updater.pid")
 
             with requests.get(self.download_url, stream=True, timeout=300) as r:
                 r.raise_for_status()
-                with open(temp_path, 'wb') as f:
+                with open(zip_path, 'wb') as f:
                     for chunk in r.iter_content(chunk_size=8192):
                         f.write(chunk)
+
+            # Extract the zip file
+            if os.path.exists(extract_dir):
+                shutil.rmtree(extract_dir)
+            os.makedirs(extract_dir, exist_ok=True)
+            
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+                
+            # Find the directory containing _internal
+            update_source_dir = extract_dir
+            for root, dirs, files in os.walk(extract_dir):
+                if '_internal' in dirs:
+                    update_source_dir = root
+                    break
 
             with open(pid_file_path, "w") as f:
                 f.write(str(os.getpid()))
 
+            # Create a batch script to replace files and launch the new executable
+            # We use xcopy to move everything from update_source_dir to app_dir
+            # Then we find the new executable to launch
             script_content = f"""
 @echo off
-SETLOCAL
+SETLOCAL EnableDelayedExpansion
 
 echo.
 echo Reading process information...
@@ -90,20 +110,42 @@ echo Waiting for files to unlock...
 timeout /t 2 /nobreak > nul
 
 echo Replacing application files...
-if exist "{old_path}" del /F /Q "{old_path}"
-rename "{app_path}" "{os.path.basename(old_path)}"
-rename "{temp_path}" "{EXE_NAME}"
+:: Remove old _internal directory
+if exist "{app_dir}\_internal" rmdir /S /Q "{app_dir}\_internal"
+:: Remove old executables (app, yt-dlp, etc.)
+del /F /Q "{app_dir}\*.exe"
+
+:: Copy new files
+xcopy /E /Y /I "{update_source_dir}\*" "{app_dir}\"
+
+:: Find the new application executable to launch (excluding known helpers)
+set "NEW_EXE="
+for %%F in ("{app_dir}\*.exe") do (
+    if /I not "%%~nxF"=="yt-dlp.exe" if /I not "%%~nxF"=="ffmpeg.exe" (
+        set "NEW_EXE=%%~nxF"
+    )
+)
 
 echo.
 echo ============================================================
 echo      Update Complete!
-echo      You can now close this window and run {EXE_NAME}.
 echo ============================================================
 echo.
-pause
+timeout /t 2 > nul
 
 echo Cleaning up helper files...
-del "{pid_file_path}"
+rmdir /S /Q "{extract_dir}"
+del /F /Q "{zip_path}"
+del /F /Q "{pid_file_path}"
+
+if defined NEW_EXE (
+    echo Starting !NEW_EXE!...
+    start "" "{app_dir}\!NEW_EXE!"
+) else (
+    echo Could not find the new executable to start automatically.
+    pause
+)
+
 del "%~f0"
 ENDLOCAL
 """

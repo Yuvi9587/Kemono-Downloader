@@ -10,7 +10,7 @@ from PyQt5.QtCore import Qt, QSize, QUrl
 from PyQt5.QtGui import QPixmap, QDesktopServices
 
 from ...utils.resolution import get_dark_theme
-
+from ..assets import get_asset_path
 
 class SupportDialog(QDialog):
     """
@@ -187,11 +187,3 @@ class SupportDialog(QDialog):
         else:
             self.setStyleSheet("")
 
-
-def get_asset_path(filename):
-    """Return the path to an asset, works in both dev and packaged environments."""
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        base_path = sys._MEIPASS
-    else:
-        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-    return os.path.join(base_path, 'assets', filename)

@@ -3269,3 +3269,18 @@ def get_translation (language_code ,key ,default_text =""):
 
     print (f"Warning: Translation key '{key }' not found for language '{language_code }' or English. Using default: '{default_text }'.")
     return default_text 
+
+from ..ui.assets import get_asset_path
+import re
+
+def _patch_assets(text):
+    if not isinstance(text, str):
+        return text
+    def replacer(match):
+        return get_asset_path(match.group(0))
+    # match assets/Svg/something.svg or assets/svg/something.svg
+    return re.sub(r"assets/[sS]vg/[a-zA-Z0-9_.]+", replacer, text)
+
+for lang in translations:
+    for key, value in translations[lang].items():
+        translations[lang][key] = _patch_assets(value)

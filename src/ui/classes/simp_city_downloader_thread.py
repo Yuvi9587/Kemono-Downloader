@@ -147,7 +147,11 @@ class SimpCityDownloadThread(QThread):
             job_type = job.get('type')
             job_url = job.get('url')
 
-            if job_type in ['image', 'saint2_direct', 'saint2', 'mega']:
+            if job_type == 'image' and self.should_dl_images:
+                enriched_jobs.append(job)
+            elif job_type in ['saint2_direct', 'saint2'] and self.should_dl_saint2:
+                enriched_jobs.append(job)
+            elif job_type == 'mega' and self.should_dl_mega:
                 enriched_jobs.append(job)
             elif (job_type == 'bunkr' and self.should_dl_bunkr) or \
                  (job_type == 'pixeldrain' and self.should_dl_pixeldrain):
@@ -303,16 +307,24 @@ class SimpCityDownloadThread(QThread):
                     self.progress_signal.emit(f"\n--- Processing Service (Saint2/Turbo): {job_url} ---")
                     saint2_logger = self._ServiceLoggerAdapter(self.progress_signal.emit, prefix="      ")
                     album_name, files = fetch_saint2_data(job_url, saint2_logger)
+                    
                     if files:
+                        if len(files) > 1:
+                            with self.counter_lock:
+                                self.total_jobs_found += (len(files) - 1)
                         self._download_album(files, job_url, album_path, job.get('post_metadata'))
-                    with self.counter_lock: 
-                        self.total_jobs_processed += 1
-                        self.overall_progress_signal.emit(self.total_jobs_found, self.total_jobs_processed)
+                    else:
+                        with self.counter_lock: 
+                            self.total_jobs_processed += 1
+                            self.overall_progress_signal.emit(self.total_jobs_found, self.total_jobs_processed)
                 
                 elif job_type == 'mega' and self.should_dl_mega:
                     self.progress_signal.emit(f"\n--- Processing Service (Mega): {job_url} ---")
                     target_path = self._get_target_path(album_path, job.get('post_metadata'))
                     drive_download_mega_file(job_url, target_path, self.progress_signal.emit, self.file_progress_signal.emit)
+                    with self.counter_lock:
+                        self.total_jobs_processed += 1
+                        self.overall_progress_signal.emit(self.total_jobs_found, self.total_jobs_processed)
                 
                 self.service_queue.task_done()
             except queue.Empty:
