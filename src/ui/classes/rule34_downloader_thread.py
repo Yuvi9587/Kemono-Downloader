@@ -6,6 +6,7 @@ import html
 import re
 import datetime
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse, parse_qs
 from PyQt5.QtCore import QThread, pyqtSignal
@@ -80,8 +81,8 @@ class Rule34DownloadThread(QThread):
         self.dl_videos = settings.value("r34_download_videos", True, type=bool)
 
         if not self.api_key or not self.user_id:
-            self.api_key = str(settings.value("r34_api_key", ""))
-            self.user_id = str(settings.value("r34_user_id", ""))
+            self.api_key = str(settings.value("r34_api_key", "")).strip()
+            self.user_id = str(settings.value("r34_user_id", "")).strip()
 
         self.favorites_only = settings.value("r34_favorites_only", False, type=bool)
         self.use_scene_sort = settings.value("r34_use_scene_sort", False, type=bool)
@@ -234,7 +235,7 @@ class Rule34DownloadThread(QThread):
                     params['user_id'] = self.user_id
                     
                 time.sleep(0.1)  # Throttle to prevent triggering rate limits
-                response = self.session.get(api_url, params=params, timeout=(3, 5))
+                response = self.session.get(api_url, params=params, timeout=(10, 15))
                 
                 if response.status_code == 200 and response.text.strip():
                     match = re.search(r'count="(\d+)"', response.text)
@@ -243,8 +244,8 @@ class Rule34DownloadThread(QThread):
                         if count > 0:
                             self.tag_count_cache[search_name] = count
                             return count
-            except Exception:
-                pass
+            except Exception as e:
+                self.main_app.log_signal.emit(f"[DEBUG] fetch_count failed for {search_name}: {e}")
             return 0
 
         count = fetch_count(original_tag)
