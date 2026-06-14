@@ -401,7 +401,7 @@ class DownloaderApp (QWidget ):
         self.download_location_label_widget = None
         self.remove_from_filename_label_widget = None
         self.skip_words_label_widget = None
-        self.setWindowTitle("Kemono Downloader v9.1.4")
+        self.setWindowTitle("Kemono Downloader v9.1.5")
         setup_ui(self)
         self._connect_signals()
 
@@ -4346,6 +4346,11 @@ class DownloaderApp (QWidget ):
                     'name': 'Kemono Batch',
                     'txt_file': 'kemono.txt',
                     'url_regex': r'https?://(?:www\.)?kemono\.(?:su|party|cr)/[^/\s]+/user/\d+(?:/post/\d+)?/?'
+                },
+                'pawchive.st': {
+                    'name': 'Kemono Batch',
+                    'txt_file': 'kemono.txt',
+                    'url_regex': r'https?://(?:www\.)?pawchive\.st/[^/\s]+/user/\d+(?:/post/\d+)?/?'
                 },
 
                 'coomer.st': {

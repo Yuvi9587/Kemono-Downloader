@@ -4,6 +4,7 @@ import urllib.request
 import re
 import json
 import sqlite3
+from ..assets import get_asset_path
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QPushButton, QCheckBox, QSpinBox, QComboBox, QGroupBox, 
@@ -14,14 +15,14 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QEvent, QSize
 
 HELP_CONTENT = {
     "General Setup": (
-        "<h3>🔑 General & API Setup</h3>"
+        f"<h3><img src='{get_asset_path('assets/Svg/settings.svg')}' width='18' height='18' align='top'> General & API Setup</h3>"
         "<p><b>[ Auto-Extract & Save Keys ]</b><br>"
         "Rule34 restricts how many images a guest can download and will eventually block your IP. "
         "This button pulls your logged-in session data from the main window and saves it. "
         "This allows the background downloader to act as a registered user, bypassing rate limits and connection drops.</p>"
     ),
     "Content Filters": (
-        "<h3>🎯 Content & Quality Filters</h3>"
+        f"<h3><img src='{get_asset_path('assets/Svg/target.svg')}' width='18' height='18' align='top'> Content & Quality Filters</h3>"
         "<ul>"
         "<li><b>Minimum Rating Allowed:</b> Tells the API to only fetch posts matching specific site ratings (Safe, Questionable, or Explicit).</li>"
         "<li><b>Minimum Post Score:</b> Skips any post that has fewer upvotes than the number you set. This is a great way to filter out low-effort or low-quality art.</li>"
@@ -29,16 +30,22 @@ HELP_CONTENT = {
         "<li><b>Download Image / Video Files:</b> Tells the engine whether to save static images (JPG, PNG, GIF), animated media (MP4, WEBM), or both.</li>"
         "</ul>"
     ),
-    "Blacklists": (
-        "<h3>🚫 Blacklists & Exclusions</h3>"
+    "Content Safety": (
+        f"<h3><img src='{get_asset_path('assets/Svg/block.svg')}' width='18' height='18' align='top'> Content Safety</h3>"
+        "<ul>"
+        "<li><b>Quick Exclusions:</b> Pre-configured safety nets (Gore, Scatology, Furry, Loli, etc.). Checking these adds massive lists of related tags to your active blacklist so you don't have to type them manually. Hover over them to see the exact blocked words.</li>"
+        "<li><b>Exclude Custom:</b> Allows you to create your own Quick Exclusion preset. Click the <b>[+]</b> button to add tags you want blocked. Checking the box instantly activates your custom blocklist without cluttering your master blacklist.</li>"
+        "</ul>"
+    ),
+    "Tag Control": (
+        f"<h3><img src='{get_asset_path('assets/Svg/tag.svg')}' width='18' height='18' align='top'> Tag Control</h3>"
         "<ul>"
         "<li><b>Priority Whitelist:</b> The ultimate override. If a post contains a tag written here (like a favorite artist), the downloader will save it even if the post also contains tags from your Blacklist.</li>"
         "<li><b>Custom Blacklist:</b> A comma-separated list of tags. If a post contains any of these words, it is instantly skipped.</li>"
-        "<li><b>Quick Exclusions:</b> Pre-configured safety nets (Gore, Scatology, Furry, Loli, etc.). Checking these adds massive lists of related tags to your active blacklist so you don't have to type them manually. Hover over them to see the exact blocked words.</li>"
         "</ul>"
     ),
     "Character Routing": (
-        "<h3>📁 Character Routing (The 'WHO')</h3>"
+        f"<h3><img src='{get_asset_path('assets/Svg/folder.svg')}' width='18' height='18' align='top'> Character Routing (The 'WHO')</h3>"
         "<ul>"
         "<li><b>Enable Automatic Character Folders:</b> Turns on the primary routing engine. It scans downloaded tags for known characters and automatically creates a folder named after them.</li>"
         "<li><b>Favorites Manager:</b> Where you type character names. Uses a custom Autocomplete system. Press <i>Ctrl + Down Arrow</i> to rapidly select and lock in names.</li>"
@@ -48,7 +55,7 @@ HELP_CONTENT = {
         "</ul>"
     ),
     "Scene Routing": (
-        "<h3>🖼️ Scene & Tag Routing (The 'WHAT / WHERE')</h3>"
+        f"<h3><img src='{get_asset_path('assets/Svg/palette.svg')}' width='18' height='18' align='top'> Scene & Tag Routing (The 'WHAT / WHERE')</h3>"
         "<ul>"
         "<li><b>Enable Priority-Based Scene Sub-Folders:</b> Turns on the secondary routing engine. If Character sorting is on, these become sub-folders (e.g., <code>\\Makima\\Beach\\</code>).</li>"
         "<li><b>Scene Priority List:</b> The engine checks tags from Top to Bottom. If a post is tagged with both 'Bikini' and 'Beach', and 'Bikini' is higher on this list, the folder will be named <code>\\Bikini\\</code>.</li>"
@@ -56,7 +63,7 @@ HELP_CONTENT = {
         "</ul>"
     ),
     "Tag Aliases": (
-        "<h3>🔄 Tag Aliases Engine (The Translator)</h3>"
+        f"<h3><img src='{get_asset_path('assets/Svg/link.svg')}' width='18' height='18' align='top'> Tag Aliases Engine (The Translator)</h3>"
         "<ul>"
         "<li><b>Alias Input:</b> Creates a translation rule formatted as <code>Master = alias1, alias2</code>.</li>"
         "<li><b>Alias List:</b> Shows active translations. When a file downloads, the engine instantly intercepts the internet's messy tags and standardizes them before any folders are created (e.g., intercepting 'swimwear' to 'bikini').</li>"
@@ -130,29 +137,25 @@ class FavoritesListWidget(QListWidget):
             super().keyPressEvent(event)
 
 class SectionHelpButton(QPushButton):
-    """A reusable, small '?' button that pops up a contextual help dialog with advanced styling."""
+    """A reusable, small button that pops up a contextual help dialog with an SVG icon."""
     def __init__(self, title, text_content, parent=None):
-        super().__init__("?", parent)
+        super().__init__("", parent)
         self.title = title
         self.text_content = text_content
         self.setFixedSize(24, 24)
+        self.setIcon(QIcon(get_asset_path("assets/Svg/help.svg")))
+        self.setIconSize(QSize(18, 18))
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip(f"Help: {title}")
         
         self.setStyleSheet("""
             QPushButton {
-                background-color: #3b3b3b;
-                color: #e0e0e0;
-                border: 1px solid #555555;
+                background-color: transparent;
+                border: none;
                 border-radius: 12px;
-                font-family: Arial;
-                font-size: 13px;
-                font-weight: bold;
             }
             QPushButton:hover {
                 background-color: #4f4f4f;
-                border: 1px solid #87ceeb;
-                color: #87ceeb;
             }
             QPushButton:pressed {
                 background-color: #2b2b2b;
@@ -236,9 +239,9 @@ class Rule34SettingsDialog(QDialog):
         self.ONLINE_CHAR_DB_URL = "https://raw.githubusercontent.com/Yuvi63771/Rule34/main/characters.db"
         self.GITHUB_RAW_URL = "https://raw.githubusercontent.com/Yuvi63771/Rule34/main/alliases.txt"
         
-        self.setWindowTitle("⚙️ Rule34 Download Settings")
+        self.setWindowTitle("Rule34 Download Settings")
+        self.setWindowIcon(QIcon(get_asset_path("assets/Svg/settings.svg")))
         self.setMinimumSize(800, 500) 
-        self.resize(1150, 750) 
         
         self.all_tags_cache = [] 
         self.search_timer = QTimer(self)
@@ -271,30 +274,39 @@ class Rule34SettingsDialog(QDialog):
         right_col = QVBoxLayout(self.right_container)
         right_col.setContentsMargins(0, 0, 0, 0)
 
-        creds_group = QGroupBox("🔑 API CREDENTIALS")
+        creds_group = QGroupBox()
         creds_layout = QVBoxLayout()
-        creds_header = QHBoxLayout()
-        creds_desc = QLabel("Saving your credentials prevents rate-limiting!")
-        creds_desc.setWordWrap(True)
-        creds_help = SectionHelpButton("General Setup", HELP_CONTENT["General Setup"])
-        creds_header.addWidget(creds_desc)
-        creds_header.addWidget(creds_help)
-        creds_layout.addLayout(creds_header)
         
-        self.save_creds_btn = QPushButton("💾 Auto-Extract Save Keys")
+        creds_title_layout = QHBoxLayout()
+        creds_title = QLabel(f"<img src='{get_asset_path('assets/Svg/key.svg')}' width='16' height='16' align='top'> <b>API CREDENTIALS</b>")
+        creds_help = SectionHelpButton("General Setup", HELP_CONTENT["General Setup"])
+        creds_title_layout.addWidget(creds_title)
+        creds_title_layout.addStretch()
+        creds_title_layout.addWidget(creds_help)
+        creds_layout.addLayout(creds_title_layout)
+
+        creds_desc = QLabel(f"<img src='{get_asset_path('assets/Svg/settings.svg')}' width='13' height='13' align='top'> Saving your credentials prevents rate-limiting!")
+        creds_desc.setWordWrap(True)
+        creds_layout.addWidget(creds_desc)
+        
+        self.save_creds_btn = QPushButton(" Auto-Extract Save Keys")
+        self.save_creds_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
         self.save_creds_btn.setStyleSheet("background-color: #2b5c38; font-weight: bold; padding: 5px;")
         self.save_creds_btn.clicked.connect(self.save_credentials_to_settings)
         creds_layout.addWidget(self.save_creds_btn)
         creds_group.setLayout(creds_layout)
         left_col.addWidget(creds_group)
 
-        filters_group = QGroupBox("🎯 CONTENT FILTERS")
+        filters_group = QGroupBox()
         filters_layout = QVBoxLayout()
-        filters_header = QHBoxLayout()
-        filters_header.addStretch()
+        
+        filters_title_layout = QHBoxLayout()
+        filters_title = QLabel(f"<img src='{get_asset_path('assets/Svg/target.svg')}' width='16' height='16' align='top'> <b>CONTENT FILTERS</b>")
         filters_help = SectionHelpButton("Content Filters", HELP_CONTENT["Content Filters"])
-        filters_header.addWidget(filters_help)
-        filters_layout.addLayout(filters_header)
+        filters_title_layout.addWidget(filters_title)
+        filters_title_layout.addStretch()
+        filters_title_layout.addWidget(filters_help)
+        filters_layout.addLayout(filters_title_layout)
 
         rating_layout = QHBoxLayout()
         rating_layout.addWidget(QLabel("Min Rating:"))
@@ -324,8 +336,18 @@ class Rule34SettingsDialog(QDialog):
         filters_group.setLayout(filters_layout)
         left_col.addWidget(filters_group)
 
-        safety_group = QGroupBox("🚫 CONTENT SAFETY")
-        safety_main_layout = QHBoxLayout()
+        safety_group = QGroupBox()
+        safety_main_layout = QVBoxLayout()
+        
+        safety_title_layout = QHBoxLayout()
+        safety_title = QLabel(f"<img src='{get_asset_path('assets/Svg/block.svg')}' width='16' height='16' align='top'> <b>CONTENT SAFETY</b>")
+        safety_help = SectionHelpButton("Content Safety", HELP_CONTENT["Content Safety"])
+        safety_title_layout.addWidget(safety_title)
+        safety_title_layout.addStretch()
+        safety_title_layout.addWidget(safety_help)
+        safety_main_layout.addLayout(safety_title_layout)
+        
+        safety_content_layout = QHBoxLayout()
         checkboxes_layout = QVBoxLayout()
         
         self.exclude_gore_cb = QCheckBox("Exclude Gore / Extreme Violence")
@@ -352,26 +374,53 @@ class Rule34SettingsDialog(QDialog):
         checkboxes_layout.addWidget(self.exclude_insects_cb)
         checkboxes_layout.addWidget(self.exclude_necro_cb)
         
-        safety_main_layout.addLayout(checkboxes_layout)
-        safety_main_layout.addStretch() 
+        self.exclude_custom_cb = QCheckBox("Exclude Custom:")
+        self.edit_custom_tags_btn = QPushButton()
+        self.edit_custom_tags_btn.setIcon(QIcon(get_asset_path('assets/Svg/add.svg')))
+        self.edit_custom_tags_btn.setFixedSize(18, 18)
+        self.edit_custom_tags_btn.setToolTip("Edit custom exclusion tags")
+        self.edit_custom_tags_btn.setStyleSheet("""
+            QPushButton { background: transparent; border: none; border-radius: 3px; }
+            QPushButton:hover { background: rgba(255, 255, 255, 0.1); }
+        """)
+        self.edit_custom_tags_btn.clicked.connect(self.open_custom_tags_editor)
+        
+        custom_layout = QHBoxLayout()
+        custom_layout.setContentsMargins(0, 0, 0, 0)
+        custom_layout.addWidget(self.exclude_custom_cb)
+        custom_layout.addWidget(self.edit_custom_tags_btn)
+        custom_layout.addStretch()
+        
+        checkboxes_layout.addLayout(custom_layout)
+        
+        safety_content_layout.addLayout(checkboxes_layout)
+        safety_content_layout.addStretch() 
         
         safety_info_layout = QVBoxLayout()
-        info_label = QLabel("ℹ️ Hover checkboxes to\nsee exact blocked tags")
-        info_label.setStyleSheet("color: #7f8c8d; font-size: 11px; font-style: italic;")
-        info_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        
-        safety_help = SectionHelpButton("Blacklists", HELP_CONTENT["Blacklists"])
-        
-        safety_info_layout.addWidget(info_label)
-        safety_info_layout.addWidget(safety_help, alignment=Qt.AlignRight)
         safety_info_layout.addStretch()
         
-        safety_main_layout.addLayout(safety_info_layout)
+        info_label = QLabel(f"<img src='{get_asset_path('assets/Svg/help.svg')}' width='13' height='13' align='top'> Hover checkboxes to<br>see exact blocked tags")
+        info_label.setStyleSheet("color: #7f8c8d; font-size: 11px; font-style: italic;")
+        info_label.setAlignment(Qt.AlignRight | Qt.AlignBottom)
+        
+        safety_info_layout.addWidget(info_label)
+        
+        safety_content_layout.addLayout(safety_info_layout)
+        safety_main_layout.addLayout(safety_content_layout)
         safety_group.setLayout(safety_main_layout)
         left_col.addWidget(safety_group)
         
-        tag_control_group = QGroupBox("🏷️ TAG CONTROL")
+        tag_control_group = QGroupBox()
         tag_control_layout = QVBoxLayout()
+        
+        tag_title_layout = QHBoxLayout()
+        tag_title = QLabel(f"<img src='{get_asset_path('assets/Svg/tag.svg')}' width='16' height='16' align='top'> <b>TAG CONTROL</b>")
+        tag_help = SectionHelpButton("Tag Control", HELP_CONTENT["Tag Control"])
+        tag_title_layout.addWidget(tag_title)
+        tag_title_layout.addStretch()
+        tag_title_layout.addWidget(tag_help)
+        tag_control_layout.addLayout(tag_title_layout)
+        
         tag_control_layout.addWidget(QLabel("Whitelist (Master)"))
         self.whitelist_input = QLineEdit()
         self.whitelist_input.setPlaceholderText("e.g., artist:name, safe_collection")
@@ -387,18 +436,24 @@ class Rule34SettingsDialog(QDialog):
         
         left_col.addStretch()
 
-        char_group = QGroupBox("📁 CHARACTER FOLDERS")
+        char_group = QGroupBox()
         char_layout = QVBoxLayout()
+        
+        char_title_layout = QHBoxLayout()
+        char_title = QLabel(f"<img src='{get_asset_path('assets/Svg/folder.svg')}' width='16' height='16' align='top'> <b>CHARACTER FOLDERS</b>")
+        char_help = SectionHelpButton("Character Routing", HELP_CONTENT["Character Routing"])
+        char_title_layout.addWidget(char_title)
+        char_title_layout.addStretch()
+        char_title_layout.addWidget(char_help)
+        char_layout.addLayout(char_title_layout)
         
         char_header_layout = QHBoxLayout()
         self.use_smart_sort_cb = QCheckBox("Enable Character Folder Sorting")
-        char_help = SectionHelpButton("Character Routing", HELP_CONTENT["Character Routing"])
         char_header_layout.addWidget(self.use_smart_sort_cb)
         char_header_layout.addStretch()
-        char_header_layout.addWidget(char_help)
         char_layout.addLayout(char_header_layout)
         
-        char_layout.addWidget(QLabel("⭐ Favorites Manager"))
+        char_layout.addWidget(QLabel(f"<img src='{get_asset_path('assets/Svg/star.svg')}' width='13' height='13' align='top'> Favorites Manager"))
         fav_input_layout = QHBoxLayout()
         self.new_fav_input = MultiCompleterLineEdit()
         self.new_fav_input.setPlaceholderText("Ctrl+Down to harvest!")
@@ -418,7 +473,8 @@ class Rule34SettingsDialog(QDialog):
         char_layout.addWidget(self.favorites_only_cb)
 
         hf_layout = QHBoxLayout()
-        self.hf_download_btn = QPushButton("☁️ Download Offline Tag DB")
+        self.hf_download_btn = QPushButton(" Download Offline Tag DB")
+        self.hf_download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
         self.hf_download_btn.clicked.connect(self.download_character_db)
         hf_layout.addWidget(self.hf_download_btn)
         self.hf_progress_bar = QProgressBar()
@@ -427,22 +483,22 @@ class Rule34SettingsDialog(QDialog):
         char_layout.addLayout(hf_layout)
         
         if os.path.exists(self.CHAR_DB_PATH):
-            self.hf_download_btn.setText("✅ Offline Database Installed")
+            self.hf_download_btn.setText(" Offline Database Installed")
+            self.hf_download_btn.setIcon(QIcon(get_asset_path("assets/Svg/archive.svg")))
             self.hf_download_btn.setEnabled(False)
 
         char_group.setLayout(char_layout)
         mid_col.addWidget(char_group)
 
-        scene_group = QGroupBox("🖼️ SCENE / TAG FOLDERS (PRIORITY BASED)")
+        scene_group = QGroupBox()
         scene_layout = QVBoxLayout()
         
-        scene_top_layout = QHBoxLayout()
-        self.use_scene_sort_cb = QCheckBox("Enable Scene/Tag Folder Sorting")
+        scene_title_layout = QHBoxLayout()
+        scene_title = QLabel(f"<img src='{get_asset_path('assets/Svg/palette.svg')}' width='16' height='16' align='top'> <b>SCENE / TAG FOLDERS (PRIORITY BASED)</b>")
         scene_help = SectionHelpButton("Scene Routing", HELP_CONTENT["Scene Routing"])
-        
-        scene_top_layout.addWidget(self.use_scene_sort_cb)
-        scene_top_layout.addWidget(scene_help)
-        scene_top_layout.addStretch() 
+        scene_title_layout.addWidget(scene_title)
+        scene_title_layout.addStretch()
+        scene_title_layout.addWidget(scene_help)
         
         self.expand_scene_btn = QPushButton()
         self.expand_scene_btn.setFixedSize(28, 28)
@@ -463,14 +519,23 @@ class Rule34SettingsDialog(QDialog):
             QPushButton:hover { background-color: #3b3b3b; }
         """)
         self.expand_scene_btn.clicked.connect(self.toggle_scene_fullscreen)
-        scene_top_layout.addWidget(self.expand_scene_btn)
+        scene_title_layout.addWidget(self.expand_scene_btn)
+        
+        scene_layout.addLayout(scene_title_layout)
+        
+        scene_top_layout = QHBoxLayout()
+        self.use_scene_sort_cb = QCheckBox("Enable Scene/Tag Folder Sorting")
+        
+        scene_top_layout.addWidget(self.use_scene_sort_cb)
+        scene_top_layout.addStretch() 
         
         scene_layout.addLayout(scene_top_layout)
         
         scene_input_layout = QHBoxLayout()
         self.scene_input = QLineEdit()
         self.scene_input.setPlaceholderText("e.g., bikini, beach, 2girls...")
-        self.add_scene_btn = QPushButton("⊕ Add Tag")
+        self.add_scene_btn = QPushButton(" Add Tag")
+        self.add_scene_btn.setIcon(QIcon(get_asset_path("assets/Svg/add.svg")))
         self.add_scene_btn.clicked.connect(self.add_scene_tag)
         scene_input_layout.addWidget(self.scene_input)
         scene_input_layout.addWidget(self.add_scene_btn)
@@ -484,7 +549,8 @@ class Rule34SettingsDialog(QDialog):
         priority_btn_layout = QHBoxLayout()
         self.scene_up_btn = QPushButton("↑ Move Up")
         self.scene_down_btn = QPushButton("↓ Move Down")
-        self.scene_del_btn = QPushButton("🗑️ Delete")
+        self.scene_del_btn = QPushButton(" Delete")
+        self.scene_del_btn.setIcon(QIcon(get_asset_path("assets/Svg/trash.svg")))
         self.scene_up_btn.clicked.connect(self.move_scene_up)
         self.scene_down_btn.clicked.connect(self.move_scene_down)
         self.scene_del_btn.clicked.connect(self.delete_scene_tag)
@@ -494,29 +560,36 @@ class Rule34SettingsDialog(QDialog):
         priority_btn_layout.addWidget(self.scene_del_btn)
         scene_layout.addLayout(priority_btn_layout)
 
-        scene_note = QLabel("ⓘ Note: Tags must exactly match general tags on Rule34.xxx")
+        scene_note = QLabel(f"<img src='{get_asset_path('assets/Svg/help.svg')}' width='13' height='13' align='top'> Note: Tags must exactly match general tags on Rule34.xxx")
         scene_note.setStyleSheet("color: gray; font-style: italic;")
         scene_layout.addWidget(scene_note)
 
         scene_group.setLayout(scene_layout)
         right_col.addWidget(scene_group)
 
-        self.alias_group = QGroupBox("🔗 TAG ALIASES (MERGE SYNONYMS)")
+        self.alias_group = QGroupBox()
         alias_layout = QVBoxLayout()
         
+        alias_title_layout = QHBoxLayout()
+        alias_title = QLabel(f"<img src='{get_asset_path('assets/Svg/link.svg')}' width='16' height='16' align='top'> <b>TAG ALIASES (MERGE SYNONYMS)</b>")
+        alias_help = SectionHelpButton("Tag Aliases", HELP_CONTENT["Tag Aliases"])
+        alias_title_layout.addWidget(alias_title)
+        alias_title_layout.addStretch()
+        alias_title_layout.addWidget(alias_help)
+        alias_layout.addLayout(alias_title_layout)
+
         alias_header_layout = QHBoxLayout()
         alias_desc = QLabel("Format: Master_Tag = alias1, alias2")
         alias_desc.setStyleSheet("color: gray; font-style: italic;")
-        alias_help = SectionHelpButton("Tag Aliases", HELP_CONTENT["Tag Aliases"])
         alias_header_layout.addWidget(alias_desc)
         alias_header_layout.addStretch()
-        alias_header_layout.addWidget(alias_help)
         alias_layout.addLayout(alias_header_layout)
 
         alias_input_layout = QHBoxLayout()
         self.alias_input = QLineEdit()
         self.alias_input.setPlaceholderText("e.g., 1girl = solo, female")
-        self.add_alias_btn = QPushButton("⊕ Add Rule")
+        self.add_alias_btn = QPushButton(" Add Rule")
+        self.add_alias_btn.setIcon(QIcon(get_asset_path("assets/Svg/add.svg")))
         self.add_alias_btn.clicked.connect(self.add_alias)
         alias_input_layout.addWidget(self.alias_input)
         alias_input_layout.addWidget(self.add_alias_btn)
@@ -527,10 +600,12 @@ class Rule34SettingsDialog(QDialog):
         alias_layout.addWidget(self.alias_list_widget)
         
         alias_action_layout = QHBoxLayout()
-        self.del_alias_btn = QPushButton("🗑️ Delete Rule")
+        self.del_alias_btn = QPushButton(" Delete Rule")
+        self.del_alias_btn.setIcon(QIcon(get_asset_path("assets/Svg/trash.svg")))
         self.del_alias_btn.clicked.connect(self.delete_alias)
         
-        self.fetch_alias_btn = QPushButton("👥 Load Community Rules")
+        self.fetch_alias_btn = QPushButton(" Load Community Rules")
+        self.fetch_alias_btn.setIcon(QIcon(get_asset_path("assets/Svg/link.svg")))
         self.fetch_alias_btn.setStyleSheet("background-color: #2b4b7c; color: white; font-weight: bold;")
         self.fetch_alias_btn.clicked.connect(self.fetch_github_aliases)
         
@@ -549,7 +624,7 @@ class Rule34SettingsDialog(QDialog):
         master_layout.addWidget(settings_scroll)
 
         btn_layout = QHBoxLayout()
-        btn_layout.setContentsMargins(0, 10, 0, 0) 
+        btn_layout.setContentsMargins(0, 10, 0, 10) 
         
         save_btn = QPushButton("Save Settings")
         cancel_btn = QPushButton("Cancel")
@@ -563,6 +638,10 @@ class Rule34SettingsDialog(QDialog):
         btn_layout.addWidget(cancel_btn)
         btn_layout.addWidget(save_btn)
         master_layout.addLayout(btn_layout)
+        
+        # Force the window to fit the content perfectly so no scrollbar is needed
+        ideal_height = scroll_content.sizeHint().height() + 120
+        self.resize(1150, ideal_height)
 
     def toggle_scene_fullscreen(self):
         self.scene_is_expanded = getattr(self, 'scene_is_expanded', False)
@@ -615,7 +694,7 @@ class Rule34SettingsDialog(QDialog):
                     added_count += 1
                     
             if added_count > 0:
-                QMessageBox.information(self, "Success", f"✅ Successfully loaded {added_count} new alias rules from GitHub!")
+                QMessageBox.information(self, "Success", f"Successfully loaded {added_count} new alias rules from GitHub!")
             else:
                 QMessageBox.information(self, "Up to Date", "No new rules found. You are completely up to date!")
                 
@@ -676,6 +755,8 @@ class Rule34SettingsDialog(QDialog):
         self.exclude_vore_cb.setChecked(settings.value("r34_exclude_vore", False, type=bool))
         self.exclude_insects_cb.setChecked(settings.value("r34_exclude_insects", False, type=bool))
         self.exclude_necro_cb.setChecked(settings.value("r34_exclude_necro", False, type=bool))
+        self.exclude_custom_cb.setChecked(settings.value("r34_exclude_custom", False, type=bool))
+        self.custom_safety_tags_str = str(settings.value("r34_custom_safety_tags", ""))
         
         self.whitelist_input.setText(settings.value("r34_whitelist", ""))
         
@@ -718,6 +799,8 @@ class Rule34SettingsDialog(QDialog):
         settings.setValue("r34_exclude_vore", self.exclude_vore_cb.isChecked())
         settings.setValue("r34_exclude_insects", self.exclude_insects_cb.isChecked())
         settings.setValue("r34_exclude_necro", self.exclude_necro_cb.isChecked())
+        settings.setValue("r34_exclude_custom", self.exclude_custom_cb.isChecked())
+        settings.setValue("r34_custom_safety_tags", getattr(self, 'custom_safety_tags_str', ""))
         
         settings.setValue("r34_whitelist", self.whitelist_input.text().strip())
         
@@ -896,3 +979,35 @@ class Rule34SettingsDialog(QDialog):
         raw_matches.sort(key=lambda x: (get_score(x), len(x), x))
         self.completer.model().setStringList(raw_matches[:40])
         self.completer.complete()
+
+    def open_custom_tags_editor(self):
+        from PyQt5.QtWidgets import QDialog, QPlainTextEdit, QVBoxLayout, QHBoxLayout, QLabel
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Custom Exclusion Tags")
+        dialog.setMinimumSize(300, 400)
+        
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("Enter tags to exclude (one per line):"))
+        
+        text_edit = QPlainTextEdit()
+        # Convert comma-separated string to newlines
+        current_tags_str = getattr(self, 'custom_safety_tags_str', "")
+        current_tags = [t.strip() for t in current_tags_str.split(',') if t.strip()]
+        text_edit.setPlainText("\n".join(current_tags))
+        layout.addWidget(text_edit)
+        
+        btn_layout = QHBoxLayout()
+        save_btn = QPushButton("Save")
+        cancel_btn = QPushButton("Cancel")
+        save_btn.clicked.connect(dialog.accept)
+        cancel_btn.clicked.connect(dialog.reject)
+        btn_layout.addStretch()
+        btn_layout.addWidget(cancel_btn)
+        btn_layout.addWidget(save_btn)
+        
+        layout.addLayout(btn_layout)
+        
+        if dialog.exec_() == QDialog.Accepted:
+            lines = text_edit.toPlainText().split('\n')
+            lines = [l.strip() for l in lines if l.strip()]
+            self.custom_safety_tags_str = ",".join(lines)

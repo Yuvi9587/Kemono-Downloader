@@ -63,6 +63,10 @@ class BooruDownloadThread(QThread):
         if settings.value("r34_exclude_necro", False, type=bool):
             self.active_blacklist.extend(['necrophilia', 'dead', 'corpse', 'zombie', 'rotting', 'decay'])
             
+        if settings.value("r34_exclude_custom", False, type=bool):
+            custom_safety_tags = str(settings.value("r34_custom_safety_tags", ""))
+            self.active_blacklist.extend([t.strip().lower() for t in custom_safety_tags.split(',') if t.strip()])
+            
         self.rating_filter = int(settings.value("r34_rating_filter", 0))
         self.min_score = int(settings.value("r34_min_score", 0))
         self.max_downloads = int(settings.value("r34_max_downloads", 0))

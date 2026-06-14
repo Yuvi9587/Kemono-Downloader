@@ -251,17 +251,7 @@ class ErrorFilesDialog(QDialog):
             if item.checkState() == Qt.Checked:
                 error_info = dict(item.data(Qt.UserRole))
                 
-                service = error_info.get('service')
-                user_id = error_info.get('user_id')
-                
-                if service and user_id and hasattr(self.parent_app, 'creator_name_cache'):
-                    creator_name = self.parent_app.creator_name_cache.get((service.lower(), str(user_id)), str(user_id))
-                    
-                    safe_creator_name = re.sub(r'[\\/*?:"<>|]', "", creator_name).strip()
-                    target_path = error_info.get('target_folder_path', '')
-                    
-                    if safe_creator_name and not target_path.replace('\\', '/').rstrip('/').endswith(safe_creator_name):
-                        error_info['target_folder_path'] = os.path.join(target_path, safe_creator_name)
+
                 
                 selected_files_for_retry.append(error_info)
 

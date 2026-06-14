@@ -95,7 +95,7 @@ class UpdateDownloader(QThread):
             # Create a batch script to replace files and launch the new executable
             # We use xcopy to move everything from update_source_dir to app_dir
             # Then we find the new executable to launch
-            script_content = f"""
+            script_content = rf"""
 @echo off
 SETLOCAL EnableDelayedExpansion
 

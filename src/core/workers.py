@@ -1387,7 +1387,7 @@ class PostProcessorWorker:
 
             all_files_from_post_api_for_char_check = []
             api_file_domain_for_char_check = urlparse(self.api_url_input).netloc
-            if not api_file_domain_for_char_check or ('kemono' not in api_file_domain_for_char_check.lower() and 'coomer' not in api_file_domain_for_char_check.lower()):
+            if not api_file_domain_for_char_check or ('kemono' not in api_file_domain_for_char_check.lower() and 'coomer' not in api_file_domain_for_char_check.lower() and 'pawchive.st' not in api_file_domain_for_char_check.lower()):
                 api_file_domain_for_char_check = "coomer.su" if self.service.lower() in ['onlyfans', 'fansly', 'candfans'] else "kemono.su"
             if post_main_file_info and isinstance(post_main_file_info, dict) and post_main_file_info.get('path'):
                 original_api_name = post_main_file_info.get('name') or os.path.basename(post_main_file_info['path'].lstrip('/'))
@@ -1429,7 +1429,7 @@ class PostProcessorWorker:
                     try:
                         parsed_input_url_for_comments = urlparse(self.api_url_input)
                         api_domain_for_comments = parsed_input_url_for_comments.netloc
-                        if not any(d in api_domain_for_comments.lower() for d in ['kemono.su', 'kemono.party', 'kemono.cr', 'coomer.su', 'coomer.party', 'coomer.st']):
+                        if not any(d in api_domain_for_comments.lower() for d in ['kemono.su', 'kemono.party', 'kemono.cr', 'pawchive.st', 'coomer.su', 'coomer.party', 'coomer.st']):
                             self.logger(f"⚠️ Unrecognized domain '{api_domain_for_comments}' for comment API. Defaulting based on service.")
                             api_domain_for_comments = "kemono.cr" if "kemono" in self.service.lower() else "coomer.st"
                        
@@ -1920,8 +1920,10 @@ class PostProcessorWorker:
             all_files_from_post_api = []
             api_file_domain = urlparse(self.api_url_input).netloc
             
-            if not api_file_domain or ('kemono' not in api_file_domain.lower() and 'coomer' not in api_file_domain.lower()):
+            if not api_file_domain or ('kemono' not in api_file_domain.lower() and 'coomer' not in api_file_domain.lower() and 'pawchive.st' not in api_file_domain.lower()):
                 api_file_domain = "coomer.su" if self.service.lower() in ['onlyfans', 'fansly', 'candfans'] else "kemono.su"
+            elif 'pawchive.st' in api_file_domain.lower():
+                api_file_domain = "fox.pawchive.st"
 
             if post_main_file_info and isinstance(post_main_file_info, dict) and post_main_file_info.get('path'):
                 file_path = post_main_file_info['path'].lstrip('/')
@@ -1930,6 +1932,8 @@ class PostProcessorWorker:
                     final_url = post_main_file_info.get('url')
                     if not final_url or not final_url.startswith('http'):
                         final_url = f"https://{api_file_domain}/{file_path}" if file_path.startswith('/') else f"https://{api_file_domain}/data/{file_path}"
+                        import urllib.parse
+                        final_url += f"?f={urllib.parse.quote(original_api_name)}"
                         
                     all_files_from_post_api.append({
                         'url': final_url,
@@ -1948,6 +1952,8 @@ class PostProcessorWorker:
                         final_url = att_info.get('url')
                         if not final_url or not final_url.startswith('http'):
                             final_url = f"https://{api_file_domain}/{att_path}" if att_path.startswith('/') else f"https://{api_file_domain}/data/{att_path}"
+                            import urllib.parse
+                            final_url += f"?f={urllib.parse.quote(original_api_att_name)}"
                             
                         all_files_from_post_api.append({
                             'url': final_url,

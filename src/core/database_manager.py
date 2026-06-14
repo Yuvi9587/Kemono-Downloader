@@ -132,14 +132,28 @@ class DatabaseManager:
             return False
             
         for tag in tags_list:
+            tag_type = 'general'
             clean_tag = tag.strip().lower().replace(' ', '_')
             if not clean_tag:
                 continue
                 
-            cursor.execute('''
-                INSERT OR IGNORE INTO Tags (tag_name)
-                VALUES (?)
-            ''', (clean_tag,))
+            if ':' in clean_tag:
+                parts = clean_tag.split(':', 1)
+                prefix = parts[0].strip()
+                if prefix in ['character', 'artist', 'series', 'general']:
+                    tag_type = prefix
+                    clean_tag = parts[1].strip()
+            
+            try:
+                cursor.execute('''
+                    INSERT OR IGNORE INTO Tags (tag_name, tag_type)
+                    VALUES (?, ?)
+                ''', (clean_tag, tag_type))
+            except sqlite3.OperationalError:
+                cursor.execute('''
+                    INSERT OR IGNORE INTO Tags (tag_name)
+                    VALUES (?)
+                ''', (clean_tag,))
             
             cursor.execute('SELECT tag_id FROM Tags WHERE tag_name = ?', (clean_tag,))
             tag_row = cursor.fetchone()
@@ -193,14 +207,28 @@ class DatabaseManager:
             return False
             
         for tag in tags_list:
+            tag_type = 'general'
             clean_tag = tag.strip().lower().replace(' ', '_')
             if not clean_tag:
                 continue
                 
-            cursor.execute('''
-                INSERT OR IGNORE INTO Tags (tag_name)
-                VALUES (?)
-            ''', (clean_tag,))
+            if ':' in clean_tag:
+                parts = clean_tag.split(':', 1)
+                prefix = parts[0].strip()
+                if prefix in ['character', 'artist', 'series', 'general']:
+                    tag_type = prefix
+                    clean_tag = parts[1].strip()
+            
+            try:
+                cursor.execute('''
+                    INSERT OR IGNORE INTO Tags (tag_name, tag_type)
+                    VALUES (?, ?)
+                ''', (clean_tag, tag_type))
+            except sqlite3.OperationalError:
+                cursor.execute('''
+                    INSERT OR IGNORE INTO Tags (tag_name)
+                    VALUES (?)
+                ''', (clean_tag,))
             
             cursor.execute('SELECT tag_id FROM Tags WHERE tag_name = ?', (clean_tag,))
             tag_row = cursor.fetchone()

@@ -62,6 +62,10 @@ class Rule34DownloadThread(QThread):
         if settings.value("r34_exclude_necro", False, type=bool):
             self.active_blacklist.extend(['necrophilia', 'dead', 'corpse', 'zombie', 'rotting', 'decay'])
             
+        if settings.value("r34_exclude_custom", False, type=bool):
+            custom_safety_tags = str(settings.value("r34_custom_safety_tags", ""))
+            self.active_blacklist.extend([t.strip().lower() for t in custom_safety_tags.split(',') if t.strip()])
+            
         self.active_blacklist.extend([
             'rape', 'gore', 
             'literal_spitroast', 'scaphism', 'what_the_fuck', 'itt', 
@@ -229,7 +233,8 @@ class Rule34DownloadThread(QThread):
                     params['api_key'] = self.api_key
                     params['user_id'] = self.user_id
                     
-                response = self.session.get(api_url, params=params, timeout=10)
+                time.sleep(0.1)  # Throttle to prevent triggering rate limits
+                response = self.session.get(api_url, params=params, timeout=(3, 5))
                 
                 if response.status_code == 200 and response.text.strip():
                     match = re.search(r'count="(\d+)"', response.text)
@@ -261,6 +266,43 @@ class Rule34DownloadThread(QThread):
         if self.download_file(file_url, save_path):
             calculated_phash, hash_warn = self.calculate_phash_safe(save_path)
             
+            post_id = post.get('id')
+            categorized_tags = []
+            if post_id:
+                post_view_url = f"https://rule34.xxx/index.php?page=post&s=view&id={post_id}"
+                try:
+                    from bs4 import BeautifulSoup
+                    post_response = self.session.get(post_view_url, timeout=(10, 15))
+                    if post_response.status_code == 200:
+                        soup = BeautifulSoup(post_response.text, 'html.parser')
+                        tag_sidebar = soup.find('ul', id='tag-sidebar')
+                        if tag_sidebar:
+                            for li in tag_sidebar.find_all('li', class_='tag'):
+                                classes = li.get('class', [])
+                                tag_type = 'general'
+                                for c in classes:
+                                    if c.startswith('tag-type-'):
+                                        category = c.replace('tag-type-', '')
+                                        if category == 'copyright':
+                                            tag_type = 'series'
+                                        elif category in ['character', 'artist']:
+                                            tag_type = category
+                                        else:
+                                            tag_type = 'general'
+                                
+                                tag_link = li.find('a', href=lambda h: h and 'tags=' in h)
+                                if tag_link:
+                                    tag_name = tag_link.text.strip().lower().replace(' ', '_')
+                                    tag_name = self.alias_map.get(tag_name, tag_name)
+                                    tag_name = tag_name.replace('_(series)', '')
+                                    if tag_name:
+                                        categorized_tags.append(f"{tag_type}:{tag_name}")
+                except Exception:
+                    pass
+
+            if not categorized_tags:
+                categorized_tags = [f"general:{t}" for t in post_tags_list]
+
             with self.db_lock:
                 if file_hash:
                     if file_hash not in self.hash_db[search_category]:
@@ -271,7 +313,7 @@ class Rule34DownloadThread(QThread):
                     file_path=save_path,
                     file_name=os.path.basename(save_path),
                     file_hash=file_hash,
-                    tags_list=post_tags_list,
+                    tags_list=categorized_tags,
                     phash=calculated_phash
                 )
 
@@ -334,11 +376,24 @@ class Rule34DownloadThread(QThread):
             api_url = f"https://api.rule34.xxx/index.php?page=dapi&s=post&q=index&tags={tags}&json=1&limit={limit}&pid={pid}"
             if self.user_id and self.api_key: api_url += f"&user_id={self.user_id}&api_key={self.api_key}"
             
-            try:
-                response = self.session.get(api_url, timeout=15)
-                response.raise_for_status()
-                if not response.text.strip(): break
+            max_retries = 3
+            for attempt in range(max_retries):
+                if self.main_app.cancellation_event.is_set(): break
+                try:
+                    response = self.session.get(api_url, timeout=(10, 20))
+                    response.raise_for_status()
+                    break # Success, exit retry loop
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        self.main_app.log_signal.emit(f"\n[WARN] API connection dropped (Attempt {attempt + 1}/{max_retries}). Retrying in {2 ** attempt}s...")
+                        time.sleep(2 ** attempt)
+                    else:
+                        self.main_app.log_signal.emit(f"\n[ERROR] API communication failure on page {pid + 1} after {max_retries} attempts: {e}")
+                        response = None # Mark as failed
 
+            if not response or not response.text.strip(): break
+
+            try:
                 posts = response.json()
                 if isinstance(posts, str):
                     try: posts = json.loads(posts)
@@ -614,15 +669,20 @@ class Rule34DownloadThread(QThread):
 
     def download_file(self, url, save_path):
         try:
-            response = self.session.get(url, stream=True, timeout=20)
-            response.raise_for_status()
-            with open(save_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if self.main_app.cancellation_event.is_set(): break
-                    if chunk: f.write(chunk)
-            if self.main_app.cancellation_event.is_set():
-                if os.path.exists(save_path): os.remove(save_path)
-                return False
-            return True
+            with self.session.get(url, stream=True, timeout=(10, 15)) as response:
+                response.raise_for_status()
+                with open(save_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if self.main_app.cancellation_event.is_set():
+                            # Close early to safely clean up file
+                            f.close()
+                            if os.path.exists(save_path): os.remove(save_path)
+                            return False
+                        if chunk: f.write(chunk)
+                return True
         except Exception:
+            # If download fails midway, don't leave corrupted partial files
+            if os.path.exists(save_path):
+                try: os.remove(save_path)
+                except OSError: pass
             return False
