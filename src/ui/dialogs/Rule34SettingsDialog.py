@@ -8,7 +8,8 @@ from ..assets import get_asset_path
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QPushButton, QCheckBox, QSpinBox, QComboBox, QGroupBox, 
-    QMessageBox, QProgressBar, QWidget, QListWidget, QCompleter, QAbstractItemView, QScrollArea, QSizePolicy
+    QMessageBox, QProgressBar, QWidget, QListWidget, QCompleter, QAbstractItemView, QScrollArea, QSizePolicy,
+    QMenu, QAction
 )
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QEvent, QSize
@@ -225,6 +226,9 @@ class Rule34SettingsDialog(QDialog):
         self.appdata_dir = os.path.join(self.base_dir, "appdata")
         os.makedirs(self.appdata_dir, exist_ok=True)
         
+        self.db_dir = os.path.join(self.appdata_dir, "Database")
+        os.makedirs(self.db_dir, exist_ok=True)
+        
         self.CHAR_DB_PATH = os.path.join(self.appdata_dir, "characters.db")
         
         if getattr(sys, 'frozen', False):
@@ -241,6 +245,7 @@ class Rule34SettingsDialog(QDialog):
         
         self.setWindowTitle("Rule34 Download Settings")
         self.setWindowIcon(QIcon(get_asset_path("assets/Svg/settings.svg")))
+        self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
         self.setMinimumSize(800, 500) 
         
         self.all_tags_cache = [] 
@@ -261,6 +266,7 @@ class Rule34SettingsDialog(QDialog):
         
         scroll_content = QWidget()
         columns_layout = QHBoxLayout(scroll_content)
+        columns_layout.setContentsMargins(0, 0, 0, 0)
         
         self.left_container = QWidget()
         left_col = QVBoxLayout(self.left_container)
@@ -433,8 +439,46 @@ class Rule34SettingsDialog(QDialog):
         
         tag_control_group.setLayout(tag_control_layout)
         left_col.addWidget(tag_control_group)
-        
         left_col.addStretch()
+        
+        db_download_group = QGroupBox()
+        db_download_layout = QVBoxLayout()
+        
+        db_title_layout = QHBoxLayout()
+        db_title = QLabel(f"<img src='{get_asset_path('assets/Svg/download.svg')}' width='16' height='16' align='top'> <b>DOWNLOAD DATABASE</b>")
+        db_title_layout.addWidget(db_title)
+        db_title_layout.addStretch()
+        db_download_layout.addLayout(db_title_layout)
+        
+        hf_layout = QHBoxLayout()
+        self.hf_download_btn = QPushButton(" Download Tag Database")
+        self.hf_download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
+        
+        db_menu = QMenu(self)
+        self.db_links = {
+            "AllTags.db": "https://huggingface.co/datasets/Yuvi9587/Database/resolve/main/AllTags.db",
+            "artists.db": "https://huggingface.co/datasets/Yuvi9587/Database/resolve/main/artists.db",
+            "characters.db": "https://huggingface.co/datasets/Yuvi9587/Database/resolve/main/characters.db",
+            "general.db": "https://huggingface.co/datasets/Yuvi9587/Database/resolve/main/general.db",
+            "metadata.db": "https://huggingface.co/datasets/Yuvi9587/Database/resolve/main/metadata.db",
+            "series.db": "https://huggingface.co/datasets/Yuvi9587/Database/resolve/main/series.db"
+        }
+        
+        for db_name in self.db_links.keys():
+            action = QAction(db_name, self)
+            action.triggered.connect(lambda checked, n=db_name: self.download_specific_db(n))
+            db_menu.addAction(action)
+            
+        self.hf_download_btn.setMenu(db_menu)
+        hf_layout.addWidget(self.hf_download_btn)
+        
+        self.hf_progress_bar = QProgressBar()
+        self.hf_progress_bar.setVisible(False)
+        hf_layout.addWidget(self.hf_progress_bar)
+        
+        db_download_layout.addLayout(hf_layout)
+        db_download_group.setLayout(db_download_layout)
+        mid_col.addWidget(db_download_group)
 
         char_group = QGroupBox()
         char_layout = QVBoxLayout()
@@ -457,7 +501,6 @@ class Rule34SettingsDialog(QDialog):
         fav_input_layout = QHBoxLayout()
         self.new_fav_input = MultiCompleterLineEdit()
         self.new_fav_input.setPlaceholderText("Ctrl+Down to harvest!")
-        self.new_fav_input.textEdited.connect(self.on_text_edited)
         self.add_fav_btn = QPushButton("Add")
         self.add_fav_btn.clicked.connect(self.add_character_to_db)
         fav_input_layout.addWidget(self.new_fav_input)
@@ -471,21 +514,6 @@ class Rule34SettingsDialog(QDialog):
 
         self.favorites_only_cb = QCheckBox("Only create folders for favorites")
         char_layout.addWidget(self.favorites_only_cb)
-
-        hf_layout = QHBoxLayout()
-        self.hf_download_btn = QPushButton(" Download Offline Tag DB")
-        self.hf_download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
-        self.hf_download_btn.clicked.connect(self.download_character_db)
-        hf_layout.addWidget(self.hf_download_btn)
-        self.hf_progress_bar = QProgressBar()
-        self.hf_progress_bar.setVisible(False)
-        hf_layout.addWidget(self.hf_progress_bar)
-        char_layout.addLayout(hf_layout)
-        
-        if os.path.exists(self.CHAR_DB_PATH):
-            self.hf_download_btn.setText(" Offline Database Installed")
-            self.hf_download_btn.setIcon(QIcon(get_asset_path("assets/Svg/archive.svg")))
-            self.hf_download_btn.setEnabled(False)
 
         char_group.setLayout(char_layout)
         mid_col.addWidget(char_group)
@@ -846,7 +874,8 @@ class Rule34SettingsDialog(QDialog):
                 conn.commit()
                 
             self.new_fav_input.clear()
-            self.completer.current_prefix = "" 
+            if hasattr(self, 'char_completer'):
+                self.char_completer.current_prefix = "" 
         except Exception as e:
             print(f"DB Error adding favorite: {e}")
 
@@ -898,73 +927,147 @@ class Rule34SettingsDialog(QDialog):
         else:
             QMessageBox.warning(self, "Missing Key", "Could not find 'api_key=' in the credentials box.")
 
-    def download_character_db(self):
-        if not hasattr(self, 'ONLINE_CHAR_DB_URL') or not self.ONLINE_CHAR_DB_URL: 
-            return
+    def download_specific_db(self, db_name):
+        url = self.db_links.get(db_name)
+        if not url: return
+            
+        save_path = os.path.join(self.db_dir, db_name)
             
         self.hf_download_btn.setEnabled(False)
         self.hf_progress_bar.setVisible(True)
         self.hf_progress_bar.setValue(0)
         
         self.download_thread = HuggingFaceDownloadThread(
-            self.ONLINE_CHAR_DB_URL, 
-            self.CHAR_DB_PATH, 
+            url, 
+            save_path, 
             self
         )
         self.download_thread.progress_signal.connect(self.hf_progress_bar.setValue)
+        self.current_download_db = db_name
         self.download_thread.finished_signal.connect(self.on_db_download_finished)
         self.download_thread.start()
 
     def on_db_download_finished(self, success, message):
         self.hf_progress_bar.setVisible(False)
+        db_name = getattr(self, 'current_download_db', "Database")
         if success:
-            self.hf_download_btn.setText("✅ Offline Database Installed")
+            if db_name == "characters.db":
+                self.all_tags_cache.clear()
+                self.setup_autocomplete()
             
-            self.all_tags_cache.clear()
-            self.setup_autocomplete()
-            
-            QMessageBox.information(self, "Success", "Characters database downloaded and installed successfully!")
+            QMessageBox.information(self, "Success", f"{db_name} downloaded and installed successfully!")
         else:
-            QMessageBox.critical(self, "Download Failed", f"Failed to fetch database: {message}")
+            QMessageBox.critical(self, "Download Failed", f"Failed to fetch {db_name}: {message}")
             
         self.hf_download_btn.setEnabled(True)
 
     def setup_autocomplete(self):
-        self.all_tags_cache = []
-        if os.path.exists(self.CHAR_DB_PATH):
+        def make_completer(line_edit):
+            completer = MultiCompleter([], self)
+            completer.setFilterMode(Qt.MatchContains)
+            completer.setCaseSensitivity(Qt.CaseInsensitive)
+            completer.setMaxVisibleItems(15) 
+            completer.setWrapAround(False) 
             try:
-                with sqlite3.connect(self.CHAR_DB_PATH) as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT raw_string FROM Characters")
-                    self.all_tags_cache = [row[0] for row in cursor.fetchall()]
-            except Exception as e:
-                print(f"Failed to load autocomplete from DB: {e}")
-        
-        self.completer = MultiCompleter([], self)
-        self.completer.setFilterMode(Qt.MatchContains)
-        self.completer.setCaseSensitivity(Qt.CaseInsensitive)
-        self.completer.setMaxVisibleItems(15) 
-        self.completer.setWrapAround(False) 
-        self.new_fav_input.setCompleter(self.completer)
+                line_edit.textEdited.disconnect()
+            except TypeError:
+                pass
+            line_edit.setCompleter(completer)
+            line_edit.textEdited.connect(lambda text, le=line_edit, c=completer: self.on_text_edited(text, le, c))
+            return completer
+            
+        self.char_completer = make_completer(self.new_fav_input)
+        self.gen_completer = make_completer(self.scene_input)
+        self.all_completer1 = make_completer(self.whitelist_input)
+        self.all_completer2 = make_completer(self.custom_blacklist_input)
+        self.all_completer3 = make_completer(self.alias_input)
 
-    def on_text_edited(self, text):
+    def on_text_edited(self, text, line_edit, completer):
         if ',' in text:
             prefix = text[:text.rfind(',') + 1]
             if not prefix.endswith(" "):
                 prefix += " "
-            self.completer.current_prefix = prefix
+            completer.current_prefix = prefix
         else:
-            self.completer.current_prefix = ""
+            completer.current_prefix = ""
+            
+        self.active_completer_data = (line_edit, completer)
         self.search_timer.start(300)
 
     def update_completer_model(self):
-        text = self.new_fav_input.text()
+        if not hasattr(self, 'active_completer_data'):
+            return
+            
+        line_edit, completer = self.active_completer_data
+        
+        try:
+            text = line_edit.text()
+        except RuntimeError:
+            # Widget was deleted (e.g. custom dialog closed)
+            return
         search_text = text.split(',')[-1].strip().lower()
+        
+        if line_edit == getattr(self, 'alias_input', None) and '=' in search_text:
+            search_text = search_text.split('=')[-1].strip()
+            
         if len(search_text) < 2:
-            self.completer.model().setStringList([])
+            completer.model().setStringList([])
             return
 
-        raw_matches = [tag for tag in self.all_tags_cache if search_text in tag.lower()]
+        search_sql = f"%{search_text}%"
+        all_tags_db = os.path.join(self.db_dir, "AllTags.db")
+        raw_matches = []
+        
+        def _query(path, query, params):
+            if not os.path.exists(path): return []
+            try:
+                with sqlite3.connect(path) as conn:
+                    c = conn.cursor()
+                    c.execute(query, params)
+                    return c.fetchall()
+            except Exception as e:
+                print(f"DB Query Error: {e}")
+                return []
+
+        if line_edit == self.new_fav_input:
+            char_db = os.path.join(self.db_dir, "characters.db")
+            if os.path.exists(char_db):
+                rows = _query(char_db, "SELECT name FROM Tags WHERE name LIKE ? ORDER BY count DESC LIMIT 200", (search_sql,))
+                raw_matches = [r[0] for r in rows]
+            else:
+                rows = _query(all_tags_db, "SELECT name FROM CharacterTags WHERE name LIKE ? ORDER BY count DESC LIMIT 200", (search_sql,))
+                raw_matches = [r[0] for r in rows]
+                
+        elif line_edit == getattr(self, 'scene_input', None):
+            gen_db = os.path.join(self.db_dir, "general.db")
+            if os.path.exists(gen_db):
+                rows = _query(gen_db, "SELECT name FROM Tags WHERE name LIKE ? ORDER BY count DESC LIMIT 200", (search_sql,))
+                raw_matches = [r[0] for r in rows]
+            else:
+                rows = _query(all_tags_db, "SELECT name FROM GeneralTags WHERE name LIKE ? ORDER BY count DESC LIMIT 200", (search_sql,))
+                raw_matches = [r[0] for r in rows]
+                
+        else:
+            if os.path.exists(all_tags_db):
+                tables = ["CharacterTags", "GeneralTags", "ArtistTags", "SeriesTags", "MetadataTags"]
+                queries = [f"SELECT name, count FROM {t} WHERE name LIKE ?" for t in tables]
+                full_query = " UNION ALL ".join(queries) + " ORDER BY count DESC LIMIT 200"
+                params = (search_sql,) * len(tables)
+                rows = _query(all_tags_db, full_query, params)
+                raw_matches = [r[0] for r in rows]
+            else:
+                dbs = ["characters.db", "general.db", "artists.db", "series.db", "metadata.db"]
+                all_results = []
+                for db_name in dbs:
+                    db_path = os.path.join(self.db_dir, db_name)
+                    all_results.extend(_query(db_path, "SELECT name, count FROM Tags WHERE name LIKE ? ORDER BY count DESC LIMIT 100", (search_sql,)))
+                all_results.sort(key=lambda x: x[1], reverse=True)
+                raw_matches = [x[0] for x in all_results[:200]]
+
+        if not raw_matches:
+            completer.model().setStringList([])
+            return
+
         def get_score(tag):
             t = tag.lower()
             has_franchise = "(" in t and ")" in t
@@ -977,26 +1080,70 @@ class Rule34SettingsDialog(QDialog):
             return 8
 
         raw_matches.sort(key=lambda x: (get_score(x), len(x), x))
-        self.completer.model().setStringList(raw_matches[:40])
-        self.completer.complete()
+        completer.model().setStringList(raw_matches[:40])
+        completer.complete()
 
     def open_custom_tags_editor(self):
-        from PyQt5.QtWidgets import QDialog, QPlainTextEdit, QVBoxLayout, QHBoxLayout, QLabel
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QPushButton
         dialog = QDialog(self)
         dialog.setWindowTitle("Custom Exclusion Tags")
-        dialog.setMinimumSize(300, 400)
+        dialog.setMinimumSize(350, 450)
         
         layout = QVBoxLayout(dialog)
-        layout.addWidget(QLabel("Enter tags to exclude (one per line):"))
+        layout.addWidget(QLabel("Add tags to your custom exclusion preset:"))
         
-        text_edit = QPlainTextEdit()
-        # Convert comma-separated string to newlines
+        input_layout = QHBoxLayout()
+        tag_input = MultiCompleterLineEdit()
+        tag_input.setPlaceholderText("Search tags to exclude...")
+        add_btn = QPushButton("Add")
+        input_layout.addWidget(tag_input)
+        input_layout.addWidget(add_btn)
+        layout.addLayout(input_layout)
+        
+        completer = MultiCompleter([], self)
+        completer.setFilterMode(Qt.MatchContains)
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        completer.setMaxVisibleItems(15)
+        completer.setWrapAround(False)
+        tag_input.setCompleter(completer)
+        tag_input.textEdited.connect(lambda text, le=tag_input, c=completer: self.on_text_edited(text, le, c))
+        
+        list_widget = QListWidget()
+        list_widget.setSelectionMode(QListWidget.ExtendedSelection)
         current_tags_str = getattr(self, 'custom_safety_tags_str', "")
         current_tags = [t.strip() for t in current_tags_str.split(',') if t.strip()]
-        text_edit.setPlainText("\n".join(current_tags))
-        layout.addWidget(text_edit)
+        for tag in current_tags:
+            list_widget.addItem(tag)
+        layout.addWidget(list_widget)
+        
+        def add_tag():
+            text = tag_input.text().strip().lower()
+            if text:
+                for t in text.split(','):
+                    t = t.strip()
+                    if t and not list_widget.findItems(t, Qt.MatchExactly):
+                        list_widget.addItem(t)
+                tag_input.clear()
+                
+        add_btn.clicked.connect(add_tag)
+        tag_input.returnPressed.connect(add_tag)
+        
+        remove_btn = QPushButton("Remove Selected")
+        def remove_tags():
+            for item in list_widget.selectedItems():
+                list_widget.takeItem(list_widget.row(item))
+        remove_btn.clicked.connect(remove_tags)
+        
+        def keyPressEvent(event):
+            if event.key() == Qt.Key_Delete:
+                remove_tags()
+            else:
+                QListWidget.keyPressEvent(list_widget, event)
+        list_widget.keyPressEvent = keyPressEvent
         
         btn_layout = QHBoxLayout()
+        btn_layout.addWidget(remove_btn)
+        
         save_btn = QPushButton("Save")
         cancel_btn = QPushButton("Cancel")
         save_btn.clicked.connect(dialog.accept)
@@ -1007,7 +1154,12 @@ class Rule34SettingsDialog(QDialog):
         
         layout.addLayout(btn_layout)
         
+        def on_close():
+            if hasattr(self, 'active_completer_data') and self.active_completer_data[0] == tag_input:
+                del self.active_completer_data
+                
+        dialog.finished.connect(lambda result: on_close())
+        
         if dialog.exec_() == QDialog.Accepted:
-            lines = text_edit.toPlainText().split('\n')
-            lines = [l.strip() for l in lines if l.strip()]
-            self.custom_safety_tags_str = ",".join(lines)
+            tags = [list_widget.item(i).text() for i in range(list_widget.count())]
+            self.custom_safety_tags_str = ",".join(tags)

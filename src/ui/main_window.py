@@ -401,7 +401,7 @@ class DownloaderApp (QWidget ):
         self.download_location_label_widget = None
         self.remove_from_filename_label_widget = None
         self.skip_words_label_widget = None
-        self.setWindowTitle("Kemono Downloader v9.1.5")
+        self.setWindowTitle("Kemono Downloader v9.2.5")
         setup_ui(self)
         self._connect_signals()
 

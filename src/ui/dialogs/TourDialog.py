@@ -6,9 +6,10 @@ from PyQt5.QtWidgets import (
     QStackedWidget, QScrollArea, QFrame, QWidget, QCheckBox
 )
 from ...i18n.translator import get_translation
-from ..main_window import get_app_icon_object
+from ..assets import get_app_icon_object  # canonical location, avoids circular import via main_window
 from ...utils.resolution import get_dark_theme
 from ...config.constants import CONFIG_ORGANIZATION_NAME
+
 
 
 class TourStepWidget(QWidget):
@@ -154,9 +155,11 @@ class TourDialog(QDialog):
                 QDialog {
                     background-color: #2D2D30;
                 }
+                QFrame#bottomFrame {
                     background-color: #252526;
                     border-top: 1px solid #3E3E42;
                 }
+                QFrame#contentFrame {
                     border: 1px solid #3E3E42;
                     border-radius: 5px;
                 }
@@ -164,20 +167,25 @@ class TourDialog(QDialog):
                     background-color: transparent;
                     border: none;
                 }
+                QPushButton {
                     background-color: #555;
                     border-radius: 6px;
                     border: 1px solid #4F4F4F;
                 }
+                QPushButton:hover {
                     background-color: #007ACC;
                     border: 1px solid #005A9E;
                 }
+                QPushButton#nextButton {
                     background-color: #007ACC;
                     border: 1px solid #005A9E;
                     padding: 8px 18px;
                     font-weight: bold;
                 }
+                QPushButton#nextButton:hover {
                     background-color: #1E90FF;
                 }
+                QPushButton:disabled {
                     background-color: #444;
                     border-color: #555;
                 }
@@ -185,6 +193,7 @@ class TourDialog(QDialog):
             self.setStyleSheet(dark_theme_base + tour_styles)
         else:
             self.setStyleSheet("QDialog { background-color: #f0f0f0; }")
+
 
     def _center_on_screen(self):
         try:

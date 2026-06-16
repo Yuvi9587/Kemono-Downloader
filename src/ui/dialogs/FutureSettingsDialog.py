@@ -21,7 +21,7 @@ from ...config.constants import (
     COOKIE_TEXT_KEY, USE_COOKIE_KEY,
     FETCH_FIRST_KEY, DISCORD_TOKEN_KEY, POST_DOWNLOAD_ACTION_KEY,
     PROXY_ENABLED_KEY, PROXY_HOST_KEY, PROXY_PORT_KEY, 
-    PROXY_USERNAME_KEY, PROXY_PASSWORD_KEY
+    PROXY_USERNAME_KEY, PROXY_PASSWORD_KEY, CREATE_DATABASE_KEY
 )
 from ...services.updater import UpdateChecker, UpdateDownloader
 
@@ -212,6 +212,10 @@ class FutureSettingsDialog(QDialog):
         self.fetch_first_checkbox.stateChanged.connect(self._fetch_first_setting_changed)
         download_settings_layout.addWidget(self.fetch_first_checkbox, 4, 0, 1, 2)
 
+        self.create_database_checkbox = QCheckBox()
+        self.create_database_checkbox.stateChanged.connect(self._create_database_setting_changed)
+        download_settings_layout.addWidget(self.create_database_checkbox, 5, 0, 1, 2)
+
         settings_file_layout = QHBoxLayout()
         self.load_settings_button = QPushButton()
         self.save_settings_button = QPushButton()
@@ -219,7 +223,7 @@ class FutureSettingsDialog(QDialog):
         settings_file_layout.addWidget(self.save_settings_button)
         settings_file_layout.addStretch(1)
         
-        download_settings_layout.addLayout(settings_file_layout, 5, 0, 1, 2)
+        download_settings_layout.addLayout(settings_file_layout, 6, 0, 1, 2)
         
         self.load_settings_button.clicked.connect(self._handle_load_settings)
         self.save_settings_button.clicked.connect(self._handle_save_settings)
@@ -328,6 +332,10 @@ class FutureSettingsDialog(QDialog):
         self.save_creator_json_checkbox.setText(self._tr("save_creator_json_label", "Save Creator.json file"))
         self.fetch_first_checkbox.setText(self._tr("fetch_first_label", "Fetch First (Download after all pages are found)"))
         self.fetch_first_checkbox.setToolTip(self._tr("fetch_first_tooltip", "If checked, the downloader will find all posts from a creator first before starting any downloads.\nThis can be slower to start but provides a more accurate progress bar."))
+        
+        self.create_database_checkbox.setText(self._tr("create_database_label", "Create library.db"))
+        self.create_database_checkbox.setToolTip(self._tr("create_database_tooltip", "If checked, the app will create and record downloads in library.db. If unchecked, the database feature is disabled."))
+
         self.save_path_button.setText(self._tr("settings_save_all_button", "Save Path + Cookie + Token"))
         self.save_path_button.setToolTip(self._tr("settings_save_all_tooltip", "Save the current 'Download Location', Cookie, and Discord Token settings for future sessions."))
         self.load_settings_button.setText(self._tr("load_settings_button", "Load Settings..."))
@@ -474,6 +482,11 @@ class FutureSettingsDialog(QDialog):
         self.fetch_first_checkbox.setChecked(should_fetch_first)
         self.fetch_first_checkbox.blockSignals(False)
 
+        self.create_database_checkbox.blockSignals(True)
+        should_create_db = self.parent_app.settings.value(CREATE_DATABASE_KEY, True, type=bool)
+        self.create_database_checkbox.setChecked(should_create_db)
+        self.create_database_checkbox.blockSignals(False)
+
     def _creator_json_setting_changed(self, state):
         is_checked = state == Qt.Checked
         self.parent_app.settings.setValue(SAVE_CREATOR_JSON_KEY, is_checked)
@@ -482,6 +495,11 @@ class FutureSettingsDialog(QDialog):
     def _fetch_first_setting_changed(self, state):
         is_checked = state == Qt.Checked
         self.parent_app.settings.setValue(FETCH_FIRST_KEY, is_checked)
+        self.parent_app.settings.sync()
+
+    def _create_database_setting_changed(self, state):
+        is_checked = state == Qt.Checked
+        self.parent_app.settings.setValue(CREATE_DATABASE_KEY, is_checked)
         self.parent_app.settings.sync()
 
     def _tr(self, key, default_text=""):

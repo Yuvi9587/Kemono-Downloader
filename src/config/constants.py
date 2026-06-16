@@ -60,6 +60,7 @@ DATE_PREFIX_FORMAT_KEY = "datePrefixFormatV1"
 AUTO_RETRY_ON_FINISH_KEY = "auto_retry_on_finish" 
 FETCH_FIRST_KEY = "fetchAllPostsFirst"
 DISCORD_TOKEN_KEY = "discord/token"
+CREATE_DATABASE_KEY = "createDatabaseV1"
 
 POST_DOWNLOAD_ACTION_KEY = "postDownloadAction"
 

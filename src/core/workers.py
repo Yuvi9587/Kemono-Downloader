@@ -86,6 +86,11 @@ class PostProcessorSignals (QObject ):
     worker_finished_signal = pyqtSignal(tuple)
 
 class PostProcessorWorker:
+    # Class-level flag + lock: prints the full pawchive pending explanation only once per
+    # session, even under multithreaded file downloads.
+    _pawchive_pending_notice_printed = False
+    _pawchive_pending_notice_lock = threading.Lock()
+
     def __init__(self, post_data, download_root, known_names,
                  filter_character_list, emitter,
                  unwanted_keywords, filter_mode, skip_zip,
@@ -310,7 +315,8 @@ class PostProcessorWorker:
                                 forced_filename_override=None,
                                 manga_global_file_counter_ref=None, folder_context_name_for_history=None,
                                 known_name_match_found=False,
-                                candidate_chars_for_ai=None
+                                candidate_chars_for_ai=None,
+                                single_attempt_only=False
                                 ):
 
         was_original_name_kept_flag = False
@@ -674,7 +680,9 @@ class PostProcessorWorker:
                 except Exception as e:
                     self.logger(f"   ⚠️ Could not perform hash check for existing file: {e}. Re-downloading with a suffix to be safe.")
         
-        max_retries = 3
+        # Pawchive.st exclusive: if the post's preview_state is "pending", the file
+        # likely hasn't been imported yet — a single attempt is enough to surface that.
+        max_retries = 0 if single_attempt_only else 3
         retry_delay = 5
         downloaded_size_bytes = 0
         calculated_file_hash = None
@@ -796,8 +804,33 @@ class PostProcessorWorker:
                         if os.path.exists(current_single_stream_part_path): os.remove(current_single_stream_part_path)
                         raise
             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, http.client.IncompleteRead) as e:
-                self.logger(f"   ❌ Download Error (Retryable): {api_original_filename}. Error: {e}")
-                last_exception_for_retry_later = e
+                # Pawchive.st CDN fallback: if file.pawchive.st fails to resolve (DNS error),
+                # immediately try fox.pawchive.st before falling back to the normal retry loop.
+                # Skip this for pending posts (single_attempt_only) — no point trying the fallback.
+                if (not single_attempt_only
+                        and 'file.pawchive.st' in file_url
+                        and isinstance(e, requests.exceptions.ConnectionError)):
+                    fallback_url = file_url.replace('file.pawchive.st', 'fox.pawchive.st', 1)
+                    self.logger(f"   ⚠️ [Pawchive] 'file.pawchive.st' unreachable for '{api_original_filename}'. Trying fallback 'fox.pawchive.st'...")
+                    try:
+                        if response: response.close()
+                        response = requests.get(fallback_url, headers=file_download_headers, timeout=(30, 300), stream=True, cookies=cookies_to_use_for_file, proxies=self.proxies, verify=False)
+                        response.raise_for_status()
+                        # Fallback succeeded — update file_url so subsequent retries also use fox.
+                        file_url = fallback_url
+                        self.logger(f"   ✅ [Pawchive] Fallback to 'fox.pawchive.st' succeeded. Continuing download.")
+                        # Re-raise nothing; fall through to the response-processing code on next iteration.
+                        last_exception_for_retry_later = e  # keep for reference
+                        # Close this response cleanly; the outer loop will re-open on next attempt
+                        response.close()
+                        response = None
+                    except Exception as fallback_e:
+                        self.logger(f"   ❌ [Pawchive] Fallback 'fox.pawchive.st' also failed for '{api_original_filename}': {fallback_e}")
+                        last_exception_for_retry_later = fallback_e
+                else:
+                    self.logger(f"   ❌ Download Error (Retryable): {api_original_filename}. Error: {e}")
+                    last_exception_for_retry_later = e
+
             except requests.exceptions.RequestException as e:
                 if e.response is not None and e.response.status_code == 403:
                     self.logger(f"   ⚠️ Download Error (403 Forbidden): {api_original_filename}. Retrying...")
@@ -1060,7 +1093,25 @@ class PostProcessorWorker:
             finally:
                 if data_to_write_io and hasattr(data_to_write_io, 'close'): data_to_write_io.close()
         else:
-            self.logger(f"->>Download Fail for '{api_original_filename}' (Post ID: {original_post_id_for_log}).")
+            if single_attempt_only:
+                with PostProcessorWorker._pawchive_pending_notice_lock:
+                    if not PostProcessorWorker._pawchive_pending_notice_printed:
+                        PostProcessorWorker._pawchive_pending_notice_printed = True
+                        self.logger(
+                            f"   ⏳ [Pawchive – Pending] '{api_original_filename}' not available.\n"
+                            f"   NOTE (printed once): Pawchive pending posts have two possible causes:\n"
+                            f"   1) The file hasn't been imported from the original platform yet — try again later.\n"
+                            f"   2) The file exceeds Pawchive's per-post size cap for this creator's favorites tier\n"
+                            f"      (<250 favs → 100 MB cap, 250–5000 → 1 GB, >5000 → 5 GB). If so, it will\n"
+                            f"      never be available on Pawchive regardless of retries."
+                        )
+                    else:
+                        self.logger(
+                            f"   ⏳ [Pawchive – Pending] '{api_original_filename}' not available "
+                            f"(see first pending notice for details)."
+                        )
+            else:
+                self.logger(f"->>Download Fail for '{api_original_filename}' (Post ID: {original_post_id_for_log}).")
             details_for_failure = {
                 'file_info': file_info, 
                 'target_folder_path': target_folder_path, 
@@ -1176,6 +1227,28 @@ class PostProcessorWorker:
                 post_content_html = self.post.get('content', '')
                 post_data = self.post
                 log_prefix = "Post"
+
+            # ---------------------------------------------------------------------------
+            # Pawchive.st exclusive: handle preview_state field.
+            # Only pawchive.st includes this field in API responses.
+            # "pending"  = file not yet imported from the origin platform.
+            # "scraped"  = file has been successfully scraped and should be downloadable.
+            # ---------------------------------------------------------------------------
+            _api_domain_for_preview = urlparse(self.api_url_input).netloc.lower()
+            _is_pawchive = 'pawchive.st' in _api_domain_for_preview
+            _is_pawchive_pending_post = False
+
+            if _is_pawchive and self.service != 'discord':
+                preview_state = self.post.get('preview_state')
+                if preview_state == 'pending':
+                    _is_pawchive_pending_post = True
+                    self.logger(
+                        f"   ⏳ [Pawchive] Post {post_id} ('{post_title[:50]}') has "
+                        f"preview_state='pending'. Files may not be imported yet. "
+                        f"Will attempt download once per file without retrying."
+                    )
+                elif preview_state == 'scraped':
+                    self.logger(f"   ✅ [Pawchive] Post {post_id} preview_state='scraped'. Files should be available.")
 
             content_is_needed = (
                 self.show_external_links or self.extract_links_only or self.scan_content_for_images or
@@ -1923,7 +1996,7 @@ class PostProcessorWorker:
             if not api_file_domain or ('kemono' not in api_file_domain.lower() and 'coomer' not in api_file_domain.lower() and 'pawchive.st' not in api_file_domain.lower()):
                 api_file_domain = "coomer.su" if self.service.lower() in ['onlyfans', 'fansly', 'candfans'] else "kemono.su"
             elif 'pawchive.st' in api_file_domain.lower():
-                api_file_domain = "fox.pawchive.st"
+                api_file_domain = "file.pawchive.st"
 
             if post_main_file_info and isinstance(post_main_file_info, dict) and post_main_file_info.get('path'):
                 file_path = post_main_file_info['path'].lstrip('/')
@@ -2286,7 +2359,8 @@ class PostProcessorWorker:
                         file_index_in_post=file_idx,
                         num_files_in_this_post=len(files_to_download_info_list),
                         known_name_match_found=known_name_match_found_for_this_file,
-                        candidate_chars_for_ai=candidate_chars_for_ai 
+                        candidate_chars_for_ai=candidate_chars_for_ai,
+                        single_attempt_only=_is_pawchive_pending_post  # Pawchive pending posts: try once, no retries
                     ))
 
                 for future in as_completed(futures_list):

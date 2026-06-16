@@ -77,10 +77,37 @@ def main():
         QCoreApplication.setOrganizationName(CONFIG_ORGANIZATION_NAME)
         QCoreApplication.setApplicationName(CONFIG_APP_NAME_MAIN)
         preload_ai_model()
+
+        # --- Windows Taskbar AppUserModelID ---
+        # MUST be called BEFORE QApplication() so Windows assigns the correct
+        # taskbar group instead of grouping under the python.exe icon.
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "KemonoDownloader.App.1"
+            )
+        except Exception:
+            pass  # Non-Windows platforms silently skip this.
+
         qt_app = QApplication(sys.argv)
+
+        # --- Application-level icon (taskbar + all windows) ---
+        from PyQt5.QtGui import QIcon
+        _icon_path = os.path.join(APP_BASE_DIR, "assets", "Kemono.ico")
+        if os.path.exists(_icon_path):
+            _app_icon = QIcon(_icon_path)
+            qt_app.setWindowIcon(_app_icon)
+        else:
+            _app_icon = None
 
         # Create the main application window
         downloader_app_instance = DownloaderApp()
+
+        # Belt-and-suspenders: also set directly on the window in case the
+        # QApplication-level icon isn't picked up by the specific platform.
+        if _app_icon and not _app_icon.isNull():
+            downloader_app_instance.setWindowIcon(_app_icon)
+
 
         # --- Window Sizing and Positioning ---
         primary_screen = QApplication.primaryScreen()
