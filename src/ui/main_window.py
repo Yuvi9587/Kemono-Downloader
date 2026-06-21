@@ -76,6 +76,8 @@ from .dialogs.HelpGuideDialog import HelpGuideDialog
 from .dialogs.FutureSettingsDialog import FutureSettingsDialog, CountdownMessageBox
 from .dialogs.ErrorFilesDialog import ErrorFilesDialog
 from .dialogs.DownloadHistoryDialog import DownloadHistoryDialog
+from ..services.updater import UpdateChecker, UpdateDownloader, PatchUpdateChecker
+from .dialogs.Rule34SettingsDialog import Rule34SettingsDialog
 from .dialogs.DownloadExtractedLinksDialog import DownloadExtractedLinksDialog
 from .dialogs.FavoritePostsDialog import FavoritePostsDialog
 from .dialogs.ConfirmAddAllDialog import ConfirmAddAllDialog
@@ -183,6 +185,9 @@ class DownloaderApp (QWidget ):
         self.is_finishing = False 
         self.finish_lock = threading.Lock() 
         self.add_info_in_pdf_setting = False
+        
+        self.patch_update_available = False
+        self.patch_download_url = ""
 
         saved_res = self.settings.value(RESOLUTION_KEY, "Auto")
         if saved_res != "Auto":
@@ -423,7 +428,22 @@ class DownloaderApp (QWidget ):
         self._update_button_states_and_connections()
         self._check_for_interrupted_session()
         self._cleanup_after_update() 
+        self._check_for_patch_update()
 
+    def _check_for_patch_update(self):
+        current_version = self.windowTitle().split(' v')[-1]
+        self.patch_checker = PatchUpdateChecker(current_version)
+        self.patch_checker.patch_available.connect(self._on_patch_available)
+        self.patch_checker.start()
+
+    def _on_patch_available(self, version, download_url):
+        self.patch_update_available = True
+        self.patch_download_url = download_url
+        if hasattr(self, 'future_settings_button'):
+            self.future_settings_button.setText("🟢")
+            self.future_settings_button.setToolTip(f"Settings (Patch Update v{version} Available!)")
+            self.future_settings_button.setStyleSheet("background-color: rgba(0, 255, 0, 0.1); border-radius: 5px;")
+            
     def add_current_settings_to_queue(self):
         """
         Takes the current URL and UI settings, packages them into a dictionary, 

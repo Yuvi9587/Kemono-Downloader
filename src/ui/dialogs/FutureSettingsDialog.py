@@ -23,7 +23,7 @@ from ...config.constants import (
     PROXY_ENABLED_KEY, PROXY_HOST_KEY, PROXY_PORT_KEY, 
     PROXY_USERNAME_KEY, PROXY_PASSWORD_KEY, CREATE_DATABASE_KEY
 )
-from ...services.updater import UpdateChecker, UpdateDownloader
+from ...services.updater import UpdateChecker, UpdateDownloader, PatchDownloader
 
 class CountdownMessageBox(QDialog):
     """
@@ -149,7 +149,9 @@ class FutureSettingsDialog(QDialog):
         self.tab_widget.addTab(self.display_tab, "Display")
         self.tab_widget.addTab(self.downloads_tab, "Downloads")
         self.tab_widget.addTab(self.network_tab, "Proxy/Network")
-        self.tab_widget.addTab(self.updates_tab, "Updates")
+        
+        tab_name = "Updates 🟢" if getattr(self.parent_app, 'patch_update_available', False) else "Updates"
+        self.tab_widget.addTab(self.updates_tab, tab_name)
 
         display_tab_layout = QVBoxLayout(self.display_tab)
         self.display_group_box = QGroupBox()
@@ -290,8 +292,27 @@ class FutureSettingsDialog(QDialog):
         update_layout.addWidget(self.version_label, 0, 0)
         update_layout.addWidget(self.update_status_label, 0, 1)
         update_layout.addWidget(self.check_update_button, 1, 0, 1, 2)
-        
         updates_tab_layout.addWidget(self.update_group_box)
+        
+        # Patch Update Section
+        self.patch_update_group_box = QGroupBox("Fast Patch Update (EXE Only)")
+        patch_layout = QGridLayout(self.patch_update_group_box)
+        self.patch_status_label = QLabel()
+        self.download_patch_button = QPushButton("Download and Apply Patch")
+        self.download_patch_button.clicked.connect(self._start_patch_download)
+        
+        if getattr(self.parent_app, 'patch_update_available', False):
+            self.patch_status_label.setText("🟢 A fast patch update is available!")
+            self.download_patch_button.setEnabled(True)
+        else:
+            self.patch_status_label.setText("You are on the latest patch.")
+            self.download_patch_button.setEnabled(False)
+            self.patch_update_group_box.setVisible(False)
+            
+        patch_layout.addWidget(self.patch_status_label, 0, 0)
+        patch_layout.addWidget(self.download_patch_button, 1, 0)
+        updates_tab_layout.addWidget(self.patch_update_group_box)
+
         updates_tab_layout.addStretch(1)
 
         button_layout = QHBoxLayout()
@@ -784,3 +805,32 @@ class FutureSettingsDialog(QDialog):
                 QMessageBox.critical(self,
                     self._tr("load_settings_error_title", "Error Loading Settings"),
                     str(e))
+
+    def _start_patch_download(self):
+        """Starts the patch download process."""
+        download_url = getattr(self.parent_app, 'patch_download_url', None)
+        if not download_url:
+            QMessageBox.critical(self, "Error", "Patch download URL is missing.")
+            return
+
+        self.download_patch_button.setText("Downloading...")
+        self.download_patch_button.setEnabled(False)
+        self.patch_status_label.setText("Downloading patch, please wait...")
+
+        self.patch_downloader_thread = PatchDownloader(download_url)
+        self.patch_downloader_thread.download_finished.connect(self._on_patch_download_finished)
+        self.patch_downloader_thread.download_error.connect(self._on_patch_download_error)
+        self.patch_downloader_thread.start()
+
+    def _on_patch_download_finished(self):
+        """Called when the patch finishes downloading."""
+        self.patch_status_label.setText("Patch downloaded! Restarting...")
+        self.accept()
+
+    def _on_patch_download_error(self, error_msg):
+        """Called if patch download fails."""
+        self.patch_status_label.setText("Patch download failed.")
+        self.download_patch_button.setText("Retry Download")
+        self.download_patch_button.setEnabled(True)
+        QMessageBox.critical(self, "Download Error", f"An error occurred while downloading the patch:\n\n{error_msg}")
+

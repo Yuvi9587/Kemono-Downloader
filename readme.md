@@ -1,6 +1,6 @@
 <h1 align="center">Kemono Downloader</h1>
 
-<p>A powerful, feature-rich GUI application for downloading content from a wide array of sites, including <strong>Kemono</strong>, <strong>Coomer</strong>, <strong>Bunkr</strong>, <strong>Erome</strong>, <strong>Saint2.su</strong>, and <strong>nhentai</strong>.</p>
+<p>A powerful, feature-rich GUI application for downloading content from a wide array of sites, including <strong>Kemono</strong>, <strong>Coomer</strong>, <strong>Pawchive</strong>, <strong>Bunkr</strong>, <strong>Erome</strong>, <strong>Saint2.su</strong>, and <strong>nhentai</strong>.</p>
 <p>Built with PyQt5, this tool is designed for users who want deep filtering capabilities, customizable folder structures, efficient downloads, and intelligent automation — all within a modern and user-friendly graphical interface.</p>
 
 <div align="center">
@@ -17,7 +17,7 @@
 </ul>
 <h3>Expanded Site Support</h3>
 <ul>
-  <li><strong>Direct Downloading:</strong> Full support for Kemono, Coomer, Bunkr, Erome, Saint2.su, and nhentai.</li>
+  <li><strong>Direct Downloading:</strong> Full support for Kemono, Coomer, Pawchive, Bunkr, Erome, Saint2.su, and nhentai.</li>
   <li><strong>Batch Mode:</strong> Download hundreds of URLs at once from <code>nhentai.txt</code> or <code>saint2.su.txt</code> files.</li>
   <li><strong>Discord Support:</strong> Download files or save entire channel histories as PDFs directly through the API.</li>
 </ul>
@@ -59,7 +59,7 @@
   </p>
   <ul>
     <li>
-      <strong>Kemono &amp; Coomer</strong> — Core supported sites; download posts and files from creators on services such as
+      <strong>Kemono, Coomer, &amp; Pawchive</strong> — Core supported sites; download posts and files from creators on services such as
       <em>Patreon, Fanbox, OnlyFans, Fansly</em>, and similar platforms.
     </li>
     <li>

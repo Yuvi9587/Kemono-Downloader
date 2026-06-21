@@ -6,6 +6,8 @@ import threading
 from PyQt5.QtCore import QSettings
 
 class DatabaseManager:
+    _shared_lock = threading.Lock()
+
     def __init__(self):
         import sys 
         try:
@@ -15,7 +17,7 @@ class DatabaseManager:
         except ImportError:
             self.enabled = True
             
-        self.lock = threading.Lock()
+        self.lock = DatabaseManager._shared_lock
         if not self.enabled:
             return
             
@@ -29,7 +31,8 @@ class DatabaseManager:
         
         self.db_path = os.path.join(self.db_dir, 'library.db')
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=20.0)
-        self._initialize_db()
+        with self.lock:
+            self._initialize_db()
 
     def _initialize_db(self):
         cursor = self.conn.cursor()

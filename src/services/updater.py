@@ -158,3 +158,105 @@ ENDLOCAL
 
         except Exception as e:
             self.download_error.emit(f"Failed to download or run updater: {e}")
+
+# --- Patch Updater System ---
+PATCH_JSON_URL = "https://huggingface.co/Yuvi9587/Kemono-Downloader-Patches/raw/main/patch.json"
+
+class PatchUpdateChecker(QThread):
+    """Checks for a lightweight EXE patch update on Hugging Face."""
+    patch_available = pyqtSignal(str, str)
+    up_to_date = pyqtSignal()
+    
+    def __init__(self, current_version):
+        super().__init__()
+        self.current_version_str = current_version.lstrip('v')
+        
+    def run(self):
+        try:
+            response = requests.get(PATCH_JSON_URL, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            patch_version_str = data.get('version', '').lstrip('v')
+            download_url = data.get('download_url', '')
+            
+            if not patch_version_str or not download_url:
+                return
+                
+            current_v = parse_version(self.current_version_str)
+            patch_v = parse_version(patch_version_str)
+            
+            if patch_v > current_v:
+                self.patch_available.emit(patch_version_str, download_url)
+            else:
+                self.up_to_date.emit()
+        except Exception:
+            pass # Silent failure for background check
+
+class PatchDownloader(QThread):
+    """Downloads a raw .exe patch and swaps it with the current one."""
+    download_finished = pyqtSignal()
+    download_error = pyqtSignal(str)
+
+    def __init__(self, download_url):
+        super().__init__()
+        self.download_url = download_url
+
+    def run(self):
+        try:
+            app_path = sys.executable
+            app_dir = os.path.dirname(app_path)
+            new_exe_path = os.path.join(app_dir, "update_patch.exe")
+            updater_script_path = os.path.join(app_dir, "patch_updater.bat")
+            pid_file_path = os.path.join(app_dir, "updater.pid")
+
+            with requests.get(self.download_url, stream=True, timeout=300) as r:
+                r.raise_for_status()
+                with open(new_exe_path, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+
+            with open(pid_file_path, "w") as f:
+                f.write(str(os.getpid()))
+
+            script_content = rf"""
+@echo off
+SETLOCAL EnableDelayedExpansion
+
+echo.
+echo Reading process information...
+set /p PID=<{pid_file_path}
+
+echo Closing the old application (PID: %PID%)...
+taskkill /F /PID %PID%
+
+echo Waiting for files to unlock...
+timeout /t 2 /nobreak > nul
+
+echo Applying Patch...
+move /Y "{new_exe_path}" "{app_path}"
+
+echo.
+echo ============================================================
+echo      Patch Update Complete!
+echo ============================================================
+echo.
+timeout /t 2 > nul
+
+echo Cleaning up...
+del /F /Q "{pid_file_path}"
+
+echo Starting application...
+start "" "{app_path}"
+
+del "%~f0"
+ENDLOCAL
+"""
+            with open(updater_script_path, "w") as f:
+                f.write(script_content)
+
+            os.startfile(updater_script_path)
+            self.download_finished.emit()
+
+        except Exception as e:
+            self.download_error.emit(f"Failed to download or run patch updater: {e}")
