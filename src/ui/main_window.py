@@ -5305,7 +5305,7 @@ class DownloaderApp (QWidget ):
                     'processed_post_ids', 'domain_override',
                     'archive_only_mode', 'skip_file_size_mb', 
                     'manga_custom_filename_format','manga_custom_date_format', 'manga_custom_suffix_format', 'sfp_threshold', 'download_revisions', 'creator_name_cache',
-                    'proxies', 'visual_sort_active', 'user_data_path'
+                    'proxies', 'visual_sort_active', 'user_data_path', 'add_info_in_pdf'
 
                 ]
                 args_template['skip_current_file_flag'] = None
