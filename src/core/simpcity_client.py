@@ -7,7 +7,7 @@ from ..utils.file_utils import clean_folder_name
 import urllib.parse
 import base64
 
-def fetch_single_simpcity_page(url, logger_func, cookies=None, post_id=None, check_pause_func=None):
+def fetch_single_simpcity_page(url, logger_func, cookies=None, post_id=None, check_pause_func=None, proxies=None):
     """
     Scrapes a single SimpCity page for images, external links, video tags, and iframes.
     """
@@ -24,8 +24,10 @@ def fetch_single_simpcity_page(url, logger_func, cookies=None, post_id=None, che
             timeout=30, 
             headers=headers, 
             cookies=cookies, 
-            impersonate="chrome120" 
+            impersonate="chrome120",
+            proxies=proxies
         )
+
         final_url = response.url
         
         if response.status_code == 404:

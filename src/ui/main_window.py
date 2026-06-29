@@ -4688,6 +4688,9 @@ class DownloaderApp (QWidget ):
             
             if hasattr(self.download_thread, 'proxies'):
                 self.download_thread.proxies = proxies_to_use
+            
+            if proxies_to_use and isinstance(proxies_to_use, dict) and 'http' in proxies_to_use:
+                self.log_signal.emit(f"🌍 Proxy Enabled: Routing traffic through {proxies_to_use['http']}")
 
             self._connect_specialized_thread_signals(self.download_thread)
             self.download_thread.start()
@@ -5146,7 +5149,7 @@ class DownloaderApp (QWidget ):
         if proxy_enabled_log:
             p_host = self.settings.value(PROXY_HOST_KEY, "")
             p_port = self.settings.value(PROXY_PORT_KEY, "")
-            log_messages.append(f"    Proxy: Enabled ({p_host}:{p_port})")
+            log_messages.append(f"    🌍 Proxy Enabled: Routing traffic through {p_host}:{p_port}")
         else:
             log_messages.append(f"    Proxy: Disabled")
 

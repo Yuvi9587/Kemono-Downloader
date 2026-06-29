@@ -3,9 +3,11 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
 class CoomerfansClient:
-    def __init__(self):
+    def __init__(self, proxies=None):
         self.base_url = "https://coomerfans.com"
         self.session = requests.Session()
+        if proxies:
+            self.session.proxies.update(proxies)
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
             'Accept-Language': 'en-US,en;q=0.9',

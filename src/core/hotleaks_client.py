@@ -2,9 +2,11 @@ import base64
 import requests
 
 class HotleaksClient:
-    def __init__(self):
+    def __init__(self, proxies=None):
         self.base_url = "https://hotleaks.tv"
         self.session = requests.Session()
+        if proxies:
+            self.session.proxies.update(proxies)
         
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',

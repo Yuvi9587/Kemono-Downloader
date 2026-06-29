@@ -2,9 +2,11 @@ import cloudscraper
 from bs4 import BeautifulSoup
 import time
 
-def get_chapter_list(series_url, logger_func):
+def get_chapter_list(series_url, logger_func, proxies=None):
     logger_func(f"   [Toonily] Scraping series page for chapter list: {series_url}")
     scraper = cloudscraper.create_scraper()
+    if proxies:
+        scraper.proxies.update(proxies)
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
         'Referer': 'https://toonily.com/'
@@ -30,7 +32,7 @@ def get_chapter_list(series_url, logger_func):
         return []
 
 
-def fetch_chapter_data(chapter_url, logger_func, scraper_session):
+def fetch_chapter_data(chapter_url, logger_func, scraper_session, proxies=None):
     """
     Scrapes a single Toonily.com chapter page for its title and image URLs.
     """

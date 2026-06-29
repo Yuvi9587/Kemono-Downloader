@@ -2585,7 +2585,8 @@ class DownloadThread(QThread):
                  proxies=None,
                  download_revisions=False,
                  visual_sort_active=False, 
-                 user_data_path=None
+                 user_data_path=None,
+                 add_info_in_pdf=False
                  ): 
 
         super().__init__()
@@ -2667,6 +2668,7 @@ class DownloadThread(QThread):
         self.download_revisions = download_revisions
         self.visual_sort_active = visual_sort_active  
         self.user_data_path = user_data_path
+        self.add_info_in_pdf = add_info_in_pdf
 
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found (DownloadThread).")
@@ -2806,7 +2808,8 @@ class DownloadThread(QThread):
                         'proxies': self.proxies,
                         'download_revisions': self.download_revisions,
                         'visual_sort_active': self.visual_sort_active, 
-                        'user_data_path': self.user_data_path
+                        'user_data_path': self.user_data_path,
+                        'add_info_in_pdf': self.add_info_in_pdf
                     }
 
                     post_processing_worker = PostProcessorWorker(**worker_args)

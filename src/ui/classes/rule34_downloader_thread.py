@@ -108,19 +108,19 @@ class Rule34DownloadThread(QThread):
         self.dynamic_penalized_tags = set()
 
         if self.smart_sort:
-            char_db_path = os.path.join(self.main_app.user_data_path, "characters.db")
+            char_db_path = os.path.join(self.main_app.user_data_path, "Database", "AllTags.db")
             
             if os.path.exists(char_db_path):
                 try:
                     with sqlite3.connect(char_db_path) as conn:
                         cursor = conn.cursor()
-                        cursor.execute("SELECT raw_string, is_favorite FROM Characters")
+                        cursor.execute("SELECT name FROM CharacterTags")
                         rows = cursor.fetchall()
                         
-                        for raw_string, is_favorite in rows:
-                            self._process_character_tag(raw_string, is_favorite=bool(is_favorite))
+                        for row in rows:
+                            self._process_character_tag(row[0], is_favorite=False)
                 except Exception as e:
-                    self.main_app.log_signal.emit(f"[WARN] Failed to read characters.db: {e}")
+                    self.main_app.log_signal.emit(f"[WARN] Failed to read AllTags.db: {e}")
 
         self.hash_db_path = os.path.join(self.main_app.user_data_path, "downloaded_hashes.json")
         self.hash_db = {}

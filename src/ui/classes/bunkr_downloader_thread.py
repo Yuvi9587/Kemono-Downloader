@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from ...core.bunkr_client import fetch_bunkr_data
+from ...utils.proxy_utils import get_proxies_from_settings
 
 IMG_EXTS = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif')
 BUNKR_IMG_THREADS = 6
@@ -22,6 +23,7 @@ class BunkrDownloadThread(QThread):
         self.bunkr_url = url
         self.output_dir = output_dir
         self.is_cancelled = False
+        self.proxies = get_proxies_from_settings(parent.settings) if hasattr(parent, 'settings') else None
         
         self.lock = threading.Lock()
         self.download_count = 0
@@ -74,6 +76,8 @@ class BunkrDownloadThread(QThread):
             
             from curl_cffi import requests as cffi_requests
             session = cffi_requests.Session(impersonate="chrome120")
+            if self.proxies:
+                session.proxies = self.proxies
             
             if headers and 'User-Agent' in headers:
                 headers = dict(headers)
@@ -134,7 +138,7 @@ class BunkrDownloadThread(QThread):
         self.progress_signal.emit("=" * 40)
         self.progress_signal.emit(f"🚀 Starting Bunkr Download for: {self.bunkr_url}")
         
-        album_name, files_to_download = fetch_bunkr_data(self.bunkr_url, self.logger)
+        album_name, files_to_download = fetch_bunkr_data(self.bunkr_url, self.logger, proxies=self.proxies)
         
         if not files_to_download:
             self.progress_signal.emit("❌ Failed to extract file information from Bunkr. Aborting.")

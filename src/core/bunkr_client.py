@@ -81,6 +81,7 @@ class Extractor:
         self.url = match.string
         self.match = match
         self.groups = match.groups()
+        self.proxies = None
         
         from curl_cffi import requests as cffi_requests
         self.session = cffi_requests.Session(impersonate="chrome120")
@@ -93,6 +94,8 @@ class Extractor:
     def items(self): yield MockMessage.Version, 1
     def request(self, url, method="GET", fatal=True, **kwargs):
         tries = 1
+        if self.proxies and 'proxies' not in kwargs:
+            kwargs['proxies'] = self.proxies
         while True:
             try:
                 response = self.session.request(method, url, **kwargs)
@@ -233,19 +236,23 @@ class BunkrMediaExtractor(BunkrAlbumExtractor):
             self.log.error(f"{exc.__class__.__name__}: {exc}")
             yield MockMessage.Directory, {"album_name": "error", "count": 0}, {}
 
-def get_bunkr_extractor(url, logger):
+def get_bunkr_extractor(url, logger, proxies=None):
     """Selects the correct Bunkr extractor based on the URL pattern."""
+    extractor = None
     if BunkrAlbumExtractor.pattern.match(url):
         logger.info("Bunkr Album URL detected.")
-        return BunkrAlbumExtractor.from_url(url, logger)
+        extractor = BunkrAlbumExtractor.from_url(url, logger)
     elif BunkrMediaExtractor.pattern.match(url):
         logger.info("Bunkr Media URL detected.")
-        return BunkrMediaExtractor.from_url(url, logger)
+        extractor = BunkrMediaExtractor.from_url(url, logger)
     else:
         logger.error(f"No suitable Bunkr extractor found for URL: {url}")
         return None
+    if extractor and proxies:
+        extractor.proxies = proxies
+    return extractor
 
-def fetch_bunkr_data(url, logger):
+def fetch_bunkr_data(url, logger, proxies=None):
     """
     Main function to be called from the GUI.
     It extracts all file information from a Bunkr URL, now handling both albums and direct file links.
@@ -278,7 +285,7 @@ def fetch_bunkr_data(url, logger):
     except Exception as e:
         logger.warning(f"Could not parse Bunkr URL for direct file check: {e}")
 
-    extractor = get_bunkr_extractor(url, logger)
+    extractor = get_bunkr_extractor(url, logger, proxies=proxies)
     if not extractor:
         return None, None
 

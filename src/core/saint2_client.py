@@ -172,7 +172,7 @@ class SaintMediaExtractor(BaseExtractor):
         return title, [file_data]
 
 
-def fetch_saint2_data(url, logger):
+def fetch_saint2_data(url, logger, proxies=None):
     """
     Identifies the correct extractor for a saint2/turbo URL and returns the data.
     """
@@ -182,6 +182,9 @@ def fetch_saint2_data(url, logger):
     session.headers.update({
         'Referer': 'https://turbo.cr/'
     })
+    if proxies:
+        # curl_cffi supports proxies on the Session object
+        session.proxies = proxies
 
     for extractor_cls in extractors:
         match = extractor_cls.pattern.match(url)

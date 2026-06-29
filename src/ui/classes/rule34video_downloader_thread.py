@@ -10,6 +10,7 @@ from ...core.database_manager import DatabaseManager
 
 from ...core.rule34video_client import fetch_rule34video_data
 from ...utils.file_utils import clean_folder_name
+from ...utils.proxy_utils import get_proxies_from_settings
 
 class Rule34VideoDownloadThread(QThread):
     """A dedicated QThread for handling rule34video.com downloads."""
@@ -23,12 +24,13 @@ class Rule34VideoDownloadThread(QThread):
         self.output_dir = output_dir
         self.is_cancelled = False
         self.db = DatabaseManager()
+        self.proxies = get_proxies_from_settings(parent.settings) if hasattr(parent, 'settings') else None
 
     def run(self):
         download_count = 0
         skip_count = 0
 
-        video_title, final_video_url, tags_list = fetch_rule34video_data(self.video_url, self.progress_signal.emit)
+        video_title, final_video_url, tags_list = fetch_rule34video_data(self.video_url, self.progress_signal.emit, proxies=self.proxies)
 
         if not final_video_url:
             self.progress_signal.emit("❌ Failed to get video data. Aborting.")
@@ -47,6 +49,8 @@ class Rule34VideoDownloadThread(QThread):
         self.progress_signal.emit(f"   Downloading: '{filename}'...")
         try:
             scraper = cloudscraper.create_scraper()
+            if self.proxies:
+                scraper.proxies.update(self.proxies)
             headers = {'Referer': 'https://rule34video.com/'}
             response = scraper.get(final_video_url, stream=True, headers=headers, timeout=90)
             response.raise_for_status()

@@ -16,6 +16,7 @@ import imagehash
 from ...core.booru_client import fetch_booru_data, BooruClientException
 from ...utils.file_utils import clean_folder_name
 from ...core.database_manager import DatabaseManager
+from ...utils.proxy_utils import get_proxies_from_settings
 
 _ff_ver = (datetime.date.today().toordinal() - 735506) // 28
 USERAGENT_FIREFOX = (f"Mozilla/5.0 (Windows NT 10.0; Win64; x64; "
@@ -39,6 +40,7 @@ class BooruDownloadThread(QThread):
         
         self.db = DatabaseManager()
         self.tag_count_cache = {}
+        self.proxies = get_proxies_from_settings(parent.settings) if hasattr(parent, 'settings') else None
         
         settings = self.main_app.settings
         
@@ -98,14 +100,14 @@ class BooruDownloadThread(QThread):
         self.dynamic_penalized_tags = set()
 
         if self.smart_sort:
-            char_db_path = os.path.join(self.main_app.user_data_path, "characters.db")
+            char_db_path = os.path.join(self.main_app.user_data_path, "Database", "AllTags.db")
             if os.path.exists(char_db_path):
                 try:
                     with sqlite3.connect(char_db_path) as conn:
                         cursor = conn.cursor()
-                        cursor.execute("SELECT raw_string, is_favorite FROM Characters")
-                        for raw_string, is_favorite in cursor.fetchall():
-                            self._process_character_tag(raw_string, is_favorite=bool(is_favorite))
+                        cursor.execute("SELECT name FROM CharacterTags")
+                        for row in cursor.fetchall():
+                            self._process_character_tag(row[0], is_favorite=False)
                 except Exception as e:
                     pass
 
@@ -205,8 +207,10 @@ class BooruDownloadThread(QThread):
             self.progress_signal.emit("=" * 40)
             self.progress_signal.emit(f"🚀 Starting Booru Download w/ Rule34 DB Integration: {self.booru_url}")
             
-            item_generator = fetch_booru_data(self.booru_url, self.api_key, self.user_id, logger)
+            item_generator = fetch_booru_data(self.booru_url, self.api_key, self.user_id, logger, proxies=self.proxies)
             scraper = cloudscraper.create_scraper()
+            if self.proxies:
+                scraper.proxies.update(self.proxies)
             download_headers = { "User-Agent": USERAGENT_FIREFOX, "Referer": "https://gelbooru.com/" }
 
             for item in item_generator:

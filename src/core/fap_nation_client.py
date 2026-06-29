@@ -4,13 +4,15 @@ import cloudscraper
 from urllib.parse import urlparse, urljoin
 from ..utils.file_utils import clean_folder_name
 
-def fetch_fap_nation_data(album_url, logger_func):
+def fetch_fap_nation_data(album_url, logger_func, proxies=None):
     """
     Scrapes a fap-nation page by prioritizing HLS streams first, then falling
     back to direct download links. Selects the highest quality available.
     """
     logger_func(f"   [Fap-Nation] Fetching album data from: {album_url}")
     scraper = cloudscraper.create_scraper()
+    if proxies:
+        scraper.proxies.update(proxies)
     
     try:
         response = scraper.get(album_url, timeout=45)

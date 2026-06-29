@@ -5,6 +5,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 from ...core.hentaifox_client import get_gallery_metadata, get_image_link_for_page, get_gallery_id
 from ...utils.file_utils import clean_folder_name
 from ...core.database_manager import DatabaseManager
+from ...utils.proxy_utils import get_proxies_from_settings
 
 class HentaiFoxDownloadThread(QThread):
     progress_signal = pyqtSignal(str)
@@ -19,6 +20,7 @@ class HentaiFoxDownloadThread(QThread):
         self.downloaded_count = 0
         self.skipped_count = 0
         self.db = DatabaseManager()
+        self.proxies = get_proxies_from_settings(parent.settings) if hasattr(parent, 'settings') else None
 
     def run(self):
         try:
@@ -31,7 +33,7 @@ class HentaiFoxDownloadThread(QThread):
             self.progress_signal.emit(f"🔍 [HentaiFox] Fetching metadata for ID: {self.gallery_id}...")
             
             try:
-                data = get_gallery_metadata(self.gallery_id)
+                data = get_gallery_metadata(self.gallery_id, proxies=self.proxies)
             except Exception as e:
                 self.progress_signal.emit(f"❌ [HentaiFox] Failed to fetch metadata: {e}")
                 self.finished_signal.emit(0, 0, False, [])
@@ -54,7 +56,7 @@ class HentaiFoxDownloadThread(QThread):
                     break
                 
                 try:
-                    img_url = get_image_link_for_page(self.gallery_id, i)
+                    img_url = get_image_link_for_page(self.gallery_id, i, proxies=self.proxies)
                     
                     if img_url:
                         ext = img_url.split('.')[-1]
@@ -109,7 +111,7 @@ class HentaiFoxDownloadThread(QThread):
         }
         
         try:
-            r = requests.get(url, headers=headers, stream=True, timeout=20)
+            r = requests.get(url, headers=headers, stream=True, timeout=20, proxies=self.proxies)
             if r.status_code != 200:
                 return False
             

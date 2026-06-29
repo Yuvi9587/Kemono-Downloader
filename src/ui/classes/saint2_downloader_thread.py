@@ -4,6 +4,7 @@ from curl_cffi import requests as cffi_requests
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from ...core.saint2_client import fetch_saint2_data
+from ...utils.proxy_utils import get_proxies_from_settings
 
 class Saint2DownloadThread(QThread):
     """A dedicated QThread for handling saint2.su downloads."""
@@ -16,6 +17,7 @@ class Saint2DownloadThread(QThread):
         self.saint2_url = url
         self.output_dir = output_dir
         self.is_cancelled = False
+        self.proxies = get_proxies_from_settings(parent.settings) if hasattr(parent, 'settings') else None
 
     def run(self):
         download_count = 0
@@ -23,7 +25,7 @@ class Saint2DownloadThread(QThread):
         self.progress_signal.emit("=" * 40)
         self.progress_signal.emit(f"🚀 Starting Saint2.su Download for: {self.saint2_url}")
         
-        album_name, files_to_download = fetch_saint2_data(self.saint2_url, self.progress_signal.emit)
+        album_name, files_to_download = fetch_saint2_data(self.saint2_url, self.progress_signal.emit, proxies=self.proxies)
         
         if not files_to_download:
             self.progress_signal.emit("❌ Failed to extract file information from Saint2. Aborting.")
@@ -35,6 +37,8 @@ class Saint2DownloadThread(QThread):
         self.progress_signal.emit(f"   Saving to folder: '{album_name}'")
 
         session = cffi_requests.Session(impersonate="chrome120")
+        if self.proxies:
+            session.proxies = self.proxies
 
         for file_data in files_to_download:
             if self.is_cancelled:

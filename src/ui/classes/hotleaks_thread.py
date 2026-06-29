@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
 from PyQt5.QtCore import QThread, pyqtSignal
 from ...core.hotleaks_client import HotleaksClient
+from ...utils.proxy_utils import get_proxies_from_settings
 
 MAX_WORKERS = 2  
 
@@ -25,7 +26,8 @@ class HotleaksThread(QThread):
         self.url = url
         self.save_directory = save_directory
         self.main_app = main_app
-        self.client = HotleaksClient()
+        _proxies = get_proxies_from_settings(main_app.settings) if hasattr(main_app, 'settings') else None
+        self.client = HotleaksClient(proxies=_proxies)
         self.is_running = True
         self.download_count = 0
         self.skip_count = 0

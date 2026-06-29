@@ -5,13 +5,15 @@ from ..utils.file_utils import clean_folder_name
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-def fetch_pixeldrain_data(url: str, logger):
+def fetch_pixeldrain_data(url: str, logger, proxies=None):
     """
     Scrapes a given Pixeldrain URL to extract album or file information.
     Handles single files (/u/), albums/lists (/l/), and folders (/d/).
     """
     logger(f"Fetching data for Pixeldrain URL: {url}")
     scraper = cloudscraper.create_scraper()
+    if proxies:
+        scraper.proxies.update(proxies)
     root = "https://pixeldrain.com"
 
     try:

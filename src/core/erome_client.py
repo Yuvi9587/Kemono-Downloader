@@ -51,7 +51,7 @@ def parse_timestamp(ts, default=None):
         return default
 
 
-def fetch_erome_data(url, logger):
+def fetch_erome_data(url, logger, proxies=None):
     """
     Identifies and extracts all media files from an Erome album URL.
 
@@ -72,6 +72,8 @@ def fetch_erome_data(url, logger):
     page_url = f"https://www.erome.com/a/{album_id}"
     
     session = cloudscraper.create_scraper()
+    if proxies:
+        session.proxies.update(proxies)
 
     try:
         logger(f"   Fetching Erome album page: {page_url}")

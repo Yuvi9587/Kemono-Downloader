@@ -2,6 +2,7 @@ import threading
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from ...core.mangadex_client import fetch_mangadex_data
+from ...utils.proxy_utils import get_proxies_from_settings
 
 
 class MangaDexDownloadThread(QThread):
@@ -18,6 +19,7 @@ class MangaDexDownloadThread(QThread):
         self.is_cancelled = False
         self.pause_event = parent.pause_event if hasattr(parent, 'pause_event') else threading.Event()
         self.cancellation_event = parent.cancellation_event if hasattr(parent, 'cancellation_event') else threading.Event()
+        self.proxies = get_proxies_from_settings(parent.settings) if hasattr(parent, 'settings') else None
 
     def run(self):
         downloaded = 0
@@ -30,7 +32,8 @@ class MangaDexDownloadThread(QThread):
                 file_progress_callback=self.file_progress_signal,
                 overall_progress_callback=self.overall_progress_signal,
                 pause_event=self.pause_event,
-                cancellation_event=self.cancellation_event
+                cancellation_event=self.cancellation_event,
+                proxies=self.proxies
             )
         except Exception as e:
             self.progress_signal.emit(f"❌ A critical error occurred in the MangaDex thread: {e}")

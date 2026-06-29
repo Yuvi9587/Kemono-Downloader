@@ -1,5 +1,7 @@
 PyQt5
-requests
+requests[socks]
+PySocks
+
 beautifulsoup4
 cloudscraper
 curl_cffi

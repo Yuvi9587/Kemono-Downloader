@@ -59,12 +59,14 @@ class Extractor:
     _retries = 3
     _timeout = 30
 
-    def __init__(self, match, logger_func=print):
+    def __init__(self, match, logger_func=print, proxies=None):
         self.url = match.string
         self.match = match
         self.groups = match.groups()
         self.session = cloudscraper.create_scraper()
         self.session.headers["User-Agent"] = USERAGENT_FIREFOX
+        if proxies:
+            self.session.proxies.update(proxies)
         self.log = logger_func
         self.api_key = None
         self.user_id = None
@@ -338,18 +340,18 @@ EXTRACTORS = [
     GelbooruPostExtractor,
 ]
 
-def find_extractor(url, logger_func):
+def find_extractor(url, logger_func, proxies=None):
     for extractor_cls in EXTRACTORS:
         match = re.search(extractor_cls.pattern, url)
         if match:
-            return extractor_cls(match, logger_func)
+            return extractor_cls(match, logger_func, proxies=proxies)
     return None
 
-def fetch_booru_data(url, api_key, user_id, logger_func):
+def fetch_booru_data(url, api_key, user_id, logger_func, proxies=None):
     """
     Main function to find an extractor and yield image data.
     """
-    extractor = find_extractor(url, logger_func)
+    extractor = find_extractor(url, logger_func, proxies=proxies)
     if not extractor:
         logger_func(f"No suitable Booru extractor found for URL: {url}")
         return

@@ -15,12 +15,13 @@ def get_gallery_id(url_or_id):
     match = re.search(r"(\d+)", str(url_or_id))
     return match.group(1) if match else None
 
-def get_gallery_metadata(gallery_id):
+def get_gallery_metadata(gallery_id, proxies=None):
     """
     Fetches the main gallery page to get the Title, Total Pages, Tags, and Artists.
     """
+    req_timeout = 30 if proxies else 15
     url = f"{BASE_URL}/gallery/{gallery_id}/"
-    response = requests.get(url, headers=HEADERS)
+    response = requests.get(url, headers=HEADERS, proxies=proxies, timeout=req_timeout)
     response.raise_for_status()
     html = response.text
     
@@ -61,14 +62,15 @@ def get_gallery_metadata(gallery_id):
         "artist": artist_string
     }
 
-def get_image_link_for_page(gallery_id, page_num):
+def get_image_link_for_page(gallery_id, page_num, proxies=None):
     """
     Fetches the specific reader page to find the actual image URL.
     Equivalent to the loop in the 'hentaifox' function:
     url="https://hentaifox.com/g/${id}/${i}/"
     """
+    req_timeout = 30 if proxies else 15
     url = f"{BASE_URL}/g/{gallery_id}/{page_num}/"
-    response = requests.get(url, headers=HEADERS)
+    response = requests.get(url, headers=HEADERS, proxies=proxies, timeout=req_timeout)
     
     match = re.search(r'data-src="(https://[^"]+)"', response.text)
     

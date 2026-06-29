@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 import re
 import html
 
-def fetch_rule34video_data(video_url, logger_func):
+def fetch_rule34video_data(video_url, logger_func, proxies=None):
     """
     Scrapes a rule34video.com page by specifically finding the 'Download' div,
     then selecting the best available quality link.
@@ -17,6 +17,8 @@ def fetch_rule34video_data(video_url, logger_func):
     """
     logger_func(f"   [Rule34Video] Fetching page: {video_url}")
     scraper = cloudscraper.create_scraper()
+    if proxies:
+        scraper.proxies.update(proxies)
     
     try:
         main_page_response = scraper.get(video_url, timeout=20)

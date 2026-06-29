@@ -3,6 +3,7 @@ import time
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from ...core.Hentai2read_client import run_hentai2read_download as h2r_run_download
+from ...utils.proxy_utils import get_proxies_from_settings
 
 
 class Hentai2readDownloadThread(QThread):
@@ -21,6 +22,7 @@ class Hentai2readDownloadThread(QThread):
         self.output_dir = output_dir
         self.is_cancelled = False
         self.pause_event = parent.pause_event if hasattr(parent, 'pause_event') else threading.Event()
+        self.proxies = get_proxies_from_settings(parent.settings) if hasattr(parent, 'settings') else None
 
     def _check_pause(self):
         """Helper to handle pausing and cancellation events."""
@@ -42,7 +44,8 @@ class Hentai2readDownloadThread(QThread):
             output_dir=self.output_dir,
             progress_callback=self.progress_signal.emit,
             overall_progress_callback=self.overall_progress_signal.emit,
-            check_pause_func=self._check_pause
+            check_pause_func=self._check_pause,
+            proxies=self.proxies
         )
         
         self.finished_signal.emit(downloaded, skipped, self.is_cancelled)

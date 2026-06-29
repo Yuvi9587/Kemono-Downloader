@@ -106,22 +106,42 @@ class DownloadManager:
             self.progress_queue.put({'type': 'handoff_to_single_thread', 'payload': (config,)})
 
     def _get_proxies_from_config(self, config):
-        """Constructs the proxy dictionary from the config."""
+        """Constructs the proxy dictionary from the config.
+
+        Prefers the pre-built 'proxies' dict that main_window.py assembles,
+        because it already uses the correct scheme (http://, socks4://, socks5h://)
+        based on the user's selected proxy type. Falls back to building one
+        manually (HTTP only) for callers that pass a minimal config without
+        the pre-built dict.
+        """
         if not config.get('proxy_enabled'):
             return None
 
+        # If main_window already built a correctly-schemed proxies dict, use it.
+        if config.get('proxies') is not None:
+            return config['proxies']
+
+        # Fallback: build from individual fields (HTTP only).
         host = config.get('proxy_host')
         port = config.get('proxy_port')
         if not host or not port:
             return None
 
-        proxy_str = f"http://{host}:{port}"
-        
+        proxy_type = config.get('proxy_type', 'HTTP').upper()
+        if proxy_type == 'SOCKS5':
+            scheme = 'socks5h'
+        elif proxy_type == 'SOCKS4':
+            scheme = 'socks4'
+        else:
+            scheme = 'http'
+
         user = config.get('proxy_username')
         password = config.get('proxy_password')
         if user and password:
-            proxy_str = f"http://{user}:{password}@{host}:{port}"
-        
+            proxy_str = f"{scheme}://{user}:{password}@{host}:{port}"
+        else:
+            proxy_str = f"{scheme}://{host}:{port}"
+
         return {
             "http": proxy_str,
             "https": proxy_str

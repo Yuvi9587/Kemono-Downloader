@@ -6,6 +6,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 
 from ...core.pixeldrain_client import fetch_pixeldrain_data
 from ...utils.file_utils import clean_folder_name
+from ...utils.proxy_utils import get_proxies_from_settings
 
 
 class PixeldrainDownloadThread(QThread):
@@ -19,6 +20,7 @@ class PixeldrainDownloadThread(QThread):
         self.pixeldrain_url = url
         self.output_dir = output_dir
         self.is_cancelled = False
+        self.proxies = get_proxies_from_settings(parent.settings) if hasattr(parent, 'settings') else None
 
     def run(self):
         download_count = 0
@@ -26,7 +28,7 @@ class PixeldrainDownloadThread(QThread):
         self.progress_signal.emit("=" * 40)
         self.progress_signal.emit(f"🚀 Starting Pixeldrain.com Download for: {self.pixeldrain_url}")
 
-        album_title_raw, files_to_download = fetch_pixeldrain_data(self.pixeldrain_url, self.progress_signal.emit)
+        album_title_raw, files_to_download = fetch_pixeldrain_data(self.pixeldrain_url, self.progress_signal.emit, proxies=self.proxies)
 
         if not files_to_download:
             self.progress_signal.emit("❌ Failed to extract file information from Pixeldrain. Aborting.")
@@ -45,6 +47,8 @@ class PixeldrainDownloadThread(QThread):
 
         total_files = len(files_to_download)
         session = cloudscraper.create_scraper()
+        if self.proxies:
+            session.proxies.update(self.proxies)
 
         for i, file_data in enumerate(files_to_download):
             if self.is_cancelled:

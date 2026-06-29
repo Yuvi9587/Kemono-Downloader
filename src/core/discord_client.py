@@ -2,7 +2,7 @@ import time
 import cloudscraper
 import json
 
-def fetch_server_channels(server_id, logger=print, cookies_dict=None):
+def fetch_server_channels(server_id, logger=print, cookies_dict=None, proxies=None):
     """
     Fetches all channels for a given Discord server ID from the API.
     Uses cloudscraper to bypass Cloudflare.
@@ -11,6 +11,8 @@ def fetch_server_channels(server_id, logger=print, cookies_dict=None):
     logger(f"   Fetching channels for server: {api_url}")
 
     scraper = cloudscraper.create_scraper()
+    if proxies:
+        scraper.proxies.update(proxies)
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         'Referer': f'https://kemono.cr/discord/server/{server_id}',
@@ -29,12 +31,14 @@ def fetch_server_channels(server_id, logger=print, cookies_dict=None):
         logger(f"   ❌ Error fetching server channels for {server_id}: {e}")
         return None
 
-def fetch_channel_messages(channel_id, logger=print, cancellation_event=None, pause_event=None, cookies_dict=None):
+def fetch_channel_messages(channel_id, logger=print, cancellation_event=None, pause_event=None, cookies_dict=None, proxies=None):
     """
     A generator that fetches all messages for a specific Discord channel, handling pagination.
     Uses cloudscraper and proper headers to bypass server protection.
     """
     scraper = cloudscraper.create_scraper()
+    if proxies:
+        scraper.proxies.update(proxies)
     base_url = f"https://kemono.cr/api/v1/discord/channel/{channel_id}"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',

@@ -7,11 +7,13 @@ from urllib.parse import urljoin
 from concurrent.futures import ThreadPoolExecutor
 import queue
 
-def run_hentai2read_download(start_url, output_dir, progress_callback, overall_progress_callback, check_pause_func):
+def run_hentai2read_download(start_url, output_dir, progress_callback, overall_progress_callback, check_pause_func, proxies=None):
     """
     Orchestrates the download process using a producer-consumer model.
     """
     scraper = cloudscraper.create_scraper()
+    if proxies:
+        scraper.proxies.update(proxies)
     all_failed_files = []
     
     try:
@@ -43,7 +45,8 @@ def run_hentai2read_download(start_url, output_dir, progress_callback, overall_p
                 save_path=final_save_path,
                 scraper=scraper,
                 progress_callback=progress_callback,
-                check_pause_func=check_pause_func
+                check_pause_func=check_pause_func,
+                proxies=proxies
             )
 
             total_downloaded_count += dl_count
@@ -151,7 +154,7 @@ def _get_series_metadata(start_url, progress_callback, scraper):
         progress_callback(f"   [Hentai2Read] ❌ Error parsing metadata after successful connection: {e}")
         return "Unknown Series", []
 
-def _process_and_download_chapter(chapter_url, save_path, scraper, progress_callback, check_pause_func):
+def _process_and_download_chapter(chapter_url, save_path, scraper, progress_callback, check_pause_func, proxies=None):
     """
     Uses a producer-consumer pattern to download a chapter.
     Includes RETRY LOGIC and ACTIVE LOGGING.
@@ -164,6 +167,8 @@ def _process_and_download_chapter(chapter_url, save_path, scraper, progress_call
 
     def downloader_worker():
         worker_scraper = cloudscraper.create_scraper()
+        if proxies:
+            worker_scraper.proxies.update(proxies)
         while True:
             task = task_queue.get()
             if task is None:

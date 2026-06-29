@@ -5,6 +5,7 @@ import cloudscraper
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from ...core.erome_client import fetch_erome_data
+from ...utils.proxy_utils import get_proxies_from_settings
 
 class EromeDownloadThread(QThread):
     """A dedicated QThread for handling erome.com downloads."""
@@ -17,6 +18,7 @@ class EromeDownloadThread(QThread):
         self.erome_url = url
         self.output_dir = output_dir
         self.is_cancelled = False
+        self.proxies = get_proxies_from_settings(parent.settings) if hasattr(parent, 'settings') else None
 
     def run(self):
         download_count = 0
@@ -24,7 +26,7 @@ class EromeDownloadThread(QThread):
         self.progress_signal.emit("=" * 40)
         self.progress_signal.emit(f"🚀 Starting Erome.com Download for: {self.erome_url}")
         
-        album_name, files_to_download = fetch_erome_data(self.erome_url, self.progress_signal.emit)
+        album_name, files_to_download = fetch_erome_data(self.erome_url, self.progress_signal.emit, proxies=self.proxies)
         
         if not files_to_download:
             self.progress_signal.emit("❌ Failed to extract file information from Erome. Aborting.")
@@ -42,6 +44,8 @@ class EromeDownloadThread(QThread):
 
         total_files = len(files_to_download)
         session = cloudscraper.create_scraper()
+        if self.proxies:
+            session.proxies.update(self.proxies)
 
         for i, file_data in enumerate(files_to_download):
             if self.is_cancelled:

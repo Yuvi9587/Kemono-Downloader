@@ -8,6 +8,7 @@ import cloudscraper
 
 from ...core.fap_nation_client import fetch_fap_nation_data
 from ...services.multipart_downloader import download_file_in_parts
+from ...utils.proxy_utils import get_proxies_from_settings
 
 class FapNationDownloadThread(QThread):
     """
@@ -32,6 +33,7 @@ class FapNationDownloadThread(QThread):
         self.cancellation_event = cancellation_event
         self.gui_signals = gui_signals
         self._is_finished = False
+        self.proxies = get_proxies_from_settings(parent.settings) if hasattr(parent, 'settings') else None
         
         self.process = QProcess(self)
         self.process.readyReadStandardOutput.connect(self.handle_ytdlp_output)
@@ -40,7 +42,7 @@ class FapNationDownloadThread(QThread):
         self.progress_signal.emit("=" * 40)
         self.progress_signal.emit(f"🚀 Starting Fap-Nation Download for: {self.album_url}")
         
-        self.album_name, files_to_download = fetch_fap_nation_data(self.album_url, self.progress_signal.emit)
+        self.album_name, files_to_download = fetch_fap_nation_data(self.album_url, self.progress_signal.emit, proxies=self.proxies)
         
         if self.is_cancelled or not files_to_download:
             self.progress_signal.emit("❌ Failed to extract file information. Aborting.")

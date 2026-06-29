@@ -27,6 +27,7 @@ from ...services.drive_downloader import (
 from ...utils.file_utils import clean_folder_name, clean_filename, format_custom_suffix, format_custom_date
 from ...core.workers import robust_clean_name
 from ...ui.dialogs.SinglePDF import create_individual_pdf, create_single_pdf_from_content
+from ...utils.proxy_utils import get_proxies_from_settings
 
 try:
     from docx import Document
@@ -59,6 +60,7 @@ class SimpCityDownloadThread(QThread):
         self.collected_external_links = []
         
         self.db = DatabaseManager()
+        self.proxies = get_proxies_from_settings(parent.settings) if hasattr(parent, 'settings') else None
 
     def _check_pause_cancel(self):
         if self.is_cancelled or (self.parent_app and self.parent_app.cancellation_event.is_set()):
@@ -162,7 +164,7 @@ class SimpCityDownloadThread(QThread):
                     'pixeldrain': (fetch_pixeldrain_data, pixeldrain_logger)
                 }
                 fetch_func, logger_adapter = fetch_map[job_type]
-                album_name, files = fetch_func(job_url, logger_adapter)
+                album_name, files = fetch_func(job_url, logger_adapter, proxies=self.proxies)
                 
                 if files:
                     job['prefetched_files'] = files
@@ -306,7 +308,7 @@ class SimpCityDownloadThread(QThread):
                 elif job_type in ['saint2', 'saint2_direct'] and self.should_dl_saint2:
                     self.progress_signal.emit(f"\n--- Processing Service (Saint2/Turbo): {job_url} ---")
                     saint2_logger = self._ServiceLoggerAdapter(self.progress_signal.emit, prefix="      ")
-                    album_name, files = fetch_saint2_data(job_url, saint2_logger)
+                    album_name, files = fetch_saint2_data(job_url, saint2_logger, proxies=self.proxies)
                     
                     if files:
                         if len(files) > 1:

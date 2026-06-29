@@ -15,6 +15,7 @@ from ...core.toonily_client import (
     get_chapter_list as toonily_get_list
 )
 from ...utils.file_utils import clean_folder_name
+from ...utils.proxy_utils import get_proxies_from_settings
 
 
 class ToonilyDownloadThread(QThread):
@@ -31,6 +32,7 @@ class ToonilyDownloadThread(QThread):
         self.is_cancelled = False
         self.pause_event = parent.pause_event if hasattr(parent, 'pause_event') else threading.Event()
         self.db = DatabaseManager()
+        self.proxies = get_proxies_from_settings(parent.settings) if hasattr(parent, 'settings') else None
 
     def _check_pause(self):
         if self.is_cancelled: return True
@@ -50,7 +52,7 @@ class ToonilyDownloadThread(QThread):
             chapters_to_download = [self.start_url]
             self.progress_signal.emit("ℹ️ Single Toonily chapter URL detected.")
         else:
-            chapters_to_download = toonily_get_list(self.start_url, self.progress_signal.emit)
+            chapters_to_download = toonily_get_list(self.start_url, self.progress_signal.emit, proxies=self.proxies)
 
         if not chapters_to_download:
             self.progress_signal.emit("❌ No chapters found to download.")
@@ -61,6 +63,8 @@ class ToonilyDownloadThread(QThread):
         self.overall_progress_signal.emit(len(chapters_to_download), 0)
         
         scraper = cloudscraper.create_scraper()
+        if self.proxies:
+            scraper.proxies.update(self.proxies)
 
         for chapter_idx, chapter_url in enumerate(chapters_to_download):
             if self._check_pause(): break

@@ -6,7 +6,7 @@ import cloudscraper
 from collections import defaultdict
 from ..utils.file_utils import clean_folder_name
 
-def fetch_mangadex_data(start_url, output_dir, logger_func, file_progress_callback, overall_progress_callback, pause_event, cancellation_event):
+def fetch_mangadex_data(start_url, output_dir, logger_func, file_progress_callback, overall_progress_callback, pause_event, cancellation_event, proxies=None):
     """
     Fetches and downloads all content from a MangaDex series or chapter URL.
     Returns a tuple of (downloaded_count, skipped_count).
@@ -14,7 +14,7 @@ def fetch_mangadex_data(start_url, output_dir, logger_func, file_progress_callba
     grand_total_dl = 0
     grand_total_skip = 0
     
-    api = _MangadexAPI(logger_func)
+    api = _MangadexAPI(logger_func, proxies=proxies)
 
     def _check_pause():
         if cancellation_event and cancellation_event.is_set(): return True
@@ -119,9 +119,11 @@ def fetch_mangadex_data(start_url, output_dir, logger_func, file_progress_callba
     return grand_total_dl, grand_total_skip
 
 class _MangadexAPI:
-    def __init__(self, logger_func):
+    def __init__(self, logger_func, proxies=None):
         self.logger_func = logger_func
         self.session = cloudscraper.create_scraper()
+        if proxies:
+            self.session.proxies.update(proxies)
         self.root = "https://api.mangadex.org"
 
     def _call(self, endpoint, params=None, cancellation_event=None):
