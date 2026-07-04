@@ -12,8 +12,9 @@ class HentaiFoxDownloadThread(QThread):
     file_progress_signal = pyqtSignal(str, object)
     finished_signal = pyqtSignal(int, int, bool, list) 
 
-    def __init__(self, url_or_id, output_dir, parent=None):
+    def __init__(self, url_or_id, output_dir, parent=None, export_all_links_mode=False):
         super().__init__(parent)
+        self.export_all_links_mode = export_all_links_mode
         self.gallery_id = get_gallery_id(url_or_id)
         self.output_dir = output_dir
         self.is_running = True
@@ -44,6 +45,30 @@ class HentaiFoxDownloadThread(QThread):
             tags = data.get('tags', [])
             artist = data.get('artist')
             
+            if self.export_all_links_mode:
+                self.progress_signal.emit(f"📋 Export All Links Mode: Extracting links for HentaiFox {self.gallery_id}...")
+                export_file_path = os.path.join(self.output_dir, "all_file_links.txt")
+                extracted_links = []
+                
+                for i in range(1, total_pages + 1):
+                    if not self.is_running: break
+                    img_url = get_image_link_for_page(self.gallery_id, i, proxies=self.proxies)
+                    if img_url:
+                        extracted_links.append(img_url)
+                    time.sleep(0.1)
+                
+                try:
+                    with open(export_file_path, "a", encoding="utf-8") as f:
+                        f.write(f"\n# HentaiFox Gallery: {title} ({self.gallery_id})\n")
+                        for link in extracted_links:
+                            f.write(link + "\n")
+                    self.progress_signal.emit(f"✅ Exported {len(extracted_links)} links to {export_file_path}")
+                except Exception as e:
+                    self.progress_signal.emit(f"❌ Failed to write links to {export_file_path}: {e}")
+                    
+                self.finished_signal.emit(len(extracted_links), 0, False, [])
+                return
+
             save_folder = os.path.join(self.output_dir, f"[{self.gallery_id}] {title}")
             os.makedirs(save_folder, exist_ok=True)
             

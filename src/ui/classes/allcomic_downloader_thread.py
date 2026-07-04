@@ -19,8 +19,9 @@ class AllcomicDownloadThread(QThread):
     finished_signal = pyqtSignal(int, int, bool) 
     overall_progress_signal = pyqtSignal(int, int) 
 
-    def __init__(self, url, output_dir, parent=None, proxies=None):
+    def __init__(self, url, output_dir, parent=None, proxies=None, export_all_links_mode=False):
         super().__init__(parent)
+        self.export_all_links_mode = export_all_links_mode
         self.comic_url = url
         self.output_dir = output_dir
         self.is_cancelled = False
@@ -93,6 +94,22 @@ class AllcomicDownloadThread(QThread):
 
             if not image_urls:
                 self.progress_signal.emit(f"❌ Failed to get data for chapter. Skipping.")
+                continue
+
+            if getattr(self, 'export_all_links_mode', False):
+                export_file_path = os.path.join(self.output_dir, "all_file_links.txt")
+                self.progress_signal.emit(f"📋 Export All Links Mode: Extracting {len(image_urls)} links for chapter...")
+                try:
+                    with open(export_file_path, "a", encoding="utf-8") as f:
+                        f.write(f"\n# AllComic: {comic_title} - {chapter_title}\n")
+                        for link in image_urls:
+                            f.write(link + "\n")
+                    self.progress_signal.emit(f"✅ Exported links to {export_file_path}")
+                    grand_total_dl += len(image_urls)
+                except Exception as e:
+                    self.progress_signal.emit(f"❌ Failed to export links: {e}")
+                
+                if self._smart_sleep(0.5): break
                 continue
 
             series_folder_name = clean_folder_name(comic_title)

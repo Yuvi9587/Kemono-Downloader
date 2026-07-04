@@ -21,8 +21,9 @@ class HotleaksThread(QThread):
     finished_signal = pyqtSignal(int, int, bool, list)
     error_signal = pyqtSignal(str)
 
-    def __init__(self, url, save_directory, main_app):
-        super().__init__()
+    def __init__(self, url, save_directory, main_app, export_all_links_mode=False):
+        super().__init__(main_app)
+        self.export_all_links_mode = export_all_links_mode
         self.url = url
         self.save_directory = save_directory
         self.main_app = main_app
@@ -296,6 +297,17 @@ class HotleaksThread(QThread):
             with self._count_lock: self.skip_count += 1
             return
 
+        if getattr(self, 'export_all_links_mode', False):
+            export_file_path = os.path.join(self.save_directory, "all_file_links.txt")
+            try:
+                with open(export_file_path, "a", encoding="utf-8") as f:
+                    f.write(image_url + "\n")
+                self.log(f"📋 Exported link: {image_url}")
+                with self._count_lock: self.download_count += 1
+            except Exception as e:
+                pass
+            return
+
         self.log(f"Downloading image: {file_name}")
         
         img_res = None
@@ -339,7 +351,18 @@ class HotleaksThread(QThread):
 
         while self.is_rate_limited and self.is_running: time.sleep(0.5)
 
-        self.log(f"Extracting video stream: {post_id}")
+        if getattr(self, 'export_all_links_mode', False):
+            export_file_path = os.path.join(self.save_directory, "all_file_links.txt")
+            try:
+                with open(export_file_path, "a", encoding="utf-8") as f:
+                    f.write(m3u8_url + "\n")
+                self.log(f"📋 Exported link: {m3u8_url}")
+                with self._count_lock: self.download_count += 1
+            except Exception as e:
+                pass
+            return
+
+        self.log(f"Starting FFMPEG download for video: {post_id}")
         
         response = None
         for attempt in range(4):

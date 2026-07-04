@@ -7,7 +7,7 @@ from urllib.parse import urljoin
 from concurrent.futures import ThreadPoolExecutor
 import queue
 
-def run_hentai2read_download(start_url, output_dir, progress_callback, overall_progress_callback, check_pause_func, proxies=None):
+def run_hentai2read_download(start_url, output_dir, progress_callback, overall_progress_callback, check_pause_func, proxies=None, export_all_links_mode=False):
     """
     Orchestrates the download process using a producer-consumer model.
     """
@@ -46,7 +46,10 @@ def run_hentai2read_download(start_url, output_dir, progress_callback, overall_p
                 scraper=scraper,
                 progress_callback=progress_callback,
                 check_pause_func=check_pause_func,
-                proxies=proxies
+                proxies=proxies,
+                export_all_links_mode=export_all_links_mode,
+                output_dir=output_dir,
+                series_title=top_level_folder_name
             )
 
             total_downloaded_count += dl_count
@@ -154,7 +157,7 @@ def _get_series_metadata(start_url, progress_callback, scraper):
         progress_callback(f"   [Hentai2Read] ❌ Error parsing metadata after successful connection: {e}")
         return "Unknown Series", []
 
-def _process_and_download_chapter(chapter_url, save_path, scraper, progress_callback, check_pause_func, proxies=None):
+def _process_and_download_chapter(chapter_url, save_path, scraper, progress_callback, check_pause_func, proxies=None, export_all_links_mode=False, output_dir=None, series_title=None):
     """
     Uses a producer-consumer pattern to download a chapter.
     Includes RETRY LOGIC and ACTIVE LOGGING.
@@ -267,7 +270,18 @@ def _process_and_download_chapter(chapter_url, save_path, scraper, progress_call
             filename = f"{page_number:03d}{ext}"
             filepath = os.path.join(save_path, filename)
             
-            task_queue.put((filepath, normalized_img_src))
+            if export_all_links_mode:
+                export_file_path = os.path.join(output_dir, "all_file_links.txt")
+                try:
+                    with open(export_file_path, "a", encoding="utf-8") as f:
+                        if page_number == 1:
+                            f.write(f"\n# Hentai2Read: {series_title} - {os.path.basename(save_path)}\n")
+                        f.write(normalized_img_src + "\n")
+                    download_stats['downloaded'] += 1
+                except Exception as e:
+                    pass
+            else:
+                task_queue.put((filepath, normalized_img_src))
             
             page_number += 1
             time.sleep(0.1) 

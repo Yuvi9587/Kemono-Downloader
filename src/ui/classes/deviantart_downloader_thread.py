@@ -24,8 +24,9 @@ class DeviantArtDownloadThread(QThread):
     overall_progress_signal = pyqtSignal(int, int)
     finished_signal = pyqtSignal(int, int, bool, list)
 
-    def __init__(self, url, output_dir, pause_event, cancellation_event, parent=None, proxies=None):
+    def __init__(self, url, output_dir, pause_event, cancellation_event, parent=None, proxies=None, export_all_links_mode=False):
         super().__init__(parent)
+        self.export_all_links_mode = export_all_links_mode
         self.url = url
         self.output_dir = output_dir
         self.pause_event = pause_event
@@ -178,6 +179,18 @@ class DeviantArtDownloadThread(QThread):
 
     def _download_file(self, file_url, metadata, override_dir=None):
         if self._check_pause_cancel(): return
+        
+        if getattr(self, 'export_all_links_mode', False):
+            export_file_path = os.path.join(self.output_dir, "all_file_links.txt")
+            try:
+                with open(export_file_path, "a", encoding="utf-8") as f:
+                    f.write(file_url + "\n")
+                self.progress_signal.emit(f"📋 Exported link: {file_url}")
+                self.download_count += 1
+            except Exception as e:
+                self.progress_signal.emit(f"❌ Failed to export link: {e}")
+                self.skip_count += 1
+            return
 
         parsed = requests.utils.urlparse(file_url)
         path_filename = os.path.basename(parsed.path)

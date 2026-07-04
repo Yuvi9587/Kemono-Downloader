@@ -16,8 +16,9 @@ class Hentai2readDownloadThread(QThread):
     finished_signal = pyqtSignal(int, int, bool)
     overall_progress_signal = pyqtSignal(int, int)
 
-    def __init__(self, url, output_dir, parent=None):
+    def __init__(self, url, output_dir, parent=None, export_all_links_mode=False):
         super().__init__(parent)
+        self.export_all_links_mode = export_all_links_mode
         self.start_url = url
         self.output_dir = output_dir
         self.is_cancelled = False
@@ -45,7 +46,8 @@ class Hentai2readDownloadThread(QThread):
             progress_callback=self.progress_signal.emit,
             overall_progress_callback=self.overall_progress_signal.emit,
             check_pause_func=self._check_pause,
-            proxies=self.proxies
+            proxies=self.proxies,
+            export_all_links_mode=self.export_all_links_mode
         )
         
         self.finished_signal.emit(downloaded, skipped, self.is_cancelled)

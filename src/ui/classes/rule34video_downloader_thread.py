@@ -23,8 +23,9 @@ class Rule34VideoDownloadThread(QThread):
     file_progress_signal = pyqtSignal(str, object)
     finished_signal = pyqtSignal(int, int, bool)
 
-    def __init__(self, url, output_dir, parent=None):
+    def __init__(self, url, output_dir, parent=None, export_all_links_mode=False):
         super().__init__(parent)
+        self.export_all_links_mode = export_all_links_mode
         self.video_url = url
         self.output_dir = output_dir
         self.is_cancelled = False
@@ -40,6 +41,19 @@ class Rule34VideoDownloadThread(QThread):
         if not final_video_url:
             self.progress_signal.emit("❌ Failed to get video data. Aborting.")
             self.finished_signal.emit(0, 1, self.is_cancelled)
+            return
+
+        if getattr(self, 'export_all_links_mode', False):
+            export_file_path = os.path.join(self.output_dir, "all_file_links.txt")
+            self.progress_signal.emit(f"📋 Export All Links Mode: Extracting link...")
+            try:
+                with open(export_file_path, "a", encoding="utf-8") as f:
+                    f.write(f"\n# Rule34Video: {video_title}\n")
+                    f.write(final_video_url + "\n")
+                self.progress_signal.emit(f"✅ Exported link to {export_file_path}")
+            except Exception as e:
+                self.progress_signal.emit(f"❌ Failed to export link: {e}")
+            self.finished_signal.emit(1, 0, self.is_cancelled)
             return
 
         safe_title = clean_folder_name(video_title if video_title else "rule34video_file")

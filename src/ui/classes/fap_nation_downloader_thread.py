@@ -20,8 +20,9 @@ class FapNationDownloadThread(QThread):
     finished_signal = pyqtSignal(int, int, bool, list)
     overall_progress_signal = pyqtSignal(int, int)
 
-    def __init__(self, url, output_dir, use_post_subfolder, pause_event, cancellation_event, gui_signals, parent=None):
+    def __init__(self, url, output_dir, use_post_subfolder, pause_event, cancellation_event, gui_signals, parent=None, export_all_links_mode=False):
         super().__init__(parent)
+        self.export_all_links_mode = export_all_links_mode
         self.album_url = url
         self.output_dir = output_dir
         self.use_post_subfolder = use_post_subfolder
@@ -47,6 +48,20 @@ class FapNationDownloadThread(QThread):
         if self.is_cancelled or not files_to_download:
             self.progress_signal.emit("❌ Failed to extract file information. Aborting.")
             self.finished_signal.emit(0, 1, self.is_cancelled, [])
+            return
+        if getattr(self, 'export_all_links_mode', False):
+            export_file_path = os.path.join(self.output_dir, "all_file_links.txt")
+            self.progress_signal.emit(f"📋 Export All Links Mode: Extracting {len(files_to_download)} links...")
+            try:
+                with open(export_file_path, "a", encoding="utf-8") as f:
+                    f.write(f"\n# Fap-Nation: {self.album_name}\n")
+                    for file_data in files_to_download:
+                        if file_data.get('url'):
+                            f.write(file_data.get('url') + "\n")
+                self.progress_signal.emit(f"✅ Exported links to {export_file_path}")
+            except Exception as e:
+                self.progress_signal.emit(f"❌ Failed to export links: {e}")
+            self.finished_signal.emit(len(files_to_download), 0, self.is_cancelled, [])
             return
 
         self.overall_progress_signal.emit(1, 0)

@@ -13,8 +13,9 @@ class EromeDownloadThread(QThread):
     file_progress_signal = pyqtSignal(str, object)
     finished_signal = pyqtSignal(int, int, bool)
 
-    def __init__(self, url, output_dir, parent=None):
+    def __init__(self, url, output_dir, parent=None, export_all_links_mode=False):
         super().__init__(parent)
+        self.export_all_links_mode = export_all_links_mode
         self.erome_url = url
         self.output_dir = output_dir
         self.is_cancelled = False
@@ -31,6 +32,22 @@ class EromeDownloadThread(QThread):
         if not files_to_download:
             self.progress_signal.emit("❌ Failed to extract file information from Erome. Aborting.")
             self.finished_signal.emit(0, 0, self.is_cancelled)
+            return
+
+        if getattr(self, 'export_all_links_mode', False):
+            export_file_path = os.path.join(self.output_dir, "all_file_links.txt")
+            self.progress_signal.emit(f"📋 Export All Links Mode: Extracting {len(files_to_download)} links...")
+            try:
+                with open(export_file_path, "a", encoding="utf-8") as f:
+                    f.write(f"\n# Erome: {album_name}\n")
+                    for file_data in files_to_download:
+                        if file_data.get('url'):
+                            f.write(file_data.get('url') + "\n")
+                self.progress_signal.emit(f"✅ Exported links to {export_file_path}")
+                download_count = len(files_to_download)
+            except Exception as e:
+                self.progress_signal.emit(f"❌ Failed to export links: {e}")
+            self.finished_signal.emit(download_count, 0, self.is_cancelled)
             return
 
         album_path = os.path.join(self.output_dir, album_name)

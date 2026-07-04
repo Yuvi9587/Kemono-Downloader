@@ -24,8 +24,9 @@ from ...core.database_manager import DatabaseManager
 class Rule34DownloadThread(QThread):
     finished_signal = pyqtSignal(int, int, bool)
 
-    def __init__(self, url, output_dir, api_key="", user_id="", parent=None):
+    def __init__(self, url, output_dir, api_key="", user_id="", parent=None, export_all_links_mode=False):
         super().__init__(parent)
+        self.export_all_links_mode = export_all_links_mode
         self.url = url
         self.output_dir = output_dir
         self.api_key = api_key
@@ -450,6 +451,10 @@ class Rule34DownloadThread(QThread):
                     if is_image and not self.dl_images: continue
                     if not is_video and not is_image: continue  # skip audio/archive/unknown
 
+                    if getattr(self, 'export_all_links_mode', False):
+                        download_tasks.append((file_url, None, None, None, None, None, None, None, None, None))
+                        continue
+
                     file_hash = post.get('hash', '')
                     post_id = post.get('id', 'Unknown')
                     
@@ -607,6 +612,24 @@ class Rule34DownloadThread(QThread):
                         download_tasks.append((file_url, save_path, file_hash, post_tags_list, search_category, post, log_folder_path, safe_type, trigger_word, tags))
 
                 if download_tasks:
+                    if getattr(self, 'export_all_links_mode', False):
+                        self.main_app.log_signal.emit(f"\n[📋 EXPORT] Exporting {len(download_tasks)} links...")
+                        export_file_path = os.path.join(self.output_dir, "all_file_links.txt")
+                        try:
+                            with open(export_file_path, "a", encoding="utf-8") as f:
+                                f.write(f"\n# Rule34 Query: {tags}\n")
+                                for task in download_tasks:
+                                    f.write(task[0] + "\n")
+                                    total_count += 1
+                            self.main_app.log_signal.emit(f"[✅] Exported {len(download_tasks)} links to {export_file_path}")
+                        except Exception as e:
+                            self.main_app.log_signal.emit(f"[❌] Failed to export links: {e}")
+                        
+                        if self.max_downloads > 0 and total_count >= self.max_downloads:
+                            break
+                        pid += 1
+                        continue
+
                     self.main_app.log_signal.emit(f"\n[⚡ TURBO] Firing up {self.max_workers} concurrent workers for {len(download_tasks)} files...")
                     
                     with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
@@ -639,11 +662,12 @@ class Rule34DownloadThread(QThread):
                 self.main_app.log_signal.emit(f"\n[ERROR] API communication failure on page {pid + 1}: {e}")
                 break
 
-        try:
-            with open(self.hash_db_path, 'w', encoding='utf-8') as f:
-                json.dump(self.hash_db, f, indent=4)
-        except Exception as e:
-            self.main_app.log_signal.emit(f"[ERROR] Could not commit hash database to disk: {e}")
+        if not getattr(self, 'export_all_links_mode', False):
+            try:
+                with open(self.hash_db_path, 'w', encoding='utf-8') as f:
+                    json.dump(self.hash_db, f, indent=4)
+            except Exception as e:
+                self.main_app.log_signal.emit(f"[ERROR] Could not commit hash database to disk: {e}")
 
         finish_msg = f"""
 ┌───────────────────────────────────────────────────────────────────────

@@ -111,6 +111,7 @@ def fetch_single_post_data(api_domain, service, user_id, post_id, headers, logge
     post_api_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}/post/{post_id}"
     logger(f"      Fetching full content for post ID {post_id}...")
 
+    # Maximum number of retries before giving up on this post
     max_retries = 4
     
     for attempt in range(max_retries + 1):

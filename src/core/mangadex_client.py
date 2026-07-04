@@ -6,7 +6,7 @@ import cloudscraper
 from collections import defaultdict
 from ..utils.file_utils import clean_folder_name
 
-def fetch_mangadex_data(start_url, output_dir, logger_func, file_progress_callback, overall_progress_callback, pause_event, cancellation_event, proxies=None):
+def fetch_mangadex_data(start_url, output_dir, logger_func, file_progress_callback, overall_progress_callback, pause_event, cancellation_event, proxies=None, export_all_links_mode=False):
     """
     Fetches and downloads all content from a MangaDex series or chapter URL.
     Returns a tuple of (downloaded_count, skipped_count).
@@ -69,6 +69,18 @@ def fetch_mangadex_data(start_url, output_dir, logger_func, file_progress_callba
             chapter_folder = clean_folder_name(f"Vol {metadata['volume']:02d} Chap {metadata['chapter']:03d}{metadata['chapter_minor']} - {chapter_folder_title}".strip().strip('-').strip())
             final_save_path = os.path.join(output_dir, series_folder, chapter_folder)
             os.makedirs(final_save_path, exist_ok=True)
+            if export_all_links_mode:
+                export_file_path = os.path.join(output_dir, "all_file_links.txt")
+                try:
+                    with open(export_file_path, "a", encoding="utf-8") as f:
+                        f.write(f"\n# MangaDex: {metadata['manga']} - {chapter_folder_title}\n")
+                        for filename in image_files:
+                            f.write(base_url + filename + "\n")
+                    logger_func(f"📋 Exported {len(image_files)} links to {export_file_path}")
+                    grand_total_dl += len(image_files)
+                except Exception as e:
+                    logger_func(f"❌ Failed to export links: {e}")
+                continue
 
             for img_idx, filename in enumerate(image_files):
                 if _check_pause(): break

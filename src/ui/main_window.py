@@ -4679,7 +4679,8 @@ class DownloaderApp (QWidget ):
             service=service,
             id1=id1,
             id2=id2,
-            effective_output_dir_for_run=effective_output_dir_for_run
+            effective_output_dir_for_run=effective_output_dir_for_run,
+            export_all_links_mode=getattr(self, 'is_export_all_links_session', False)
         )
 
         if specialized_thread:
@@ -6750,8 +6751,9 @@ class DownloaderApp (QWidget ):
             if not cancelled_by_user and auto_retry_enabled and self.permanently_failed_files_for_dialog:
                 num_files_to_retry = len(self.permanently_failed_files_for_dialog)
                 self.log_signal.emit("=" * 40)
-                self.log_signal.emit(f"🔄 Auto-retry is enabled. Starting a new session for {num_files_to_retry} previously failed file(s)...")
+                self.log_signal.emit(f"🔄 Auto-retry is enabled. Starting pass 1 of up to 3 for {num_files_to_retry} previously failed file(s)...")
                 
+                self.auto_retry_current_pass = 1
                 self._start_failed_files_retry_session(files_to_retry_list=list(self.permanently_failed_files_for_dialog))
                 
                 self.is_finishing = False 
@@ -6908,6 +6910,9 @@ class DownloaderApp (QWidget ):
             raw_files_list = list(self.retryable_failed_files_info)
             self.retryable_failed_files_info.clear()
 
+        # Clear the permanent list so it only gets re-populated with files that fail the retry
+        self.permanently_failed_files_for_dialog.clear()
+
         unique_files = []
         seen_urls = set()
         
@@ -7035,7 +7040,9 @@ class DownloaderApp (QWidget ):
         service = job_details.get('service', '')
         user_id = str(job_details.get('user_id', ''))
         
-        override_dir = job_details.get('override_output_dir') or job_details.get('target_folder_path')
+        # For a retry, target_folder_path is the EXACT resolved directory where the file should go
+        # (including the creator name, Visual Sort logic, and Post Subfolder).
+        override_dir = job_details.get('target_folder_path')
         
         base_dir = self.dir_input.text().strip()
         if not override_dir or os.path.normpath(override_dir) == os.path.normpath(base_dir):
@@ -7052,7 +7059,10 @@ class DownloaderApp (QWidget ):
             'service': service, 
             'user_id': user_id, 
             'api_url_input': job_details.get('api_url_input', ''),
-            'override_output_dir': override_dir
+            'override_output_dir': override_dir,
+            # Force disable folder generation logic so PostProcessorWorker doesn't append post subfolders again
+            'separate_posts': False,
+            'use_subfolders': False
         }
         
         worker = PostProcessorWorker(**ppw_init_args)
@@ -7116,11 +7126,13 @@ class DownloaderApp (QWidget ):
             self.retry_thread_pool = None
 
         auto_retry_enabled = self.settings.value(AUTO_RETRY_ON_FINISH_KEY, False, type=bool)
-        
-        if auto_retry_enabled and self.failed_retry_count_in_session > 0:
+        current_pass = getattr(self, 'auto_retry_current_pass', 1)
+
+        if auto_retry_enabled and self.failed_retry_count_in_session > 0 and current_pass < 3:
+            self.auto_retry_current_pass = current_pass + 1
             num_files_to_retry = self.failed_retry_count_in_session
             self.log_signal.emit("=" * 40)
-            self.log_signal.emit(f"🔄 Auto-retry is enabled. Looping again for {num_files_to_retry} newly failed file(s)...")
+            self.log_signal.emit(f"🔄 Auto-retry is enabled. Starting pass {self.auto_retry_current_pass} of up to 3 for {num_files_to_retry} newly failed file(s)...")
             
             self._start_failed_files_retry_session(files_to_retry_list=list(self.permanently_failed_files_for_dialog))
             return
@@ -7376,8 +7388,8 @@ class DownloaderApp (QWidget ):
                 return
 
         service, user_id, post_id = extract_post_info(url)
-        safe_service = service if service else "unknown_site"
-        safe_user_id = user_id if user_id else "unknown_creator"
+        safe_service = clean_folder_name(service) if service else "unknown_site"
+        safe_user_id = clean_folder_name(user_id) if user_id else "unknown_creator"
         filename = f"Exported_Links_{safe_service}_{safe_user_id}.txt"
         
         filepath = os.path.join(main_ui_download_dir, filename)
@@ -7423,6 +7435,11 @@ class DownloaderApp (QWidget ):
                 post_id = entry.get('post_id', '')
                 if url:
                     lines.append(f"{url} [Post: '{post_title}' (ID: {post_id}), File: '{filename}']")
+
+            if not lines:
+                # Specialized threads (rule34, etc.) handle their own export file (all_file_links.txt)
+                # and don't populate the buffer, so we don't want to write an empty file here.
+                return
 
             with open(filepath, 'w', encoding='utf-8') as f:
                 for line in lines:

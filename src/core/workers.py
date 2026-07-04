@@ -13,6 +13,7 @@ from collections import deque, defaultdict
 from datetime import datetime 
 import hashlib
 from .visual_sorter import VisualSorter
+from .database_manager import DatabaseManager
 from concurrent.futures import ThreadPoolExecutor, as_completed, CancelledError, Future
 from io import BytesIO
 from urllib .parse import urlparse 
@@ -155,6 +156,7 @@ class PostProcessorWorker:
                  user_data_path=None,
                  export_all_links_mode=False
                  ):
+        self.db = DatabaseManager()
         self.post = post_data
         self.download_root = download_root
         self.known_names = known_names

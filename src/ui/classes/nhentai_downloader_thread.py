@@ -18,8 +18,9 @@ class NhentaiDownloadThread(QThread):
     
     EXTENSION_MAP = {'j': 'jpg', 'p': 'png', 'g': 'gif', 'w': 'webp' }
 
-    def __init__(self, gallery_data, output_dir, parent=None):
+    def __init__(self, gallery_data, output_dir, parent=None, export_all_links_mode=False):
         super().__init__(parent)
+        self.export_all_links_mode = export_all_links_mode
         self.gallery_data = gallery_data
         self.output_dir = output_dir
         self.is_cancelled = False
@@ -77,6 +78,28 @@ class NhentaiDownloadThread(QThread):
         
         img_timeout = (30, 120) if self.proxies else 60
 
+
+        if self.export_all_links_mode:
+            self.progress_signal.emit(f"📋 Export All Links Mode: Extracting links for nHentai Gallery {gallery_id}...")
+            export_file_path = os.path.join(self.output_dir, "all_file_links.txt")
+            extracted_links = []
+            
+            for i, page_data in enumerate(pages_info):
+                page_path = page_data.get('path', '')
+                full_url = f"https://i.nhentai.net/{page_path}"
+                extracted_links.append(full_url)
+            
+            try:
+                with open(export_file_path, "a", encoding="utf-8") as f:
+                    f.write(f"\n# nHentai Gallery: {title} ({gallery_id})\n")
+                    for link in extracted_links:
+                        f.write(link + "\n")
+                self.progress_signal.emit(f"✅ Exported {len(extracted_links)} links to {export_file_path}")
+            except Exception as e:
+                self.progress_signal.emit(f"❌ Failed to write links to {export_file_path}: {e}")
+                
+            self.finished_signal.emit(len(extracted_links), 0, False)
+            return
 
         for i, page_data in enumerate(pages_info):
             if self.is_cancelled: break

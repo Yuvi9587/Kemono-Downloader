@@ -28,7 +28,7 @@ from .rule34_downloader_thread import Rule34DownloadThread
 from .hotleaks_thread import HotleaksThread  
 from .coomerfans_thread import CoomerfansThread
 
-def create_downloader_thread(main_app, api_url, service, id1, id2, effective_output_dir_for_run):
+def create_downloader_thread(main_app, api_url, service, id1, id2, effective_output_dir_for_run, export_all_links_mode=False):
     """
     Factory function to create and configure the correct QThread for a given URL.
     Returns a configured QThread instance, a specific error string ("COOKIE_ERROR", "FETCH_ERROR"),
@@ -57,16 +57,16 @@ def create_downloader_thread(main_app, api_url, service, id1, id2, effective_out
         )
 
     if 'erome.com' in api_url:
-        return EromeDownloadThread(api_url, effective_output_dir_for_run, main_app)
+        return EromeDownloadThread(api_url, effective_output_dir_for_run, main_app, export_all_links_mode=export_all_links_mode)
 
     if service == 'rule34':
         main_app.log_signal.emit("ℹ️ Rule34 URL detected. Starting dedicated downloader.")
         
         api_key, user_id = main_app.get_booru_credentials()
         
-        return Rule34DownloadThread(api_url, effective_output_dir_for_run, api_key, user_id, main_app)
+        return Rule34DownloadThread(api_url, effective_output_dir_for_run, api_key, user_id, main_app, export_all_links_mode=export_all_links_mode)
     if 'mangadex.org' in api_url:
-        return MangaDexDownloadThread(api_url, effective_output_dir_for_run, main_app)
+        return MangaDexDownloadThread(api_url, effective_output_dir_for_run, main_app, export_all_links_mode=export_all_links_mode)
 
     is_saint2_url = service == 'saint2' or 'saint2.su' in api_url or 'saint2.pk' in api_url
     if is_saint2_url and api_url.strip().lower() != 'saint2.su':
@@ -88,7 +88,7 @@ def create_downloader_thread(main_app, api_url, service, id1, id2, effective_out
 
     if service == 'rule34video':
         main_app.log_signal.emit("ℹ️ Rule34Video.com URL detected. Starting dedicated downloader.")
-        return Rule34VideoDownloadThread(api_url, effective_output_dir_for_run, main_app)
+        return Rule34VideoDownloadThread(api_url, effective_output_dir_for_run, main_app, export_all_links_mode=export_all_links_mode)
 
     elif service == 'discord' and any(domain in api_url for domain in ['kemono.cr', 'kemono.su', 'kemono.party', 'pawchive.st', 'pawchive.pw']):
         main_app.log_signal.emit("ℹ️ Kemono Discord URL detected. Starting dedicated downloader.")
@@ -133,16 +133,17 @@ def create_downloader_thread(main_app, api_url, service, id1, id2, effective_out
         )
 
     if service == 'allcomic' or 'allcomic.com' in api_url or 'allporncomic.com' in api_url:
-        return AllcomicDownloadThread(api_url, effective_output_dir_for_run, main_app)
+        return AllcomicDownloadThread(api_url, effective_output_dir_for_run, main_app, export_all_links_mode=export_all_links_mode)
 
     if service == 'hentai2read' or 'hentai2read.com' in api_url:
-        return Hentai2readDownloadThread(api_url, effective_output_dir_for_run, main_app)
+        return Hentai2readDownloadThread(api_url, effective_output_dir_for_run, main_app, export_all_links_mode=export_all_links_mode)
 
     if service == 'fap-nation' or 'fap-nation.com' in api_url or 'fap-nation.org' in api_url:
         use_post_subfolder = main_app.use_subfolder_per_post_checkbox.isChecked()
         return FapNationDownloadThread(
             api_url, effective_output_dir_for_run, use_post_subfolder,
-            main_app.pause_event, main_app.cancellation_event, main_app.actual_gui_signals, main_app
+            main_app.pause_event, main_app.cancellation_event, main_app.actual_gui_signals, main_app,
+            export_all_links_mode=export_all_links_mode
         )
 
     if service == 'coomerfans' or 'coomerfans.com' in api_url:
@@ -163,7 +164,7 @@ def create_downloader_thread(main_app, api_url, service, id1, id2, effective_out
         if not gallery_data:
             main_app.log_signal.emit(f"❌ Failed to fetch nHentai gallery data for ID {id1}.")
             return "FETCH_ERROR"
-        return NhentaiDownloadThread(gallery_data, effective_output_dir_for_run, main_app)
+        return NhentaiDownloadThread(gallery_data, effective_output_dir_for_run, main_app, export_all_links_mode=export_all_links_mode)
 
     if service == 'toonily' or 'toonily.com' in api_url:
         return ToonilyDownloadThread(api_url, effective_output_dir_for_run, main_app)
@@ -178,7 +179,8 @@ def create_downloader_thread(main_app, api_url, service, id1, id2, effective_out
             output_dir=effective_output_dir_for_run,
             pause_event=main_app.pause_event,
             cancellation_event=main_app.cancellation_event,
-            parent=main_app
+            parent=main_app,
+            export_all_links_mode=export_all_links_mode
         )
 
     if 'hentaifox.com' in api_url or service == 'hentaifox':
@@ -186,7 +188,8 @@ def create_downloader_thread(main_app, api_url, service, id1, id2, effective_out
         return HentaiFoxDownloadThread(
             url_or_id=api_url,
             output_dir=effective_output_dir_for_run,
-            parent=main_app
+            parent=main_app,
+            export_all_links_mode=export_all_links_mode
         )    
     
     if service == 'hotleaks' or 'hotleaks.tv' in api_url or 'hotleaks.vip' in api_url:
@@ -194,7 +197,8 @@ def create_downloader_thread(main_app, api_url, service, id1, id2, effective_out
         return HotleaksThread(
             url=api_url, 
             save_directory=effective_output_dir_for_run,
-            main_app=main_app 
+            main_app=main_app,
+            export_all_links_mode=export_all_links_mode
         )
         
     main_app.log_signal.emit(f"ℹ️ No specialized downloader found for service '{service}' and URL '{api_url[:50]}...'. Using generic downloader.")
