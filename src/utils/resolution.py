@@ -504,7 +504,9 @@ def setup_ui(main_app):
     main_app._update_multipart_toggle_button_text()
     log_title_layout.addWidget(main_app.multipart_toggle_button)
 
-    main_app.export_all_links_btn = QPushButton("📋 Export All Links")
+    main_app.export_all_links_btn = QPushButton(" Export All Links")
+    main_app.export_all_links_btn.setIcon(QIcon(get_asset_path("assets/Svg/export.svg")))
+    main_app.export_all_links_btn.setIconSize(QSize(int(16 * scale), int(16 * scale)))
     main_app.export_all_links_btn.setToolTip(
         "Fetch all post file URLs from this creator/URL without downloading them.\n"
         "Exports a list of direct download links to a .txt file for use in IDM or other download managers."
