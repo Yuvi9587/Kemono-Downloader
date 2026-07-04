@@ -90,7 +90,7 @@ def create_downloader_thread(main_app, api_url, service, id1, id2, effective_out
         main_app.log_signal.emit("ℹ️ Rule34Video.com URL detected. Starting dedicated downloader.")
         return Rule34VideoDownloadThread(api_url, effective_output_dir_for_run, main_app)
 
-    elif service == 'discord' and any(domain in api_url for domain in ['kemono.cr', 'kemono.su', 'kemono.party', 'pawchive.st']):
+    elif service == 'discord' and any(domain in api_url for domain in ['kemono.cr', 'kemono.su', 'kemono.party', 'pawchive.st', 'pawchive.pw']):
         main_app.log_signal.emit("ℹ️ Kemono Discord URL detected. Starting dedicated downloader.")
         cookies = prepare_cookies_for_request(
             use_cookie_flag=main_app.use_cookie_checkbox.isChecked(),

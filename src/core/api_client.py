@@ -244,7 +244,7 @@ def download_from_api(
         logger("   Download_from_api cancelled at start.")
         return
     
-    if not any(d in api_domain.lower() for d in ['kemono.su', 'kemono.party', 'kemono.cr', 'pawchive.st', 'coomer.su', 'coomer.party', 'coomer.st']):
+    if not any(d in api_domain.lower() for d in ['kemono.su', 'kemono.party', 'kemono.cr', 'pawchive.st', 'pawchive.pw', 'coomer.su', 'coomer.party', 'coomer.st']):
         logger(f"⚠️ Unrecognized domain '{api_domain}' from input URL. Defaulting to kemono.cr for API calls.")
         api_domain = "kemono.cr"
         

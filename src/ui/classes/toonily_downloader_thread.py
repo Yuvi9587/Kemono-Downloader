@@ -7,7 +7,12 @@ import cloudscraper
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from PIL import Image
-import imagehash
+try:
+    import imagehash
+    IMAGEHASH_AVAILABLE = True
+except ImportError:
+    imagehash = None
+    IMAGEHASH_AVAILABLE = False
 from ...core.database_manager import DatabaseManager
 
 from ...core.toonily_client import (

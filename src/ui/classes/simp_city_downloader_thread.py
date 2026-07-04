@@ -14,7 +14,12 @@ from curl_cffi import requests as cffi_requests
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from PIL import Image
-import imagehash
+try:
+    import imagehash
+    IMAGEHASH_AVAILABLE = True
+except ImportError:
+    imagehash = None
+    IMAGEHASH_AVAILABLE = False
 from ...core.database_manager import DatabaseManager
 
 from ...core.bunkr_client import fetch_bunkr_data

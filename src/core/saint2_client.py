@@ -2,7 +2,10 @@ import os
 import re as re_module
 import html
 import urllib.parse
-from curl_cffi import requests as cffi_requests
+try:
+    from curl_cffi import requests as cffi_requests
+except ImportError:
+    cffi_requests = None
 
 PATTERN_CACHE = {}
 

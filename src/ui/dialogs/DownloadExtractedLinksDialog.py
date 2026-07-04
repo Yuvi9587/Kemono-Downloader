@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QMessageBox, QPushButton, QVBoxLayout, QAbstractItemView, QLineEdit
 )
 from ...i18n.translator import get_translation
-from ..main_window import get_app_icon_object
+from ..assets import get_app_icon_object
 from ...utils.resolution import get_dark_theme
 
 class DownloadExtractedLinksDialog(QDialog):

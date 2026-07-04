@@ -13,7 +13,7 @@ from ...i18n.translator import get_translation
 from ...utils.resolution import get_dark_theme
 from ..assets import get_app_icon_object
 
-from ..main_window import get_app_icon_object
+
 from ...config.constants import (
     THEME_KEY, LANGUAGE_KEY, DOWNLOAD_LOCATION_KEY,
     RESOLUTION_KEY, UI_SCALE_KEY, SAVE_CREATOR_JSON_KEY,

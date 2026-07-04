@@ -4,10 +4,15 @@ import requests
 import re
 import random
 from datetime import datetime
+try:
+    import imagehash
+    IMAGEHASH_AVAILABLE = True
+except ImportError:
+    imagehash = None
+    IMAGEHASH_AVAILABLE = False
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from PIL import Image
-import imagehash
 from ...core.database_manager import DatabaseManager
 
 from ...core.deviantart_client import DeviantArtClient

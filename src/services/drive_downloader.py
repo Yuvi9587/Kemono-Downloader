@@ -57,6 +57,7 @@ def bytes_to_b64(b):
     return base64.b64encode(b).decode('utf-8')
 
 def _decrypt_mega_attribute(encrypted_attr_b64, key_bytes):
+    if not PYCRYPTODOME_AVAILABLE: return {}
     try:
         attr_bytes = b64_to_bytes(encrypted_attr_b64)
         padded_len = (len(attr_bytes) + 15) & ~15
@@ -72,6 +73,7 @@ def _decrypt_mega_attribute(encrypted_attr_b64, key_bytes):
         return {}
 
 def _decrypt_mega_key(encrypted_key_b64, master_key_bytes):
+    if not PYCRYPTODOME_AVAILABLE: raise Exception("pycryptodome missing")
     key_bytes = b64_to_bytes(encrypted_key_b64)
     iv = b'\0' * 16
     cipher = AES.new(master_key_bytes, AES.MODE_ECB)

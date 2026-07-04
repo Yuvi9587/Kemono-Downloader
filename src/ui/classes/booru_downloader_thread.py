@@ -8,10 +8,15 @@ import re
 import html
 from urllib.parse import urlparse
 import cloudscraper
+try:
+    import imagehash
+    IMAGEHASH_AVAILABLE = True
+except ImportError:
+    imagehash = None
+    IMAGEHASH_AVAILABLE = False
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from PIL import Image
-import imagehash
 
 from ...core.booru_client import fetch_booru_data, BooruClientException
 from ...utils.file_utils import clean_folder_name

@@ -66,13 +66,13 @@ class DownloadWorker(QThread):
                             if total > 0:
                                 self.progress_signal.emit(int(downloaded / total * 100))
             
-            if self.is_full_download or "fallback" in self.files[0][0]:
+            if self.is_full_download or (self.files and "fallback" in self.files[0][0]):
                 self.status_signal.emit("Refreshing AI engine tags in memory...")
                 if os.path.exists(self.model_path) and os.path.exists(self.csv_path):
                     try:
                         from src.core.visual_sorter import VisualSorter
                     except ImportError:
-                        from .visual_sorter import VisualSorter
+                        from ...core.visual_sorter import VisualSorter
                     
                     VisualSorter._instance = None
                     VisualSorter.get_instance(self.model_path, self.csv_path)

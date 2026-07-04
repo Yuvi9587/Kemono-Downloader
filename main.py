@@ -50,7 +50,7 @@ def handle_uncaught_exception(exc_type, exc_value, exc_traceback):
 def preload_ai_model():
     """Try to preload the AI model if it exists. If not, continue normally."""
     try:
-        models_dir = os.path.abspath(os.path.join("appdata", "models"))
+        models_dir = os.path.join(APP_BASE_DIR, "appdata", "models")
         model_path = os.path.join(models_dir, "model.onnx")
         csv_path = os.path.join(models_dir, "selected_tags.csv")
         

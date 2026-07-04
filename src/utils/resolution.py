@@ -376,6 +376,7 @@ def setup_ui(main_app):
     main_app.error_btn.setIconSize(QSize(int(18 * scale), int(18 * scale)))
     main_app.error_btn.setToolTip("View files skipped due to errors and optionally retry them.")
     main_app.error_btn.setEnabled(True)
+
     btn_layout.addWidget(main_app.download_btn)
     btn_layout.addWidget(main_app.add_queue_btn) 
     btn_layout.addWidget(main_app.pause_btn)
@@ -502,6 +503,14 @@ def setup_ui(main_app):
     main_app.multipart_toggle_button.setFixedWidth(int(130 * scale))
     main_app._update_multipart_toggle_button_text()
     log_title_layout.addWidget(main_app.multipart_toggle_button)
+
+    main_app.export_all_links_btn = QPushButton("📋 Export All Links")
+    main_app.export_all_links_btn.setToolTip(
+        "Fetch all post file URLs from this creator/URL without downloading them.\n"
+        "Exports a list of direct download links to a .txt file for use in IDM or other download managers."
+    )
+    main_app.export_all_links_btn.setEnabled(True)
+    log_title_layout.addWidget(main_app.export_all_links_btn)
     main_app.EYE_ICON = ""
     main_app.CLOSED_EYE_ICON = ""
     main_app.EYE_ICON_PATH = get_asset_path("assets/Svg/eye_open.svg")

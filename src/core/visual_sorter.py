@@ -68,6 +68,8 @@ class VisualSorter:
                     self.character_end_idx = reader.line_num - 2
                 self.tags.append(tag_name)
                 
+        if self.character_start_idx is None:
+            self.character_start_idx = len(self.tags)
         if self.character_end_idx is None:
             self.character_end_idx = len(self.tags)
 

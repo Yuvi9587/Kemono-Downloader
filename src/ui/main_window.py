@@ -243,6 +243,8 @@ class DownloaderApp (QWidget ):
         self.selected_cookie_filepath = None
         self.retryable_failed_files_info = []
         self.is_paused = False
+        self.is_export_all_links_session = False
+        self.export_all_links_buffer = []  # accumulates {'post_id', 'post_title', 'url', 'filename'} per post
         self.worker_to_gui_queue = queue.Queue()
         self.gui_update_timer = QTimer(self)
         self.actual_gui_signals = PostProcessorSignals()
@@ -1576,6 +1578,8 @@ class DownloaderApp (QWidget ):
             self .history_button .clicked .connect (self ._show_download_history_dialog )
         if hasattr (self ,'error_btn'):
             self .error_btn .clicked .connect (self ._show_error_files_dialog )
+        if hasattr(self, 'export_all_links_btn'):
+            self.export_all_links_btn.clicked.connect(self._export_all_links_action)
         if hasattr(self, 'support_button'): 
             self.support_button.clicked.connect(self._show_support_dialog)
 
@@ -1822,6 +1826,10 @@ class DownloaderApp (QWidget ):
                     self ._handle_file_successfully_downloaded (payload [0 ])
                 elif signal_type == 'worker_finished':
                     self.actual_gui_signals.worker_finished_signal.emit(payload[0] if payload else tuple())
+                elif signal_type == 'collected_file_links':
+                    # payload: (post_id, post_title, link_entries)
+                    if len(payload) == 3:
+                        self._handle_collected_file_links(payload[0], payload[1], payload[2])
                 elif signal_type == 'set_progress_label' and self.progress_label:
                     self.progress_label.setText(payload[0] if payload else "")
                 elif signal_type == 'set_ui_enabled':
@@ -4367,10 +4375,10 @@ class DownloaderApp (QWidget ):
                     'txt_file': 'kemono.txt',
                     'url_regex': r'https?://(?:www\.)?kemono\.(?:su|party|cr)/[^/\s]+/user/\d+(?:/post/\d+)?/?'
                 },
-                'pawchive.st': {
+                'pawchive.pw': {
                     'name': 'Kemono Batch',
                     'txt_file': 'kemono.txt',
-                    'url_regex': r'https?://(?:www\.)?pawchive\.st/[^/\s]+/user/\d+(?:/post/\d+)?/?'
+                    'url_regex': r'https?://(?:www\.)?pawchive\.(?:pw|st)/[^/\s]+/user/\d+(?:/post/\d+)?/?'
                 },
 
                 'coomer.st': {
@@ -4615,11 +4623,12 @@ class DownloaderApp (QWidget ):
                 return False
             effective_output_dir_for_run = os.path.normpath(override_output_dir)
         else:
-            if not extract_links_only and not main_ui_download_dir:
+            skip_dir_check = extract_links_only or getattr(self, 'is_export_all_links_session', False)
+            if not skip_dir_check and not main_ui_download_dir:
                 QMessageBox.critical(self, "Input Error", "Download Directory is required.")
                 return False
 
-            if not extract_links_only and main_ui_download_dir and not os.path.isdir(main_ui_download_dir):
+            if not skip_dir_check and main_ui_download_dir and not os.path.isdir(main_ui_download_dir):
                 reply = QMessageBox.question(self, "Create Directory?",
                                              f"The directory '{main_ui_download_dir}' does not exist.\nCreate it now?",
                                              QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
@@ -4636,7 +4645,7 @@ class DownloaderApp (QWidget ):
             effective_output_dir_for_run = os.path.normpath(main_ui_download_dir) if main_ui_download_dir else ""
 
         self.last_effective_download_dir = effective_output_dir_for_run
-        if not is_restore:
+        if not is_restore and not getattr(self, 'is_export_all_links_session', False):
             self._create_initial_session_file(api_url, effective_output_dir_for_run, remaining_queue=self.favorite_download_queue)
 
         self.download_history_candidates.clear()
@@ -4713,7 +4722,7 @@ class DownloaderApp (QWidget ):
         self.save_creator_json_enabled_this_session = self.settings.value(SAVE_CREATOR_JSON_KEY, True, type=bool)
         self.is_single_post_session = bool(post_id_from_url) 
 
-        if not self.is_single_post_session:
+        if not self.is_single_post_session and not getattr(self, 'is_export_all_links_session', False):
             self.save_creator_json_enabled_this_session = self.settings.value(SAVE_CREATOR_JSON_KEY, True, type=bool)
 
             creator_profile_data = {}
@@ -5178,7 +5187,7 @@ class DownloaderApp (QWidget ):
             'filter_mode': backend_filter_mode,
             'text_only_scope': text_only_scope_for_run,
             'text_export_format': export_format_for_run,
-            'single_pdf_mode': self.single_pdf_setting,
+            'single_pdf_mode': self.single_pdf_setting and not getattr(self, 'is_export_all_links_session', False),
             'skip_zip': effective_skip_zip,
             'use_subfolders': use_subfolders,
             'use_post_subfolders': use_post_subfolders,
@@ -5245,7 +5254,8 @@ class DownloaderApp (QWidget ):
             'proxies': current_proxies,  
             'download_revisions': self.revisions_checkbox.isChecked() if hasattr(self, 'revisions_checkbox') else False,                
             'visual_sort_active': getattr(self, 'visual_sort_checkbox', None) and self.visual_sort_checkbox.isChecked(),
-            'user_data_path': getattr(self, 'user_data_path', "")
+            'user_data_path': getattr(self, 'user_data_path', ""),
+            'export_all_links_mode': getattr(self, 'is_export_all_links_session', False)
         }
 
         args_template['override_output_dir'] = override_output_dir
@@ -6566,6 +6576,9 @@ class DownloaderApp (QWidget ):
                 return
             self.is_finishing = True
 
+            if getattr(self, 'is_export_all_links_session', False):
+                self._finish_export_all_links()
+
             if cancelled_by_user:
                 self.log_signal.emit("✅ Cancellation complete. Resetting UI.")
                 
@@ -6981,7 +6994,14 @@ class DownloaderApp (QWidget ):
             'manga_date_file_counter_ref': None,
             'download_revisions': self.revisions_checkbox.isChecked() if hasattr(self, 'revisions_checkbox') else False,
             'visual_sort_active': getattr(self, 'visual_sort_checkbox', None) and self.visual_sort_checkbox.isChecked(),
-            'user_data_path': getattr(self, 'user_data_path', "")
+            'user_data_path': getattr(self, 'user_data_path', ""),
+            'use_date_prefix_for_subfolder': self.date_prefix_checkbox.isChecked() if hasattr(self, 'date_prefix_checkbox') else False,
+            'date_prefix_format': self.date_prefix_format,
+            'manga_mode_active': self.manga_mode_checkbox.isChecked() if hasattr(self, 'manga_mode_checkbox') else False,
+            'manga_filename_style': self.manga_filename_style,
+            'manga_date_prefix': self.manga_date_prefix_input.text().strip() if hasattr(self, 'manga_date_prefix_input') else "",
+            'manga_global_file_counter_ref': None,
+            'keep_in_post_duplicates': self.keep_duplicates_checkbox.isChecked() if hasattr(self, 'keep_duplicates_checkbox') else False
         }
 
         for job_details in self.files_for_current_retry_session:
@@ -7317,6 +7337,107 @@ class DownloaderApp (QWidget ):
             else:
                 self.multipart_toggle_button.setText(self._tr("multipart_off_button_text", "Multi-part: OFF"))
                 self.multipart_toggle_button.setToolTip(self._tr("multipart_off_button_tooltip", "Multipart download is OFF. Click to enable and set options."))
+
+    def _export_all_links_action(self):
+        """
+        Starts a download run in 'export_all_links_mode' — fetches every post from the given
+        creator URL, collects all direct file download links, then writes them to a .txt file.
+        No files are downloaded to disk.
+        """
+        from PyQt5.QtWidgets import QMessageBox
+        if self._is_download_active():
+            self.log_signal.emit("⚠️ Cannot start Export All Links while a download is in progress.")
+            return
+            
+        url = self.link_input.text().strip() if hasattr(self, 'link_input') else ""
+        if not url:
+            self.log_signal.emit("⚠️ Please enter a URL before using Export All Links.")
+            QMessageBox.critical(self, "Input Error", "URL is required.")
+            return
+
+        main_ui_download_dir = self.dir_input.text().strip() if hasattr(self, 'dir_input') else ""
+        if not main_ui_download_dir:
+            QMessageBox.critical(self, "Input Error", "Download Directory is required.")
+            return
+            
+        if not os.path.isdir(main_ui_download_dir):
+            reply = QMessageBox.question(self, "Create Directory?",
+                                         f"The directory '{main_ui_download_dir}' does not exist.\nCreate it now?",
+                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+            if reply == QMessageBox.Yes:
+                try:
+                    os.makedirs(main_ui_download_dir, exist_ok=True)
+                    self.log_signal.emit(f"ℹ️ Created directory: {main_ui_download_dir}")
+                except Exception as e:
+                    QMessageBox.critical(self, "Directory Error", f"Could not create directory: {e}")
+                    return
+            else:
+                self.log_signal.emit("❌ Export cancelled: Output directory does not exist and was not created.")
+                return
+
+        service, user_id, post_id = extract_post_info(url)
+        safe_service = service if service else "unknown_site"
+        safe_user_id = user_id if user_id else "unknown_creator"
+        filename = f"Exported_Links_{safe_service}_{safe_user_id}.txt"
+        
+        filepath = os.path.join(main_ui_download_dir, filename)
+
+        self.export_all_links_buffer = []
+        self.is_export_all_links_session = True
+        self._export_all_links_output_path = filepath
+
+        self.log_signal.emit("=" * 40)
+        self.log_signal.emit(f"📋 Export All Links: Fetching file URLs for '{url}' — no files will be downloaded.")
+        self.log_signal.emit(f"   Links will be saved to: {filepath}")
+
+        # Temporarily inject export_all_links_mode into the args and kick off the normal download pipeline
+        self.start_download()
+
+    def _handle_collected_file_links(self, post_id, post_title, link_entries):
+        """Called per-post during an Export All Links run. Accumulates the collected links."""
+        for entry in link_entries:
+            self.export_all_links_buffer.append({
+                'post_id': post_id,
+                'post_title': post_title,
+                'url': entry.get('url', ''),
+                'filename': entry.get('filename', ''),
+            })
+
+    def _finish_export_all_links(self):
+        """
+        Called when the download pipeline finishes during an Export All Links session.
+        Writes the accumulated links to the chosen .txt file.
+        """
+        self.is_export_all_links_session = False
+        filepath = getattr(self, '_export_all_links_output_path', None)
+        if not filepath:
+            return
+
+        from PyQt5.QtWidgets import QMessageBox
+        try:
+            lines = []
+            for entry in self.export_all_links_buffer:
+                url = entry.get('url', '')
+                filename = entry.get('filename', '')
+                post_title = entry.get('post_title', '')
+                post_id = entry.get('post_id', '')
+                if url:
+                    lines.append(f"{url} [Post: '{post_title}' (ID: {post_id}), File: '{filename}']")
+
+            with open(filepath, 'w', encoding='utf-8') as f:
+                for line in lines:
+                    f.write(line + "\n")
+
+            self.log_signal.emit(f"✅ Export All Links: {len(lines)} file URL(s) written to: {filepath}")
+            QMessageBox.information(
+                self, "Export Complete",
+                f"Successfully exported {len(lines)} file link(s) to:\n{filepath}"
+            )
+        except Exception as e:
+            self.log_signal.emit(f"❌ Export All Links: Failed to write file — {e}")
+        finally:
+            self.export_all_links_buffer = []
+            self._export_all_links_output_path = None
 
     def _update_error_button_count(self):
         """Updates the Error button text to show the count of failed files."""

@@ -5,7 +5,12 @@ from PyQt5.QtCore import QThread, pyqtSignal
 import cloudscraper
 
 from PIL import Image
-import imagehash
+try:
+    import imagehash
+    IMAGEHASH_AVAILABLE = True
+except ImportError:
+    imagehash = None
+    IMAGEHASH_AVAILABLE = False
 from ...core.database_manager import DatabaseManager
 
 from ...core.rule34video_client import fetch_rule34video_data

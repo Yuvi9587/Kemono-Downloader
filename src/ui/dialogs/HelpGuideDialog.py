@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
     QStackedWidget, QListWidget, QFrame, QWidget, QScrollArea
 )
-from ..main_window import get_app_icon_object
+from ..assets import get_app_icon_object
 from ...utils.resolution import get_dark_theme
 
 class TourStepWidget(QWidget):

@@ -1,4 +1,7 @@
-from curl_cffi import requests as cffi_requests
+try:
+    from curl_cffi import requests as cffi_requests
+except ImportError:
+    cffi_requests = None
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, unquote, parse_qs
 import os

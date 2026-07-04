@@ -19,8 +19,12 @@ from urllib .parse import urlparse
 import requests
 import cloudscraper 
 import shutil
-import imagehash
-from ..core.database_manager import DatabaseManager
+try:
+    import imagehash
+    IMAGEHASH_AVAILABLE = True
+except ImportError:
+    imagehash = None
+    IMAGEHASH_AVAILABLE = False
 try:
     from PIL import Image
 except ImportError:
@@ -148,7 +152,8 @@ class PostProcessorWorker:
                  proxies=None,
                  download_revisions=False,
                  visual_sort_active=False, 
-                 user_data_path=None
+                 user_data_path=None,
+                 export_all_links_mode=False
                  ):
         self.post = post_data
         self.download_root = download_root
@@ -233,6 +238,7 @@ class PostProcessorWorker:
             self.db = DatabaseManager()
         else:
             self.db = None
+        self.export_all_links_mode = export_all_links_mode
 
 
         if self.compress_images and Image is None:
@@ -808,24 +814,24 @@ class PostProcessorWorker:
                 # immediately try fox.pawchive.st before falling back to the normal retry loop.
                 # Skip this for pending posts (single_attempt_only) — no point trying the fallback.
                 if (not single_attempt_only
-                        and 'file.pawchive.st' in file_url
+                        and ('file.pawchive.st' in file_url or 'file.pawchive.pw' in file_url)
                         and isinstance(e, requests.exceptions.ConnectionError)):
-                    fallback_url = file_url.replace('file.pawchive.st', 'fox.pawchive.st', 1)
-                    self.logger(f"   ⚠️ [Pawchive] 'file.pawchive.st' unreachable for '{api_original_filename}'. Trying fallback 'fox.pawchive.st'...")
+                    fallback_url = file_url.replace('file.pawchive.st', 'fox.pawchive.st', 1).replace('file.pawchive.pw', 'fox.pawchive.pw', 1)
+                    self.logger(f"   ⚠️ [Pawchive] 'file.pawchive' unreachable for '{api_original_filename}'. Trying fallback 'fox.pawchive'...")
                     try:
                         if response: response.close()
                         response = requests.get(fallback_url, headers=file_download_headers, timeout=(30, 300), stream=True, cookies=cookies_to_use_for_file, proxies=self.proxies, verify=False)
                         response.raise_for_status()
                         # Fallback succeeded — update file_url so subsequent retries also use fox.
                         file_url = fallback_url
-                        self.logger(f"   ✅ [Pawchive] Fallback to 'fox.pawchive.st' succeeded. Continuing download.")
+                        self.logger(f"   ✅ [Pawchive] Fallback to 'fox.pawchive' succeeded. Continuing download.")
                         # Re-raise nothing; fall through to the response-processing code on next iteration.
                         last_exception_for_retry_later = e  # keep for reference
                         # Close this response cleanly; the outer loop will re-open on next attempt
                         response.close()
                         response = None
                     except Exception as fallback_e:
-                        self.logger(f"   ❌ [Pawchive] Fallback 'fox.pawchive.st' also failed for '{api_original_filename}': {fallback_e}")
+                        self.logger(f"   ❌ [Pawchive] Fallback 'fox.pawchive' also failed for '{api_original_filename}': {fallback_e}")
                         last_exception_for_retry_later = fallback_e
                 else:
                     self.logger(f"   ❌ Download Error (Retryable): {api_original_filename}. Error: {e}")
@@ -1235,7 +1241,7 @@ class PostProcessorWorker:
             # "scraped"  = file has been successfully scraped and should be downloadable.
             # ---------------------------------------------------------------------------
             _api_domain_for_preview = urlparse(self.api_url_input).netloc.lower()
-            _is_pawchive = 'pawchive.st' in _api_domain_for_preview
+            _is_pawchive = 'pawchive.st' in _api_domain_for_preview or 'pawchive.pw' in _api_domain_for_preview
             _is_pawchive_pending_post = False
 
             if _is_pawchive and self.service != 'discord':
@@ -1460,7 +1466,7 @@ class PostProcessorWorker:
 
             all_files_from_post_api_for_char_check = []
             api_file_domain_for_char_check = urlparse(self.api_url_input).netloc
-            if not api_file_domain_for_char_check or ('kemono' not in api_file_domain_for_char_check.lower() and 'coomer' not in api_file_domain_for_char_check.lower() and 'pawchive.st' not in api_file_domain_for_char_check.lower()):
+            if not api_file_domain_for_char_check or ('kemono' not in api_file_domain_for_char_check.lower() and 'coomer' not in api_file_domain_for_char_check.lower() and 'pawchive.st' not in api_file_domain_for_char_check.lower() and 'pawchive.pw' not in api_file_domain_for_char_check.lower()):
                 api_file_domain_for_char_check = "coomer.su" if self.service.lower() in ['onlyfans', 'fansly', 'candfans'] else "kemono.su"
             if post_main_file_info and isinstance(post_main_file_info, dict) and post_main_file_info.get('path'):
                 original_api_name = post_main_file_info.get('name') or os.path.basename(post_main_file_info['path'].lstrip('/'))
@@ -1502,7 +1508,7 @@ class PostProcessorWorker:
                     try:
                         parsed_input_url_for_comments = urlparse(self.api_url_input)
                         api_domain_for_comments = parsed_input_url_for_comments.netloc
-                        if not any(d in api_domain_for_comments.lower() for d in ['kemono.su', 'kemono.party', 'kemono.cr', 'pawchive.st', 'coomer.su', 'coomer.party', 'coomer.st']):
+                        if not any(d in api_domain_for_comments.lower() for d in ['kemono.su', 'kemono.party', 'kemono.cr', 'pawchive.st', 'pawchive.pw', 'coomer.su', 'coomer.party', 'coomer.st']):
                             self.logger(f"⚠️ Unrecognized domain '{api_domain_for_comments}' for comment API. Defaulting based on service.")
                             api_domain_for_comments = "kemono.cr" if "kemono" in self.service.lower() else "coomer.st"
                        
@@ -1905,7 +1911,7 @@ class PostProcessorWorker:
                         result_tuple = (0, num_potential_files_in_post, [], [], [], None, None)
                         return result_tuple
 
-            if not self.extract_links_only and should_create_post_subfolder:
+            if not self.extract_links_only and not self.export_all_links_mode and should_create_post_subfolder:
                 cleaned_post_title_for_sub = robust_clean_name(post_title)
                 max_folder_len = 100 
                 if len(cleaned_post_title_for_sub) > max_folder_len:
@@ -1993,10 +1999,10 @@ class PostProcessorWorker:
             all_files_from_post_api = []
             api_file_domain = urlparse(self.api_url_input).netloc
             
-            if not api_file_domain or ('kemono' not in api_file_domain.lower() and 'coomer' not in api_file_domain.lower() and 'pawchive.st' not in api_file_domain.lower()):
+            if not api_file_domain or ('kemono' not in api_file_domain.lower() and 'coomer' not in api_file_domain.lower() and 'pawchive.st' not in api_file_domain.lower() and 'pawchive.pw' not in api_file_domain.lower()):
                 api_file_domain = "coomer.su" if self.service.lower() in ['onlyfans', 'fansly', 'candfans'] else "kemono.su"
-            elif 'pawchive.st' in api_file_domain.lower():
-                api_file_domain = "file.pawchive.st"
+            elif 'pawchive.st' in api_file_domain.lower() or 'pawchive.pw' in api_file_domain.lower():
+                api_file_domain = "file.pawchive.pw"
 
             if post_main_file_info and isinstance(post_main_file_info, dict) and post_main_file_info.get('path'):
                 file_path = post_main_file_info['path'].lstrip('/')
@@ -2052,6 +2058,20 @@ class PostProcessorWorker:
 
                 if new_count < original_count:
                     self.logger(f"   De-duplicated file list: Removed {original_count - new_count} redundant entries from the API response.")
+
+            # ── Export-All-Links mode: collect URLs and skip the actual download ──
+            if self.export_all_links_mode:
+                link_entries = []
+                for f_info in all_files_from_post_api:
+                    url = f_info.get('url', '')
+                    name = f_info.get('_original_name_for_log') or f_info.get('name', '')
+                    if url:
+                        link_entries.append({'url': url, 'filename': name})
+                if link_entries:
+                    self._emit_signal('collected_file_links', post_id, post_title, link_entries)
+                result_tuple = (0, len(link_entries), [], [], [], None, None)
+                self._emit_signal('worker_finished', result_tuple)
+                return result_tuple
 
             if self.scan_content_for_images and post_content_html and not self.extract_links_only:
                 self.logger(f"   Scanning post content for additional image URLs (Post ID: {post_id})...")

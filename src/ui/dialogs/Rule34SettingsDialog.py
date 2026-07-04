@@ -488,9 +488,28 @@ class Rule34SettingsDialog(QDialog):
         char_layout.addLayout(char_title_layout)
         
         char_header_layout = QHBoxLayout()
-        char_layout.addWidget(self.use_smart_sort_cb)
+        self.use_smart_sort_cb = QCheckBox("Enable Character Folder Sorting")
+        char_header_layout.addWidget(self.use_smart_sort_cb)
         char_header_layout.addStretch()
         char_layout.addLayout(char_header_layout)
+        
+        char_layout.addWidget(QLabel(f"<img src='{get_asset_path('assets/Svg/star.svg')}' width='13' height='13' align='top'> Favorites Manager"))
+        fav_input_layout = QHBoxLayout()
+        self.new_fav_input = MultiCompleterLineEdit()
+        self.new_fav_input.setPlaceholderText("Ctrl+Down to harvest!")
+        self.add_fav_btn = QPushButton("Add")
+        self.add_fav_btn.clicked.connect(self.add_character_to_db)
+        fav_input_layout.addWidget(self.new_fav_input)
+        fav_input_layout.addWidget(self.add_fav_btn)
+        char_layout.addLayout(fav_input_layout)
+
+        self.fav_list_widget = FavoritesListWidget()
+        self.fav_list_widget.setSelectionMode(QListWidget.ExtendedSelection)
+        self.fav_list_widget.delete_requested.connect(self.remove_selected_favorites)
+        char_layout.addWidget(self.fav_list_widget)
+
+        self.favorites_only_cb = QCheckBox("Only create folders for favorites")
+        char_layout.addWidget(self.favorites_only_cb)
 
         char_group.setLayout(char_layout)
         mid_col.addWidget(char_group)
@@ -766,6 +785,8 @@ class Rule34SettingsDialog(QDialog):
         self.whitelist_input.setText(settings.value("r34_whitelist", ""))
         
         self.use_smart_sort_cb.setChecked(settings.value("r34_smart_sort", False, type=bool))
+        self.favorites_only_cb.setChecked(settings.value("r34_favorites_only", False, type=bool))
+        
         self.use_scene_sort_cb.setChecked(settings.value("r34_use_scene_sort", False, type=bool))
         scene_tags_str = settings.value("r34_scene_tags", "1girl,bikini,beach")
         if scene_tags_str:
@@ -774,6 +795,10 @@ class Rule34SettingsDialog(QDialog):
         alias_str = settings.value("r34_tag_aliases", "1girl = solo, single, women")
         if alias_str:
             self.alias_list_widget.addItems(alias_str.split('||'))
+            
+        fav_str = settings.value("r34_character_favorites", "")
+        if fav_str:
+            self.fav_list_widget.addItems([f for f in fav_str.split('||') if f])
 
     def accept(self):
         settings = self.main_app.settings
@@ -797,6 +822,7 @@ class Rule34SettingsDialog(QDialog):
         settings.setValue("r34_whitelist", self.whitelist_input.text().strip())
         
         settings.setValue("r34_smart_sort", self.use_smart_sort_cb.isChecked())
+        settings.setValue("r34_favorites_only", self.favorites_only_cb.isChecked())
         
         settings.setValue("r34_use_scene_sort", self.use_scene_sort_cb.isChecked())
         scenes = [self.scene_list_widget.item(i).text() for i in range(self.scene_list_widget.count())]
@@ -805,7 +831,31 @@ class Rule34SettingsDialog(QDialog):
         aliases = [self.alias_list_widget.item(i).text() for i in range(self.alias_list_widget.count())]
         settings.setValue("r34_tag_aliases", "||".join(aliases))
         
+        favs = [self.fav_list_widget.item(i).text() for i in range(self.fav_list_widget.count())]
+        settings.setValue("r34_character_favorites", "||".join(favs))
+        
         super().accept()
+
+    def add_character_to_db(self):
+        input_text = self.new_fav_input.text()
+        new_chars = [c.strip().lower() for c in input_text.split(',') if c.strip()]
+        if not new_chars: return
+        
+        for new_char in reversed(new_chars):
+            items = self.fav_list_widget.findItems(new_char, Qt.MatchExactly)
+            if not items:
+                self.fav_list_widget.insertItem(0, new_char)
+                
+        self.new_fav_input.clear()
+        if hasattr(self, 'char_completer'):
+            self.char_completer.current_prefix = "" 
+
+    def remove_selected_favorites(self):
+        selected_items = self.fav_list_widget.selectedItems()
+        if not selected_items: return
+        
+        for item in selected_items:
+            self.fav_list_widget.takeItem(self.fav_list_widget.row(item))
 
     def save_credentials_to_settings(self):
         has_creds = hasattr(self.main_app, 'booru_creds_input')
@@ -854,7 +904,7 @@ class Rule34SettingsDialog(QDialog):
         self.hf_progress_bar.setVisible(False)
         db_name = getattr(self, 'current_download_db', "Database")
         if success:
-            if db_name == "characters.db":
+            if db_name == "AllTags.db":
                 self.all_tags_cache.clear()
                 self.setup_autocomplete()
             
@@ -879,7 +929,8 @@ class Rule34SettingsDialog(QDialog):
             line_edit.textEdited.connect(lambda text, le=line_edit, c=completer: self.on_text_edited(text, le, c))
             return completer
             
-        self.char_completer = make_completer(self.new_fav_input)
+        if hasattr(self, 'new_fav_input'):
+            self.char_completer = make_completer(self.new_fav_input)
         self.gen_completer = make_completer(self.scene_input)
         self.all_completer1 = make_completer(self.whitelist_input)
         self.all_completer2 = make_completer(self.custom_blacklist_input)
@@ -932,14 +983,9 @@ class Rule34SettingsDialog(QDialog):
                 print(f"DB Query Error: {e}")
                 return []
 
-        if line_edit == self.new_fav_input:
-            char_db = os.path.join(self.db_dir, "characters.db")
-            if os.path.exists(char_db):
-                rows = _query(char_db, "SELECT name FROM Tags WHERE name LIKE ? ORDER BY count DESC LIMIT 200", (search_sql,))
-                raw_matches = [r[0] for r in rows]
-            else:
-                rows = _query(all_tags_db, "SELECT name FROM CharacterTags WHERE name LIKE ? ORDER BY count DESC LIMIT 200", (search_sql,))
-                raw_matches = [r[0] for r in rows]
+        if line_edit == getattr(self, 'new_fav_input', None):
+            rows = _query(all_tags_db, "SELECT name FROM CharacterTags WHERE name LIKE ? ORDER BY count DESC LIMIT 200", (search_sql,))
+            raw_matches = [r[0] for r in rows]
                 
         elif line_edit == getattr(self, 'scene_input', None):
             gen_db = os.path.join(self.db_dir, "general.db")

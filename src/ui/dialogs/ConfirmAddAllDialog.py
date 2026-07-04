@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QVBoxLayout
 )
 from ...i18n.translator import get_translation
-from ..main_window import get_app_icon_object
+from ..assets import get_app_icon_object
 CONFIRM_ADD_ALL_ACCEPTED = 1
 CONFIRM_ADD_ALL_SKIP_ADDING = 2
 CONFIRM_ADD_ALL_CANCEL_DOWNLOAD = 3

@@ -59,6 +59,11 @@ class DatabaseManager:
             )
         ''')
         
+        try:
+            cursor.execute("ALTER TABLE Tags ADD COLUMN tag_type TEXT DEFAULT 'general'")
+        except sqlite3.OperationalError:
+            pass
+        
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS ImageTags (
                 hash TEXT,

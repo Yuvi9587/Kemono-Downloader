@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
 )
 
 from ...i18n.translator import get_translation
-from ..main_window import get_app_icon_object
+from ..assets import get_app_icon_object
 from ...core.api_client import download_from_api
 from ...utils.network_utils import extract_post_info, prepare_cookies_for_request
 from ...utils.resolution import get_dark_theme
