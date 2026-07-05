@@ -408,7 +408,7 @@ class DownloaderApp (QWidget ):
         self.download_location_label_widget = None
         self.remove_from_filename_label_widget = None
         self.skip_words_label_widget = None
-        self.setWindowTitle("Kemono Downloader v9.2.5")
+        self.setWindowTitle("Kemono Downloader v9.3.5")
         setup_ui(self)
         self._connect_signals()
 
@@ -7061,7 +7061,7 @@ class DownloaderApp (QWidget ):
             'api_url_input': job_details.get('api_url_input', ''),
             'override_output_dir': override_dir,
             # Force disable folder generation logic so PostProcessorWorker doesn't append post subfolders again
-            'separate_posts': False,
+            'use_post_subfolders': False,
             'use_subfolders': False
         }
         
