@@ -423,7 +423,9 @@ def download_gdrive_file(url, download_path, logger_func=print, progress_callbac
         sys.stdout = captured_output_buffer
         sys.stderr = captured_output_buffer
 
-        paths = gdown.download_folder(url, output=final_download_path, quiet=False, use_cookies=False, remaining_ok=True)
+        # Ensure final_download_path ends with a separator so gdown creates the original folder name inside it
+        output_path = final_download_path if final_download_path.endswith(os.sep) else final_download_path + os.sep
+        paths = gdown.download_folder(url, output=output_path, quiet=False, use_cookies=True)
         
     except Exception as e:
         logger_func(f"   [G-Drive] ❌ An unexpected error occurred: {e}")

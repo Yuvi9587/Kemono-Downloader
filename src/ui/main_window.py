@@ -2145,7 +2145,24 @@ class DownloaderApp (QWidget ):
                 self .cancellation_event .set ()
                 self .thread_pool .shutdown (wait =True ,cancel_futures =True )
                 self .thread_pool =None 
+            if hasattr(self, 'retry_thread_pool') and self.retry_thread_pool:
+                self.log_signal.emit("   Shutting down retry thread pool...")
+                self.retry_thread_pool.shutdown(wait=False, cancel_futures=True)
+                self.retry_thread_pool = None
+            if hasattr(self, 'visual_sort_thread_pool') and self.visual_sort_thread_pool:
+                self.log_signal.emit("   Shutting down visual sort thread pool...")
+                self.visual_sort_thread_pool.shutdown(wait=False, cancel_futures=True)
+                self.visual_sort_thread_pool = None
             self .log_signal .emit ("👋 Exiting application.")
+            
+            # Prevent daemon threads from crashing interpreter on shutdown due to stdout/stderr writing
+            import sys, os
+            try:
+                sys.stdout = open(os.devnull, 'w')
+                sys.stderr = open(os.devnull, 'w')
+            except Exception:
+                pass
+
             event .accept ()
 
 
@@ -3733,7 +3750,8 @@ class DownloaderApp (QWidget ):
         _ ,_ ,post_id =extract_post_info (url_text )
 
         is_creator_feed =not post_id if url_text else False 
-        enable_page_range =is_creator_feed 
+        is_fav_mode_active = self.favorite_mode_checkbox.isChecked() if hasattr(self, 'favorite_mode_checkbox') and self.favorite_mode_checkbox else False
+        enable_page_range =is_creator_feed or is_fav_mode_active
 
         for widget in [self .page_range_label ,self .start_page_input ,self .to_label ,self .end_page_input ]:
             if widget :widget .setEnabled (enable_page_range )
@@ -3857,10 +3875,7 @@ class DownloaderApp (QWidget ):
             if self .link_input :
                 self .link_input .clear ()
                 self .link_input .setEnabled (False )
-            for widget in [self .page_range_label ,self .start_page_input ,self .to_label ,self .end_page_input ]:
-                if widget :widget .setEnabled (False )
-            if self .start_page_input :self .start_page_input .clear ()
-            if self .end_page_input :self .end_page_input .clear ()
+
 
             self .update_custom_folder_visibility ()
             self .update_page_range_enabled_state ()
@@ -4568,6 +4583,16 @@ class DownloaderApp (QWidget ):
         if is_restore and self.interrupted_session_data:
             self.log_signal.emit("   Restoring session state...")
             download_state = self.interrupted_session_data.get("download_state", {})
+            
+            if download_state.get("is_finished_with_errors"):
+                self.log_signal.emit("ℹ️ Session finished with errors. Opening error dialog directly.")
+                self.is_restore_pending = False
+                self.interrupted_session_data = None
+                self._update_error_button_count()
+                self._update_button_states_and_connections()
+                self._show_error_files_dialog()
+                return True
+                
             processed_post_ids_for_restore = download_state.get("processed_post_ids", [])
             start_offset_for_restore = download_state.get("last_processed_offset", 0)
             restored_hashes = download_state.get("successfully_downloaded_hashes", [])
@@ -5250,6 +5275,7 @@ class DownloaderApp (QWidget ):
             'start_offset': start_offset_for_restore, 
             'fetch_first': fetch_first_enabled, 
             'sfp_threshold': download_commands.get('sfp_threshold'),
+            'min_files_threshold': download_commands.get('min_files_threshold'),
             'handle_unknown_mode': handle_unknown_command,
             'add_info_in_pdf': self.add_info_in_pdf_setting,     
             'proxies': current_proxies,  
@@ -5318,7 +5344,7 @@ class DownloaderApp (QWidget ):
                     'keep_duplicates_limit', 'downloaded_hash_counts', 'downloaded_hash_counts_lock',
                     'processed_post_ids', 'domain_override',
                     'archive_only_mode', 'skip_file_size_mb', 
-                    'manga_custom_filename_format','manga_custom_date_format', 'manga_custom_suffix_format', 'sfp_threshold', 'download_revisions', 'creator_name_cache',
+                    'manga_custom_filename_format','manga_custom_date_format', 'manga_custom_suffix_format', 'sfp_threshold', 'min_files_threshold', 'download_revisions', 'creator_name_cache',
                     'proxies', 'visual_sort_active', 'user_data_path', 'add_info_in_pdf'
 
                 ]
@@ -5487,6 +5513,7 @@ class DownloaderApp (QWidget ):
         """Appends details of files that failed but might be retryable later."""
         if list_of_retry_details :
             self .retryable_failed_files_info .extend (list_of_retry_details )
+            self._update_error_button_count()
 
     def _handle_permanent_file_failure_from_thread (self ,list_of_permanent_failure_details ):
         """Handles permanently failed files signaled by the single BackendDownloadThread."""
@@ -5785,6 +5812,7 @@ class DownloaderApp (QWidget ):
             args_for_this_worker['domain_override'] = commands.get('domain_override')
             args_for_this_worker['archive_only_mode'] = commands.get('archive_only', False)
             args_for_this_worker['sfp_threshold'] = commands.get('sfp_threshold')
+            args_for_this_worker['min_files_threshold'] = commands.get('min_files_threshold')
             args_for_this_worker['handle_unknown_mode'] = commands.get('handle_unknown', False)
             
             skip_words_parts = [part.strip() for part in args_for_this_worker.get('skip_words_text', '').split(',') if part.strip()]
@@ -6243,7 +6271,7 @@ class DownloaderApp (QWidget ):
         self .radio_only_archives ,self .radio_only_links ,
         self .skip_zip_checkbox ,
         self .download_thumbnails_checkbox ,self .compress_images_checkbox ,
-        self .use_subfolders_checkbox ,self .use_subfolder_per_post_checkbox ,
+        self .use_subfolders_checkbox ,self.use_subfolder_per_post_checkbox ,
         self .manga_mode_checkbox ,
         self .manga_rename_toggle_button ,
         self .cookie_browse_button ,
@@ -6270,7 +6298,7 @@ class DownloaderApp (QWidget ):
         self .skip_words_input ,self .skip_scope_toggle_button ,self .remove_from_filename_input ,
         self .radio_all ,self .radio_images ,self .radio_videos ,self .radio_only_archives ,self .radio_only_links ,
         self .skip_zip_checkbox , self .download_thumbnails_checkbox ,self .compress_images_checkbox ,
-        self .use_subfolders_checkbox ,self .use_subfolder_per_post_checkbox ,self .scan_content_images_checkbox ,
+        self .use_subfolders_checkbox ,self.use_subfolder_per_post_checkbox ,self .scan_content_images_checkbox ,
         self .use_multithreading_checkbox ,self .thread_count_input ,self .thread_count_label ,
         self .favorite_mode_checkbox ,
         self .external_links_checkbox ,self .manga_mode_checkbox ,self .manga_rename_toggle_button ,self .use_cookie_checkbox ,self .cookie_text_input ,self .cookie_browse_button ,
@@ -6291,7 +6319,9 @@ class DownloaderApp (QWidget ):
                 self .log_signal .emit ("ℹ️ Cancelling active Mega download due to UI state change.")
                 self .external_link_download_thread .cancel ()
         else :
-            pass 
+            if self .bottom_action_buttons_stack :
+                has_errors = hasattr(self, 'permanently_failed_files_for_dialog') and len(self.permanently_failed_files_for_dialog) > 0
+                self .bottom_action_buttons_stack .setCurrentIndex (1 if (is_fav_mode_active and not has_errors) else 0 )
 
 
         for widget in all_potentially_toggleable_widgets :
@@ -6343,8 +6373,8 @@ class DownloaderApp (QWidget ):
         if self .thread_count_label :self .thread_count_label .setEnabled (enabled and multithreading_currently_on )
 
         subfolders_currently_on =self .use_subfolders_checkbox .isChecked ()
-        if self .use_subfolder_per_post_checkbox :
-            self .use_subfolder_per_post_checkbox .setEnabled (enabled or (self .is_paused and self .use_subfolder_per_post_checkbox in widgets_to_enable_on_pause ))
+        if self.use_subfolder_per_post_checkbox :
+            self.use_subfolder_per_post_checkbox .setEnabled (enabled or (self .is_paused and self.use_subfolder_per_post_checkbox in widgets_to_enable_on_pause ))
         if self .cancel_btn :self .cancel_btn .setEnabled (download_is_active_or_paused )
         if self .pause_btn :
             self .pause_btn .setEnabled (download_is_active_or_paused )
@@ -6402,7 +6432,7 @@ class DownloaderApp (QWidget ):
         self .character_search_input .clear ();self .thread_count_input .setText ("4");self .radio_all .setChecked (True );
         self .skip_zip_checkbox .setChecked (True );self .download_thumbnails_checkbox .setChecked (False );
         self .compress_images_checkbox .setChecked (False );self .use_subfolders_checkbox .setChecked (False );
-        self .use_subfolder_per_post_checkbox .setChecked (True );self .use_multithreading_checkbox .setChecked (True );
+        self.use_subfolder_per_post_checkbox .setChecked (True );self .use_multithreading_checkbox .setChecked (True );
         if self .favorite_mode_checkbox :self .favorite_mode_checkbox .setChecked (False )
         if hasattr (self ,'scan_content_images_checkbox'):self .scan_content_images_checkbox .setChecked (False )
         self .external_links_checkbox .setChecked (False )
@@ -6515,20 +6545,8 @@ class DownloaderApp (QWidget ):
             self.log_signal.emit("    Cancelling active External Link download thread...")
             self.external_link_download_thread.cancel()
 
-        if isinstance(self.download_thread, NhentaiDownloadThread): 
-            self.log_signal.emit("    Signaling nhentai download thread to cancel.")
-            self.download_thread.cancel()
-        if isinstance(self.download_thread, BunkrDownloadThread):
-            self.log_signal.emit("    Signaling Bunkr download thread to cancel.")
-            self.download_thread.cancel()
-        if isinstance(self.download_thread, Saint2DownloadThread):
-            self.log_signal.emit("    Signaling Saint2 download thread to cancel.")
-            self.download_thread.cancel()
-        if isinstance(self.download_thread, EromeDownloadThread):
-            self.log_signal.emit("    Signaling Erome download thread to cancel.")
-            self.download_thread.cancel()
-        if isinstance(self.download_thread, Hentai2readDownloadThread):
-            self.log_signal.emit("    Signaling Hentai2Read download thread to cancel.")
+        if hasattr(self.download_thread, 'cancel') and callable(getattr(self.download_thread, 'cancel')):
+            self.log_signal.emit(f"    Signaling {self.download_thread.__class__.__name__} to cancel.")
             self.download_thread.cancel()
             
         if self.thread_pool:
@@ -6547,8 +6565,10 @@ class DownloaderApp (QWidget ):
             
         self.download_finished(0, 0, True, [])
 
-    def _get_domain_for_service(self, service_name: str) -> str:
+    def _get_domain_for_service(self, service_name: str, source_api: str = None) -> str:
         """Determines the base domain for a given service."""
+        if source_api and "pawchive" in source_api.lower():
+            return "pawchive.pw"
         if not isinstance(service_name, str):
             return "kemono.cr"
         service_lower = service_name.lower()
@@ -6650,11 +6670,6 @@ class DownloaderApp (QWidget ):
                 self.is_processing_favorites_queue = False
                 self.log_signal.emit("✅ All items from the download queue have been processed.")
 
-            if not cancelled_by_user and not self.retryable_failed_files_info:
-                self._clear_session_file()
-                self.interrupted_session_data = None
-                self.is_restore_pending = False
-
             self._finalize_download_history()
             status_message = self._tr("status_completed", "Completed")
 
@@ -6725,26 +6740,12 @@ class DownloaderApp (QWidget ):
             self.file_progress_label.setText("")
 
             if not cancelled_by_user and self.retryable_failed_files_info:
-                num_failed = len(self.retryable_failed_files_info)
-                reply = QMessageBox.question(self, "Retry Failed Downloads?",
-                                             f"{num_failed} file(s) failed with potentially recoverable errors (e.g., IncompleteRead).\n\n"
-                                             "Would you like to attempt to download these failed files again?",
-                                             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
-                if reply == QMessageBox.Yes:
-                    self.is_finishing = False
-                    
-                    self.finish_lock.release()
-                    lock_held = False
-                    
-                    self._start_failed_files_retry_session()
-                    return
-                else:
-                    self.log_signal.emit("ℹ️ User chose not to retry failed files.")
-                    self.permanently_failed_files_for_dialog.extend(self.retryable_failed_files_info)
-                    if self.permanently_failed_files_for_dialog:
-                        self.log_signal.emit(f"🆘 Error button enabled. {len(self.permanently_failed_files_for_dialog)} file(s) can be viewed.")
-                    self.cancellation_message_logged_this_session = False
-                    self.retryable_failed_files_info.clear()
+                self.permanently_failed_files_for_dialog.extend(self.retryable_failed_files_info)
+                if self.permanently_failed_files_for_dialog:
+                    self.log_signal.emit(f"🆘 Error button enabled. {len(self.permanently_failed_files_for_dialog)} file(s) ultimately failed and can be viewed.")
+                self.cancellation_message_logged_this_session = False
+                self.retryable_failed_files_info.clear()
+                self._update_error_button_count()
 
             auto_retry_enabled = self.settings.value(AUTO_RETRY_ON_FINISH_KEY, False, type=bool)
             
@@ -6767,6 +6768,27 @@ class DownloaderApp (QWidget ):
             if not cancelled_by_user and not self.is_processing_favorites_queue:
                 if not getattr(self, 'is_running_job_queue', False):
                     self._execute_post_download_action()
+
+            if not cancelled_by_user:
+                if self.permanently_failed_files_for_dialog:
+                    # Save the failed files into the session file so they can be restored on next boot
+                    session_data = {
+                        "ui_settings": self._get_current_ui_settings_as_dict(),
+                        "download_state": {
+                            "permanently_failed_files": list(self.permanently_failed_files_for_dialog),
+                            "is_finished_with_errors": True
+                        }
+                    }
+                    if hasattr(self, 'interrupted_session_data') and self.interrupted_session_data:
+                        if 'download_state' in self.interrupted_session_data:
+                            # Preserve processed posts so we don't redownload on restore
+                            session_data['download_state']['processed_post_ids'] = self.interrupted_session_data['download_state'].get('processed_post_ids', [])
+                            session_data['download_state']['manga_counters'] = self.interrupted_session_data['download_state'].get('manga_counters', {})
+                    self._save_session_file(session_data)
+                else:
+                    self._clear_session_file()
+                    self.interrupted_session_data = None
+                    self.is_restore_pending = False
 
             self.set_ui_enabled(True)
             self._update_button_states_and_connections()
@@ -6910,9 +6932,6 @@ class DownloaderApp (QWidget ):
             raw_files_list = list(self.retryable_failed_files_info)
             self.retryable_failed_files_info.clear()
 
-        # Clear the permanent list so it only gets re-populated with files that fail the retry
-        self.permanently_failed_files_for_dialog.clear()
-
         unique_files = []
         seen_urls = set()
         
@@ -6936,6 +6955,7 @@ class DownloaderApp (QWidget ):
         _, download_commands = self._parse_character_filters(raw_character_filters_text)
         domain_override_command = download_commands.get('domain_override')
         sfp_threshold_command = download_commands.get('sfp_threshold')
+        min_files_threshold_command = download_commands.get('min_files_threshold')
         handle_unknown_command = download_commands.get('handle_unknown', False) 
 
         if domain_override_command:
@@ -6968,6 +6988,7 @@ class DownloaderApp (QWidget ):
             'creator_name_cache': self.creator_name_cache,
             'domain_override': domain_override_command,
             'sfp_threshold': sfp_threshold_command, 
+            'min_files_threshold': min_files_threshold_command,
             'handle_unknown_mode': handle_unknown_command, 
             'filter_mode': self.get_filter_mode(),
             'skip_zip': self.skip_zip_checkbox.isChecked(),
@@ -7004,28 +7025,42 @@ class DownloaderApp (QWidget ):
             'date_prefix_format': self.date_prefix_format,
             'manga_mode_active': self.manga_mode_checkbox.isChecked() if hasattr(self, 'manga_mode_checkbox') else False,
             'manga_filename_style': self.manga_filename_style,
+            'manga_custom_filename_format': self.custom_manga_filename_format if hasattr(self, 'custom_manga_filename_format') else "{published} {title}",
+            'manga_custom_date_format': self.manga_custom_date_format if hasattr(self, 'manga_custom_date_format') else "YYYY-MM-DD",
+            'manga_custom_suffix_format': self.custom_manga_suffix_format if hasattr(self, 'custom_manga_suffix_format') else "001",
             'manga_date_prefix': self.manga_date_prefix_input.text().strip() if hasattr(self, 'manga_date_prefix_input') else "",
             'manga_global_file_counter_ref': None,
             'keep_in_post_duplicates': self.keep_duplicates_checkbox.isChecked() if hasattr(self, 'keep_duplicates_checkbox') else False
         }
 
         for job_details in self.files_for_current_retry_session:
-            future = self.retry_thread_pool.submit(self._execute_single_file_retry, job_details, common_ppw_args_for_retry)
+            base_dir = self.dir_input.text().strip()
+            future = self.retry_thread_pool.submit(self._execute_single_file_retry, job_details, common_ppw_args_for_retry, base_dir)
             future.add_done_callback(self._handle_retry_future_result)
             self.active_retry_futures_map[future] = job_details 
             self.active_retry_futures.append(future)
 
-    def _execute_single_file_retry(self, job_details, common_args):
+    def _execute_single_file_retry(self, job_details, common_args, base_dir):
         """
         Reconstructs the original environment (Known.txt rules, AI rules, output paths) 
         for a single failed file and forces the PostProcessorWorker to try downloading it again.
         """
+        import sip
+        if sip.isdeleted(self):
+            return False
 
         file_info = job_details.get('file_info', {})
         file_url = file_info.get('url', '')
         
         if 'path' not in file_info and file_url:
             file_info['path'] = urlparse(file_url).path
+            
+        if 'file_index_in_post' in job_details:
+            file_info['_original_file_index'] = job_details['file_index_in_post']
+        if 'num_files_in_this_post' in job_details:
+            file_info['_original_num_files'] = job_details['num_files_in_this_post']
+        if 'forced_filename_override' in job_details:
+            file_info['_forced_filename_override'] = job_details['forced_filename_override']
 
         dummy_post_data = {
             'id': job_details.get('original_post_id_for_log', 'unknown_id'),
@@ -7086,6 +7121,10 @@ class DownloaderApp (QWidget ):
         return is_successful_download or is_resolved_as_skipped
 
     def _handle_retry_future_result (self ,future ):
+        import sip
+        if sip.isdeleted(self):
+            return
+
         self .processed_retry_count +=1 
         was_successful =False 
         try :
@@ -7143,10 +7182,20 @@ class DownloaderApp (QWidget ):
                     with open(self.session_file_path, 'r', encoding='utf-8') as f:
                         session_data = json.load(f)
                     
+                    should_clear = False
                     if 'download_state' in session_data:
                         session_data['download_state']['permanently_failed_files'] = self.permanently_failed_files_for_dialog
-                    self._save_session_file(session_data)
-                    self.log_signal.emit("ℹ️ Session file updated with retry results.")
+                        if session_data['download_state'].get('is_finished_with_errors') and not self.permanently_failed_files_for_dialog:
+                            should_clear = True
+                            
+                    if should_clear:
+                        self._clear_session_file()
+                        self.interrupted_session_data = None
+                        self.is_restore_pending = False
+                        self.log_signal.emit("ℹ️ All errors resolved. Session file cleared.")
+                    else:
+                        self._save_session_file(session_data)
+                        self.log_signal.emit("ℹ️ Session file updated with retry results.")
 
             except Exception as e:
                 self.log_signal.emit(f"⚠️ Could not update session file after retry: {e}")
@@ -7461,11 +7510,13 @@ class DownloaderApp (QWidget ):
         if not hasattr(self, 'error_btn'):
             return
 
-        count = len(self.permanently_failed_files_for_dialog)
+        count = len(getattr(self, 'permanently_failed_files_for_dialog', []))
+        count += len(getattr(self, 'retryable_failed_files_info', []))
+        
         base_text = self._tr("error_button_text", "Error")
 
         if count > 0:
-            self.error_btn.setText(f"({count}) {base_text}")
+            self.error_btn.setText(f"{base_text} ({count})")
         else:
             self.error_btn.setText(base_text)
 
@@ -7705,6 +7756,7 @@ class DownloaderApp (QWidget ):
             'project_root_dir': self.app_base_dir,
             'processed_post_ids': list(self.active_update_profile['processed_post_ids']),
             'sfp_threshold': download_commands.get('sfp_threshold'),
+            'min_files_threshold': download_commands.get('min_files_threshold'),
             'date_prefix_format': self.date_prefix_format,
             'domain_override': download_commands.get('domain_override'),
             'archive_only_mode': download_commands.get('archive_only', False),
@@ -7898,18 +7950,36 @@ class DownloaderApp (QWidget ):
 
             kemono_ok = bool(kemono_cookies)
             coomer_ok = bool(coomer_cookies)
+            
+            pawchive_cookies = prepare_cookies_for_request(
+                cookies_config['use_cookie'], cookies_config['cookie_text'], cookies_config['selected_cookie_file'],
+                cookies_config['app_base_dir'], lambda msg: self.log_signal.emit(f"[FavPosts Cookie Check] {msg}"),
+                target_domain="pawchive.pw"
+            )
+            if not pawchive_cookies:
+                self.log_signal.emit("  ↳ No cookies for pawchive.pw, trying fallback pawchive.st...")
+                pawchive_cookies = prepare_cookies_for_request(
+                    cookies_config['use_cookie'], cookies_config['cookie_text'], cookies_config['selected_cookie_file'],
+                    cookies_config['app_base_dir'], lambda msg: self.log_signal.emit(f"[FavPosts Cookie Check] {msg}"),
+                    target_domain="pawchive.st"
+                )
+                
+            pawchive_ok = bool(pawchive_cookies)
+            ok_count = sum([kemono_ok, coomer_ok, pawchive_ok])
 
-            if kemono_ok and not coomer_ok:
-                target_domain_preference_for_fetch = "kemono.cr"
-                self.log_signal.emit("  ↳ Only Kemono cookies loaded. Will fetch favorites from Kemono.cr only.")
-            elif coomer_ok and not kemono_ok:
-                target_domain_preference_for_fetch = "coomer.st"
-                self.log_signal.emit("  ↳ Only Coomer cookies loaded. Will fetch favorites from Coomer.st only.")
-            elif kemono_ok and coomer_ok:
+            if ok_count == 1:
+                if kemono_ok:
+                    target_domain_preference_for_fetch = "kemono.cr"
+                elif coomer_ok:
+                    target_domain_preference_for_fetch = "coomer.st"
+                elif pawchive_ok:
+                    target_domain_preference_for_fetch = "pawchive.pw"
+                self.log_signal.emit(f"  ↳ Only {target_domain_preference_for_fetch} cookies loaded. Will fetch favorites from there only.")
+            elif ok_count > 1:
                 target_domain_preference_for_fetch = None
-                self.log_signal.emit("  ↳ Cookies for both Kemono and Coomer loaded. Will attempt to fetch from both.")
+                self.log_signal.emit("  ↳ Cookies for multiple domains loaded. Will attempt to fetch from all available.")
             else:
-                self.log_signal.emit("  ↳ No valid cookies loaded for Kemono.cr or Coomer.st.")
+                self.log_signal.emit("  ↳ No valid cookies loaded for any supported domain.")
                 cookie_help_dialog = CookieHelpDialog(self, self)
                 cookie_help_dialog.exec_()
                 return
@@ -7925,7 +7995,7 @@ class DownloaderApp (QWidget ):
             if selected_posts :
                 self .log_signal .emit (f"ℹ️ Queuing {len (selected_posts )} favorite post(s) for download.")
                 for post_data in selected_posts :
-                    domain =self ._get_domain_for_service (post_data ['service'])
+                    domain =self ._get_domain_for_service (post_data ['service'], post_data.get('_source_api'))
                     direct_post_url =f"https://{domain }/{post_data ['service']}/user/{str (post_data ['creator_id'])}/post/{str (post_data ['post_id'])}"
 
                     queue_item ={

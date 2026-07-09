@@ -54,7 +54,8 @@ class FavoritePostsFetcherThread (QThread ):
 
         api_sources = [
             {"name": "Kemono.cr", "url": "https://kemono.cr/api/v1/account/favorites?type=post", "domain": "kemono.cr"},
-            {"name": "Coomer.st", "url": "https://coomer.st/api/v1/account/favorites?type=post", "domain": "coomer.st"}
+            {"name": "Coomer.st", "url": "https://coomer.st/api/v1/account/favorites?type=post", "domain": "coomer.st"},
+            {"name": "Pawchive", "url": "https://pawchive.pw/api/v1/account/favorites?type=post", "domain": "pawchive.pw"}
         ]
 
         api_sources_to_try =[]
@@ -78,7 +79,14 @@ class FavoritePostsFetcherThread (QThread ):
             cookies_dict_for_source = None
             if self.cookies_config['use_cookie']:
                 primary_domain = source['domain']
-                fallback_domain = "kemono.su" if "kemono" in primary_domain else "coomer.su"
+                if "kemono" in primary_domain:
+                    fallback_domain = "kemono.su"
+                elif "coomer" in primary_domain:
+                    fallback_domain = "coomer.su"
+                elif "pawchive" in primary_domain:
+                    fallback_domain = "pawchive.st"
+                else:
+                    fallback_domain = None
 
                 cookies_dict_for_source = prepare_cookies_for_request(
                     True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'],

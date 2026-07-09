@@ -3,6 +3,7 @@ import re
 CMD_ARCHIVE_ONLY = 'ao'
 CMD_DOMAIN_OVERRIDE_PREFIX = '.'
 CMD_SFP_PREFIX = 'sfp-'
+CMD_MIN_FILES_PREFIX = 'min-'
 CMD_UNKNOWN = 'unknown'
 
 def parse_commands_from_text(raw_text: str):
@@ -36,6 +37,14 @@ def parse_commands_from_text(raw_text: str):
                 threshold = int(threshold_str)
                 if 'sfp_threshold' not in commands:
                     commands['sfp_threshold'] = threshold
+            except (ValueError, IndexError):
+                pass
+        elif command_str.startswith(CMD_MIN_FILES_PREFIX):
+            try:
+                threshold_str = command_str[len(CMD_MIN_FILES_PREFIX):]
+                threshold = int(threshold_str)
+                if 'min_files_threshold' not in commands:
+                    commands['min_files_threshold'] = threshold
             except (ValueError, IndexError):
                 pass
         elif command_str == CMD_UNKNOWN:

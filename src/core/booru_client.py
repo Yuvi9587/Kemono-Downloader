@@ -129,8 +129,8 @@ class Extractor:
 class BaseExtractor(Extractor):
     instances = ()
 
-    def __init__(self, match, logger_func=print):
-        super().__init__(match, logger_func)
+    def __init__(self, match, logger_func=print, proxies=None):
+        super().__init__(match, logger_func, proxies)
         self._init_category()
 
     def _init_category(self):
@@ -160,8 +160,8 @@ class DanbooruExtractor(BaseExtractor):
     filename_fmt = "{category}_{id}_{filename}.{extension}"
     per_page = 200
 
-    def __init__(self, match, logger_func=print):
-        super().__init__(match, logger_func)
+    def __init__(self, match, logger_func=print, proxies=None):
+        super().__init__(match, logger_func, proxies)
         self._auth_logged = False
 
     def _init_auth(self):
@@ -247,8 +247,8 @@ class GelbooruBase(Extractor):
     category = "gelbooru"
     root = "https://gelbooru.com"
 
-    def __init__(self, match, logger_func=print):
-        super().__init__(match, logger_func)
+    def __init__(self, match, logger_func=print, proxies=None):
+        super().__init__(match, logger_func, proxies)
         self._auth_logged = False
     
     def _api_request(self, params, key="post"):

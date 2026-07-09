@@ -33,7 +33,9 @@ class FavoriteArtistsDialog (QDialog ):
         self ._init_ui ()
         self ._fetch_favorite_artists ()
 
-    def _get_domain_for_service(self, service_name):
+    def _get_domain_for_service(self, service_name, source_api=None):
+        if source_api and "pawchive" in source_api.lower():
+            return "pawchive.pw"
         service_lower = service_name.lower()
         coomer_primary_services = {'onlyfans', 'fansly', 'manyvids', 'candfans'}
         if service_lower in coomer_primary_services:
@@ -147,7 +149,18 @@ class FavoriteArtistsDialog (QDialog ):
                     self.cookies_config['app_base_dir'], self._logger, target_domain="coomer.su"
                 )
 
-            if not kemono_cookies and not coomer_cookies:
+            pawchive_cookies = prepare_cookies_for_request(
+                True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'],
+                self.cookies_config['app_base_dir'], self._logger, target_domain="pawchive.pw"
+            )
+            if not pawchive_cookies:
+                self._logger("No cookies for pawchive.pw, trying fallback pawchive.st...")
+                pawchive_cookies = prepare_cookies_for_request(
+                    True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'],
+                    self.cookies_config['app_base_dir'], self._logger, target_domain="pawchive.st"
+                )
+
+            if not kemono_cookies and not coomer_cookies and not pawchive_cookies:
                 self.status_label.setText(self._tr("fav_artists_cookies_required_status", "Error: Cookies enabled but could not be loaded for any source."))
                 self._logger("Error: Cookies enabled but no valid cookies were loaded. Showing help dialog.")
                 cookie_help_dialog = CookieHelpDialog(self.parent_app, self)
@@ -162,7 +175,8 @@ class FavoriteArtistsDialog (QDialog ):
 
         api_sources = [
             {"name": "Kemono.cr", "url": "https://kemono.cr/api/v1/account/favorites?type=artist", "domain": "kemono.cr"},
-            {"name": "Coomer.st", "url": "https://coomer.st/api/v1/account/favorites?type=artist", "domain": "coomer.st"}
+            {"name": "Coomer.st", "url": "https://coomer.st/api/v1/account/favorites?type=artist", "domain": "coomer.st"},
+            {"name": "Pawchive", "url": "https://pawchive.pw/api/v1/account/favorites?type=artist", "domain": "pawchive.pw"}
         ]
 
         for source in api_sources :
@@ -173,7 +187,14 @@ class FavoriteArtistsDialog (QDialog ):
             cookies_dict_for_source = None
             if self.cookies_config['use_cookie']:
                 primary_domain = source['domain']
-                fallback_domain = "kemono.su" if "kemono" in primary_domain else "coomer.su"
+                if "kemono" in primary_domain:
+                    fallback_domain = "kemono.su"
+                elif "coomer" in primary_domain:
+                    fallback_domain = "coomer.su"
+                elif "pawchive" in primary_domain:
+                    fallback_domain = "pawchive.st"
+                else:
+                    fallback_domain = None
 
                 cookies_dict_for_source = prepare_cookies_for_request(
                     True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'],
@@ -215,7 +236,7 @@ class FavoriteArtistsDialog (QDialog ):
                     artist_service_platform =artist_entry .get ("service")
 
                     if artist_id and artist_name and artist_service_platform :
-                        artist_page_domain =self ._get_domain_for_service (artist_service_platform )
+                        artist_page_domain =self ._get_domain_for_service (artist_service_platform, source['name'])
                         full_url =f"https://{artist_page_domain }/{artist_service_platform }/user/{artist_id }"
 
                         self .all_fetched_artists .append ({

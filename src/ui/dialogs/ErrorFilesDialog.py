@@ -1,9 +1,9 @@
 import os
 import re
-from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtCore import pyqtSignal, Qt, QSize
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
-    QMessageBox, QPushButton, QVBoxLayout, QAbstractItemView, QFileDialog, QCheckBox
+    QMessageBox, QPushButton, QVBoxLayout, QAbstractItemView, QFileDialog, QCheckBox, QWidget
 )
 
 from ...i18n.translator import get_translation
@@ -48,6 +48,7 @@ class ErrorFilesDialog(QDialog):
 
         self.files_list_widget = QListWidget()
         self.files_list_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.files_list_widget.itemClicked.connect(self._toggle_item_check_state)
         main_layout.addWidget(self.files_list_widget)
         self._populate_list()
 
@@ -180,14 +181,21 @@ class ErrorFilesDialog(QDialog):
         self.parent_app.settings.setValue(AUTO_RETRY_ON_FINISH_KEY, checked)
 
     def _add_item_to_list(self, error_info):
-        """Creates and adds a single QListWidgetItem based on error_info content."""
+        """Creates and adds a single QListWidgetItem based on error_info content, with error reason on the right."""
         if error_info.get('is_loaded_from_txt'):
             filename = error_info.get('file_info', {}).get('name', 'Unknown Filename')
             post_title = error_info.get('post_title', 'N/A')
             post_id = error_info.get('original_post_id_for_log', 'N/A')
-            item_text = f"File: {filename}\nPost: '{post_title}' (ID: {post_id}) [Loaded from .txt]"
+            item_text = f"<b>File:</b> {filename}<br><b>Post:</b> '{post_title}' (ID: {post_id}) [Loaded from .txt]"
         else:
-            filename = error_info.get('forced_filename_override', error_info.get('file_info', {}).get('name', 'Unknown Filename'))
+            original_filename = error_info.get('file_info', {}).get('_original_name_for_log', error_info.get('file_info', {}).get('name', 'Unknown Filename'))
+            saved_filename = error_info.get('forced_filename_override')
+            
+            if saved_filename and saved_filename != original_filename:
+                file_display = f"{original_filename} ➔ <b>Saved As:</b> {saved_filename}"
+            else:
+                file_display = original_filename
+                
             post_title = error_info.get('post_title', 'Unknown Post')
             post_id = error_info.get('original_post_id_for_log', 'N/A')
             
@@ -214,14 +222,42 @@ class ErrorFilesDialog(QDialog):
             if not creator_name:
                 creator_name = "Unknown Creator"
 
-            item_text = f"File: {filename}\nCreator: {creator_name} - Post: '{post_title}' (ID: {post_id})"
+            item_text = f"<b>File:</b> {file_display}<br><b>Creator:</b> {creator_name} - <b>Post:</b> '{post_title}' (ID: {post_id})"
 
-        list_item = QListWidgetItem(item_text)
+        widget = QWidget()
+        layout = QHBoxLayout()
+        layout.setContentsMargins(5, 5, 5, 5)
+
+        info_label = QLabel(item_text)
+        info_label.setTextFormat(Qt.RichText)
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label, stretch=1)
+
+        error_reason = error_info.get('error_reason')
+        if error_reason:
+            error_code = str(error_reason).split(':')[0].strip()
+            error_label = QLabel(f"⚠️ {error_code}")
+            error_label.setStyleSheet("color: #ff6b6b; font-weight: bold;")
+            error_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            error_label.setWordWrap(True)
+            layout.addWidget(error_label)
+
+        widget.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        widget.setLayout(layout)
+
+        list_item = QListWidgetItem()
         list_item.setData(Qt.UserRole, error_info)
         list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)
         list_item.setCheckState(Qt.Unchecked)
-        self.files_list_widget.addItem(list_item)
+        
+        list_item.setSizeHint(QSize(0, 50))
 
+        self.files_list_widget.addItem(list_item)
+        self.files_list_widget.setItemWidget(list_item, widget)
+
+    def _toggle_item_check_state(self, item):
+        new_state = Qt.Checked if item.checkState() == Qt.Unchecked else Qt.Unchecked
+        item.setCheckState(new_state)
     def _select_all_items(self):
         """Toggles checking all items in the list."""
         is_currently_checked = self.files_list_widget.item(0).checkState() == Qt.Checked if self.files_list_widget.count() > 0 else False

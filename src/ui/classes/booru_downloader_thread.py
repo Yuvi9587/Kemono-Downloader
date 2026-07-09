@@ -357,6 +357,8 @@ class BooruDownloadThread(QThread):
                         with open(filepath, 'wb') as f:
                             for chunk in response.iter_content(chunk_size=8192):
                                 if self.is_cancelled: break
+                                if self.pause_event.is_set():
+                                    while self.pause_event.is_set() and not self.is_cancelled: time.sleep(0.5)
                                 f.write(chunk)
                         
                         if not self.is_cancelled:
