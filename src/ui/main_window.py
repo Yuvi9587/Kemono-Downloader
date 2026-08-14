@@ -618,8 +618,12 @@ class DownloaderApp (QWidget ):
         except Exception as e:
             self.log_signal.emit(f"❌ Error loading/starting job '{next_job_path}': {e}")
             failed_path = next_job_path + ".failed"
-            os.rename(next_job_path, failed_path)
-            self._process_next_queued_job()
+            try:
+                os.rename(next_job_path, failed_path)
+            except OSError:
+                pass
+            # Fix: Use QTimer instead of direct recursion to prevent stack overflow on many bad jobs
+            QTimer.singleShot(100, self._process_next_queued_job)
 
     def _run_discord_file_download_thread(self, session, server_id, channel_id, token, output_dir, message_limit=None):
         """
@@ -699,8 +703,12 @@ class DownloaderApp (QWidget ):
                 for attachment in message.get('attachments', []):
                     if check_events(): break
                     
-                    file_url = attachment['url']
-                    original_filename = attachment['filename']
+                    file_url = attachment.get('url') or attachment.get('proxy_url')
+                    original_filename = attachment.get('filename')
+                    # Fix: Skip attachments that are missing required fields (e.g. stickers, embeds)
+                    if not file_url or not original_filename:
+                        queue_logger(f"   ⚠️ Skipping attachment with missing url or filename: {attachment}")
+                        continue
                     filepath = os.path.join(output_dir, original_filename)
                     filename_to_use = original_filename
 
@@ -773,7 +781,6 @@ class DownloaderApp (QWidget ):
 
         if is_kemono_discord and hasattr(thread, 'permanent_file_failed_signal'):
             thread.permanent_file_failed_signal.connect(self._handle_permanent_file_failure_from_thread)
-            print("DEBUG: Connected permanent_file_failed_signal for KemonoDiscordDownloadThread.")
 
     def _apply_theme_and_restart_prompt(self):
         """Applies the theme and prompts the user to restart."""
@@ -1071,7 +1078,6 @@ class DownloaderApp (QWidget ):
             )
             self.add_queue_btn.setEnabled(should_enable_queue)
 
-        print(f"--- DEBUG: Updating buttons (is_download_active={is_download_active}) ---")
 
         if self.is_ready_to_download_fetched:
             num_posts = len(self.fetched_posts_for_download)
@@ -1148,7 +1154,6 @@ class DownloaderApp (QWidget ):
             self.cancel_btn.setToolTip(self._tr("discard_session_tooltip", "Click to discard the interrupted session and reset the UI."))
 
         elif is_download_active:
-            print("  --> Button state: ACTIVE DOWNLOAD/FETCH")
             if self.is_fetching_only:
                 self.download_btn.setText("⏳ Fetching Pages...")
                 self.download_btn.setEnabled(False)
@@ -1172,7 +1177,6 @@ class DownloaderApp (QWidget ):
                 self.pause_btn.setIcon(QIcon(get_asset_path("assets/Svg/resume.svg")) if self.is_paused else QIcon(get_asset_path("assets/Svg/pause.svg")))
                 self.pause_btn.setEnabled(True)
                 self.pause_btn.clicked.connect(self._handle_pause_resume_action)
-            print("  --> Button state: IDLE")
 
             self.cancel_btn.setText(self._tr("cancel_button_text", "Cancel & Reset UI"))
             self.cancel_btn.setEnabled(True)
@@ -1654,7 +1658,7 @@ class DownloaderApp (QWidget ):
         parsed = parse_qs(raw_creds.lstrip('?&'))
         
         api_key = parsed.get('api_key', [''])[0]
-        user_id = parsed.get('user_id', [''])[0]
+        user_id = parsed.get('user_id', [''])[0] or parsed.get('login', [''])[0]
         
         return api_key, user_id
 
@@ -4363,6 +4367,10 @@ class DownloaderApp (QWidget ):
                 self.start_discord_pdf_save()
                 return
 
+        # Fix: Reset cancellation event so the next download isn't immediately aborted
+        # (cancellation_event stays set after cancel_download_button_action() calls .set())
+        if self.cancellation_event.is_set():
+            self.cancellation_event.clear()
         self.is_main_download_active = True
 
 
@@ -6412,6 +6420,12 @@ class DownloaderApp (QWidget ):
             else:
                 self.download_thread.resume()
         else:
+            # Also call pause/resume on specialized threads that support it (Erome, Bunkr, etc.)
+            if hasattr(self.download_thread, 'pause') and hasattr(self.download_thread, 'resume'):
+                if self.is_paused:
+                    self.download_thread.pause()
+                else:
+                    self.download_thread.resume()
             if self.is_paused:
                 self.pause_event.set()
                 self.log_signal.emit("⏸️ Download paused. Workers will halt on their next check.")
@@ -6419,7 +6433,8 @@ class DownloaderApp (QWidget ):
                 self.pause_event.clear()
                 self.log_signal.emit("▶️ Download resumed.")
 
-        self.set_ui_enabled(False)
+        # Fix: Update button label immediately after toggling pause state
+        self._update_button_states_and_connections()
 
     def _perform_soft_ui_reset (self ,preserve_url =None ,preserve_dir =None ):
         """Resets UI elements and some state to app defaults, then applies preserved inputs."""

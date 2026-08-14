@@ -19,6 +19,7 @@ class EromeDownloadThread(QThread):
         self.erome_url = url
         self.output_dir = output_dir
         self.is_cancelled = False
+        self._is_paused = False
         self.proxies = get_proxies_from_settings(parent.settings) if hasattr(parent, 'settings') else None
 
     def run(self):
@@ -69,6 +70,10 @@ class EromeDownloadThread(QThread):
                 self.progress_signal.emit("   Download cancelled by user.")
                 skip_count = total_files - download_count
                 break
+            # Pause support: block the loop while paused
+            while self._is_paused and not self.is_cancelled:
+                import time as _time
+                _time.sleep(0.3)
 
             filename = file_data.get('filename', f'untitled_{i+1}.mp4')
             file_url = file_data.get('url')
@@ -94,6 +99,10 @@ class EromeDownloadThread(QThread):
                     for chunk in response.iter_content(chunk_size=8192):
                         if self.is_cancelled:
                             break
+                        # Pause support: block chunk writing while paused
+                        while self._is_paused and not self.is_cancelled:
+                            import time as _time
+                            _time.sleep(0.3)
                         if chunk:
                             f.write(chunk)
                             downloaded_size += len(chunk)
@@ -124,4 +133,13 @@ class EromeDownloadThread(QThread):
 
     def cancel(self):
         self.is_cancelled = True
+        self._is_paused = False  # unblock any paused loop on cancel
         self.progress_signal.emit("   Cancellation signal received by Erome thread.")
+
+    def pause(self):
+        self._is_paused = True
+        self.progress_signal.emit("   Erome download paused.")
+
+    def resume(self):
+        self._is_paused = False
+        self.progress_signal.emit("   Erome download resumed.")

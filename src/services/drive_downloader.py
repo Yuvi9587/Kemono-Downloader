@@ -190,6 +190,9 @@ def download_and_decrypt_mega_file(info, download_path, logger_func,
                             return
 
                         while pause_event and pause_event.is_set():
+                            if cancellation_event and cancellation_event.is_set():
+                                logger_func(f"   [Mega] ❌ Download cancelled for '{file_name}'.")
+                                return
                             time.sleep(0.5)
 
                         if not chunk:

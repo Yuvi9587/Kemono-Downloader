@@ -23,6 +23,7 @@ class BunkrDownloadThread(QThread):
         self.bunkr_url = url
         self.output_dir = output_dir
         self.is_cancelled = False
+        self._is_paused = False
         self.proxies = get_proxies_from_settings(parent.settings) if hasattr(parent, 'settings') else None
         
         self.lock = threading.Lock()
@@ -51,6 +52,12 @@ class BunkrDownloadThread(QThread):
         and worker threads (for images).
         """
         
+        if self.is_cancelled:
+            return
+        # Pause support: block while paused
+        while self._is_paused and not self.is_cancelled:
+            import time as _time
+            _time.sleep(0.3)
         if self.is_cancelled:
             return
 
@@ -102,6 +109,10 @@ class BunkrDownloadThread(QThread):
                 for chunk in response.iter_content(chunk_size=8192):
                     if self.is_cancelled:
                         break
+                    # Pause support: block chunk writing while paused
+                    while self._is_paused and not self.is_cancelled:
+                        import time as _time
+                        _time.sleep(0.3)
                     if chunk:
                         f.write(chunk)
                         downloaded_size += len(chunk)
@@ -198,4 +209,13 @@ class BunkrDownloadThread(QThread):
 
     def cancel(self):
         self.is_cancelled = True
+        self._is_paused = False
         self.progress_signal.emit("   Cancellation signal received by Bunkr thread.")
+
+    def pause(self):
+        self._is_paused = True
+        self.progress_signal.emit("   Bunkr download paused.")
+
+    def resume(self):
+        self._is_paused = False
+        self.progress_signal.emit("   Bunkr download resumed.")

@@ -9,7 +9,9 @@ from ...core.database_manager import DatabaseManager
 
 class NhentaiDownloadThread(QThread):
     progress_signal = pyqtSignal(str)
+    file_progress_signal = pyqtSignal(str, object)
     finished_signal = pyqtSignal(int, int, bool)
+    overall_progress_signal = pyqtSignal(int, int)
 
     IMAGE_SERVERS = [
         "https://i.nhentai.net", "https://i2.nhentai.net", "https://i3.nhentai.net",
@@ -24,6 +26,7 @@ class NhentaiDownloadThread(QThread):
         self.gallery_data = gallery_data
         self.output_dir = output_dir
         self.is_cancelled = False
+        self._is_paused = False
         self.proxies = None
         self.db = DatabaseManager()
 
@@ -103,6 +106,10 @@ class NhentaiDownloadThread(QThread):
 
         for i, page_data in enumerate(pages_info):
             if self.is_cancelled: break
+            # Pause support
+            while self._is_paused and not self.is_cancelled:
+                import time as _time
+                _time.sleep(0.3)
             
             page_path = page_data.get('path', '')
             
@@ -124,7 +131,7 @@ class NhentaiDownloadThread(QThread):
                 full_url = f"{server}/{page_path}"
                 
                 try:
-                    self.progress_signal.emit(f"   Downloading page {i+1}/{total_pages}...")
+                    self.progress_signal.emit(f"   Downloading page {i+1}/{total_pages}: {local_filename}...")
                     
                     headers = {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -134,26 +141,54 @@ class NhentaiDownloadThread(QThread):
                     response = scraper.get(full_url, headers=headers, timeout=img_timeout, stream=True, proxies=self.proxies, verify=False)
                     
                     if response.status_code == 200:
+                        total_size = int(response.headers.get('content-length', 0))
+                        downloaded_size = 0
+                        last_update_time = time.time()
                         with open(filepath, 'wb') as f:
                             for chunk in response.iter_content(chunk_size=8192):
-                                f.write(chunk)
-                        download_count += 1
-                        download_successful = True
+                                if self.is_cancelled: break
+                                while self._is_paused and not self.is_cancelled:
+                                    import time as _time; _time.sleep(0.3)
+                                if chunk:
+                                    f.write(chunk)
+                                    downloaded_size += len(chunk)
+                                    current_time = time.time()
+                                    if current_time - last_update_time > 0.5:
+                                        self.file_progress_signal.emit(local_filename, (downloaded_size, total_size))
+                                        last_update_time = current_time
+                        if not self.is_cancelled:
+                            self.file_progress_signal.emit(local_filename, (downloaded_size, total_size))
+                            download_count += 1
+                            download_successful = True
+                        else:
+                            if os.path.exists(filepath): os.remove(filepath)
                         break
                         
                 except Exception as e:
-                    pass
+                    self.progress_signal.emit(f"   ⚠️ Server {server} failed for page {i+1}: {e}")
             
             if not download_successful:
                 self.progress_signal.emit(f"   ❌ Failed to download {local_filename} from all servers.")
                 skip_count += 1
 
+            # Emit overall page progress after each page attempt
+            self.overall_progress_signal.emit(total_pages, i + 1)
             time.sleep(0.5)
 
         if not self.is_cancelled and download_count + skip_count == total_pages and total_pages > 0:
             self.db.record_manga_download(db_gallery_id, "nhentai", title, save_path, artist=artist_name, tags_list=tags_list)
 
+        self.file_progress_signal.emit("", None)
         self.finished_signal.emit(download_count, skip_count, self.is_cancelled)
 
     def cancel(self):
         self.is_cancelled = True
+        self._is_paused = False
+
+    def pause(self):
+        self._is_paused = True
+        self.progress_signal.emit("   Nhentai download paused.")
+
+    def resume(self):
+        self._is_paused = False
+        self.progress_signal.emit("   Nhentai download resumed.")

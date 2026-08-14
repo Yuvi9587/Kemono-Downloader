@@ -20,6 +20,7 @@ from PIL import Image
 
 from ...core.booru_client import fetch_booru_data, BooruClientException
 from ...utils.file_utils import clean_folder_name
+from ...utils.network_utils import prepare_cookies_for_request
 from ...core.database_manager import DatabaseManager
 from ...utils.proxy_utils import get_proxies_from_settings
 
@@ -46,6 +47,15 @@ class BooruDownloadThread(QThread):
         self.db = DatabaseManager()
         self.tag_count_cache = {}
         self.proxies = get_proxies_from_settings(parent.settings) if hasattr(parent, 'settings') else None
+
+        # Load cookies for Danbooru (needed to bypass Cloudflare)
+        use_cookie = getattr(parent, 'use_cookie', False)
+        cookie_text = getattr(parent, 'cookie_text', '')
+        selected_cookie_file = getattr(parent, 'selected_cookie_file', '')
+        app_base_dir = getattr(parent, 'app_base_dir', '')
+        self.cookies_dict = prepare_cookies_for_request(
+            use_cookie, cookie_text, selected_cookie_file, app_base_dir, lambda msg: None, target_domain='danbooru.donmai.us'
+        )
         
         settings = self.main_app.settings
         
@@ -212,11 +222,14 @@ class BooruDownloadThread(QThread):
             self.progress_signal.emit("=" * 40)
             self.progress_signal.emit(f"🚀 Starting Booru Download w/ Rule34 DB Integration: {self.booru_url}")
             
-            item_generator = fetch_booru_data(self.booru_url, self.api_key, self.user_id, logger, proxies=self.proxies)
+            item_generator = fetch_booru_data(self.booru_url, self.api_key, self.user_id, logger, proxies=self.proxies, cookies_dict=self.cookies_dict)
             scraper = cloudscraper.create_scraper()
             if self.proxies:
                 scraper.proxies.update(self.proxies)
-            download_headers = { "User-Agent": USERAGENT_FIREFOX, "Referer": "https://gelbooru.com/" }
+            if "danbooru.donmai.us" in self.booru_url:
+                download_headers = { "User-Agent": "gallery-dl/1.29.0", "Referer": "https://danbooru.donmai.us/" }
+            else:
+                download_headers = { "User-Agent": USERAGENT_FIREFOX, "Referer": "https://gelbooru.com/" }
 
             for item in item_generator:
                 if self.is_cancelled: break
@@ -338,7 +351,6 @@ class BooruDownloadThread(QThread):
                 for folder in char_folders: final_output_dir = os.path.join(final_output_dir, clean_folder_name(folder))
                 if scene_folder_name: final_output_dir = os.path.join(final_output_dir, clean_folder_name(scene_folder_name))
                 
-                os.makedirs(final_output_dir, exist_ok=True)
                 final_filename = f"{post_data.get('category', 'booru')}_{post_id}_{file_hash or post_data.get('filename', 'img')}{ext}"
                 filepath = os.path.join(final_output_dir, final_filename)
 
@@ -354,6 +366,7 @@ class BooruDownloadThread(QThread):
                     response = scraper.get(file_url, headers=download_headers, stream=True, timeout=60)
                     
                     if response.status_code == 200:
+                        os.makedirs(final_output_dir, exist_ok=True)
                         with open(filepath, 'wb') as f:
                             for chunk in response.iter_content(chunk_size=8192):
                                 if self.is_cancelled: break
@@ -386,6 +399,7 @@ class BooruDownloadThread(QThread):
                             if os.path.exists(filepath): os.remove(filepath)
                             skip_count += 1
                     else:
+                        self.progress_signal.emit(f"   ❌ Failed to download '{final_filename}'. Status code: {response.status_code}")
                         skip_count += 1
                 except Exception as e:
                     skip_count += 1

@@ -76,6 +76,11 @@ class Extractor:
         self.user_id = user_id
         self._init_auth()
 
+    def set_cookies(self, cookies_dict):
+        """Load a cookie dict into the session."""
+        if cookies_dict:
+            self.session.cookies.update(cookies_dict)
+
     def _init_auth(self):
         """Placeholder for extractor-specific auth setup."""
         pass
@@ -163,13 +168,23 @@ class DanbooruExtractor(BaseExtractor):
     def __init__(self, match, logger_func=print, proxies=None):
         super().__init__(match, logger_func, proxies)
         self._auth_logged = False
+        # Danbooru whitelists the gallery-dl user agent in Cloudflare.
+        # Use a plain requests.Session with that UA to bypass the 403.
+        self.session = requests.Session()
+        self.session.headers["User-Agent"] = "gallery-dl/1.29.0"
+        self.session.headers["Accept"] = "application/json"
+        if proxies:
+            self.session.proxies.update(proxies)
 
     def _init_auth(self):
         if self.user_id and self.api_key:
             if not self._auth_logged:
                 self.log("Danbooru auth set.")
                 self._auth_logged = True
-            self.session.auth = (self.user_id, self.api_key)
+            # Use HTTP Basic Auth header (same as gallery-dl does)
+            import base64 as _b64
+            creds = _b64.b64encode(f"{self.user_id}:{self.api_key}".encode()).decode()
+            self.session.headers["Authorization"] = f"Basic {creds}"
 
 
     def items(self):
@@ -180,18 +195,52 @@ class DanbooruExtractor(BaseExtractor):
                 continue
 
             post = item
-            url = post.get("file_url")
-            if not url: continue
-            
+
+            # Danbooru returns categorized tag fields - merge them all into one 'tags' string
+            # so the rest of the pipeline (blacklist, character sort, etc.) works identically
+            if post.get('tag_string'):
+                post['tags'] = post['tag_string']
+            else:
+                tag_parts = [
+                    post.get('tag_string_general', ''),
+                    post.get('tag_string_character', ''),
+                    post.get('tag_string_artist', ''),
+                    post.get('tag_string_copyright', ''),
+                    post.get('tag_string_meta', ''),
+                ]
+                post['tags'] = ' '.join(p for p in tag_parts if p).strip()
+
+            # Expose individual category strings
+            post['tags_character'] = post.get('tag_string_character', '')
+            post['tags_artist'] = post.get('tag_string_artist', '')
+            post['tags_copyright'] = post.get('tag_string_copyright', '')
+
+            url = post.get('file_url')
+
+            # Danbooru may not include file_url directly - fall back to media_asset variants
+            if not url:
+                media_asset = post.get('media_asset', {})
+                variants = media_asset.get('variants', [])
+                for variant in variants:
+                    if variant.get('type') == 'original':
+                        url = variant.get('url')
+                        break
+                if not url and variants:
+                    url = variants[-1].get('url')
+
+            if not url:
+                continue
+
             nameext_from_url(url, post)
             post["date"] = parse_datetime(post.get("created_at"), "%Y-%m-%dT%H:%M:%S.%f%z")
 
             if url.startswith("/"):
                 url = self.root + url
             post['file_url'] = url
-            
+
             post.update(data)
             yield post
+
 
     def metadata(self):
         return {}
@@ -240,7 +289,11 @@ class DanbooruPostExtractor(DanbooruExtractor):
     def posts(self):
         post_id = self.groups[-1]
         url = f"{self.root}/posts/{post_id}.json"
-        post = self.request_json(url)
+        params = {}
+        if self.user_id and self.api_key:
+            params["login"] = self.user_id
+            params["api_key"] = self.api_key
+        post = self.request_json(url, params=params)
         return (post,) if post else ()
 
 class GelbooruBase(Extractor):
@@ -347,7 +400,7 @@ def find_extractor(url, logger_func, proxies=None):
             return extractor_cls(match, logger_func, proxies=proxies)
     return None
 
-def fetch_booru_data(url, api_key, user_id, logger_func, proxies=None):
+def fetch_booru_data(url, api_key, user_id, logger_func, proxies=None, cookies_dict=None):
     """
     Main function to find an extractor and yield image data.
     """
@@ -358,5 +411,7 @@ def fetch_booru_data(url, api_key, user_id, logger_func, proxies=None):
 
     logger_func(f"Using extractor: {extractor.__class__.__name__}")
     extractor.set_auth(api_key, user_id)
+    if cookies_dict:
+        extractor.set_cookies(cookies_dict)
     
     yield from extractor.items()

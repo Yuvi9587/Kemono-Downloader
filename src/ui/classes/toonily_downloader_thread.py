@@ -109,15 +109,27 @@ class ToonilyDownloadThread(QThread):
                         response = scraper.get(img_url, stream=True, timeout=60, headers={'Referer': chapter_url})
                         response.raise_for_status()
                         
+                        total_size = int(response.headers.get('content-length', 0))
+                        downloaded_size = 0
+                        import time as _t
+                        last_update_time = _t.time()
+                        
                         with open(filepath, 'wb') as f:
                             for chunk in response.iter_content(chunk_size=8192):
                                 if self._check_pause(): break
-                                f.write(chunk)
+                                if chunk:
+                                    f.write(chunk)
+                                    downloaded_size += len(chunk)
+                                    current_time = _t.time()
+                                    if current_time - last_update_time > 0.4:
+                                        self.file_progress_signal.emit(filename, (downloaded_size, total_size))
+                                        last_update_time = current_time
                         
                         if self._check_pause():
                             if os.path.exists(filepath): os.remove(filepath)
                             break
                         
+                        self.file_progress_signal.emit(filename, (downloaded_size, total_size))
                         calculated_phash = None
                         valid_exts = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
                         if file_extension.lower() in valid_exts:

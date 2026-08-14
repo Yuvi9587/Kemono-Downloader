@@ -23,6 +23,9 @@ from ...core.database_manager import DatabaseManager
 
 class Rule34DownloadThread(QThread):
     finished_signal = pyqtSignal(int, int, bool)
+    progress_signal = pyqtSignal(str)
+    file_progress_signal = pyqtSignal(str, object)
+    overall_progress_signal = pyqtSignal(int, int)
 
     def __init__(self, url, output_dir, api_key="", user_id="", parent=None, export_all_links_mode=False):
         super().__init__(parent)
@@ -698,21 +701,33 @@ class Rule34DownloadThread(QThread):
         return hash_val
 
     def download_file(self, url, save_path):
+        """Downloads a single file and emits byte-level progress to the UI."""
         try:
-            with self.session.get(url, stream=True, timeout=(10, 15)) as response:
+            filename = os.path.basename(save_path)
+            with self.session.get(url, stream=True, timeout=(10, 60)) as response:
                 response.raise_for_status()
+                total_size = int(response.headers.get('content-length', 0))
+                downloaded_size = 0
+                import time as _time
+                last_update_time = _time.time()
                 with open(save_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         if self.main_app.cancellation_event.is_set():
-                            # Close early to safely clean up file
                             f.close()
                             if os.path.exists(save_path): os.remove(save_path)
                             return False
-                        if chunk: f.write(chunk)
+                        if chunk:
+                            f.write(chunk)
+                            downloaded_size += len(chunk)
+                            current_time = _time.time()
+                            if current_time - last_update_time > 0.5:
+                                self.file_progress_signal.emit(filename, (downloaded_size, total_size))
+                                last_update_time = current_time
+                self.file_progress_signal.emit(filename, (downloaded_size, total_size))
                 return True
         except Exception:
             # If download fails midway, don't leave corrupted partial files
             if os.path.exists(save_path):
                 try: os.remove(save_path)
                 except OSError: pass
-            return False
+            return False

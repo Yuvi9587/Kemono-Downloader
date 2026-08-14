@@ -157,7 +157,7 @@ class PostProcessorWorker:
                  user_data_path=None,
                  export_all_links_mode=False
                  ):
-        self.db = DatabaseManager()
+        # self.db is initialized below based on the api_url
         self.post = post_data
         self.download_root = download_root
         self.known_names = known_names
@@ -338,6 +338,8 @@ class PostProcessorWorker:
             try:
                 parsed = urlparse(file_url)
                 new_netloc = re.sub(r'^n\d+\.', 'img.', parsed.netloc)
+                new_netloc = re.sub(r'^file\.', 'img.', new_netloc)
+                new_netloc = re.sub(r'^fox\.', 'img.', new_netloc)
                 new_path = '/thumbnail' + parsed.path if parsed.path.startswith('/data/') else parsed.path
                 if new_netloc != parsed.netloc or new_path != parsed.path:
                     file_url = parsed._replace(netloc=new_netloc, path=new_path).geturl()
@@ -675,18 +677,26 @@ class PostProcessorWorker:
             final_save_path_check = os.path.join(target_folder_path, filename_to_save_in_main_path)
             if os.path.exists(final_save_path_check):
                 try:
-                    self.logger(f"   ⚠️ File '{filename_to_save_in_main_path}' exists. Verifying content with URL hash...")
                     parsed_url = urlparse(file_url)
-                    hash_from_url = os.path.basename(parsed_url.path).split('.')[0]
-                    hash_from_disk = hashlib.sha256()
-                    with open(final_save_path_check, 'rb') as f:
-                        for chunk in iter(lambda: f.read(8192), b""):
-                            hash_from_disk.update(chunk)
-                    if hash_from_url == hash_from_disk.hexdigest():
-                        self.logger(f"   -> Skip (Hash Match): The existing file is a perfect match.")
-                        return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
+                    url_stem = os.path.basename(parsed_url.path).split('.')[0]
+                    # Fix: Kemono CDN uses 64-char SHA-256 hex as filename stem.
+                    # Compare url_stem to disk SHA-256. For non-hex stems,
+                    # trust filename uniqueness and skip immediately.
+                    if len(url_stem) == 64 and all(c in '0123456789abcdef' for c in url_stem.lower()):
+                        self.logger(f"   ⚠️ File '{filename_to_save_in_main_path}' exists. Verifying SHA-256 hash...")
+                        hash_from_disk = hashlib.sha256()
+                        with open(final_save_path_check, 'rb') as f:
+                            for chunk in iter(lambda: f.read(8192), b""):
+                                hash_from_disk.update(chunk)
+                        if url_stem.lower() == hash_from_disk.hexdigest():
+                            self.logger(f"   -> Skip (Hash Match): The existing file is a perfect match.")
+                            return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
+                        else:
+                            self.logger(f"   -> Hash Mismatch. Existing file differs. Downloading with a suffix.")
                     else:
-                        self.logger(f"   -> Hash Mismatch. Existing file is different content. Proceeding to download new file with a suffix.")
+                        # Non-hash filename: filename uniqueness is the dedup key, skip.
+                        self.logger(f"   -> Skip (Exists): '{filename_to_save_in_main_path}' already downloaded.")
+                        return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
                 except Exception as e:
                     self.logger(f"   ⚠️ Could not perform hash check for existing file: {e}. Re-downloading with a suffix to be safe.")
         
@@ -1962,7 +1972,9 @@ class PostProcessorWorker:
 
                     if published_date_str:
                         try:
-                            dt_obj = datetime.fromisoformat(published_date_str)
+                            # Fix: Python < 3.11 fromisoformat() does not accept 'Z' suffix
+                            date_str_normalized = published_date_str.replace('Z', '+00:00') if published_date_str.endswith('Z') else published_date_str
+                            dt_obj = datetime.fromisoformat(date_str_normalized)
                             final_subfolder_name = final_subfolder_name.replace("YYYY", dt_obj.strftime("%Y"))
                             final_subfolder_name = final_subfolder_name.replace("MM", dt_obj.strftime("%m"))
                             final_subfolder_name = final_subfolder_name.replace("DD", dt_obj.strftime("%d"))

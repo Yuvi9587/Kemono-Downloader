@@ -10,7 +10,8 @@ from ...utils.proxy_utils import get_proxies_from_settings
 class HentaiFoxDownloadThread(QThread):
     progress_signal = pyqtSignal(str)
     file_progress_signal = pyqtSignal(str, object)
-    finished_signal = pyqtSignal(int, int, bool, list) 
+    finished_signal = pyqtSignal(int, int, bool, list)
+    overall_progress_signal = pyqtSignal(int, int)
 
     def __init__(self, url_or_id, output_dir, parent=None, export_all_links_mode=False):
         super().__init__(parent)
@@ -110,6 +111,8 @@ class HentaiFoxDownloadThread(QThread):
                     self.progress_signal.emit(f"❌ [{i}/{total_pages}] Exception: {e}")
                     self.skipped_count += 1
 
+                # Emit overall page progress
+                self.overall_progress_signal.emit(total_pages, i)
                 time.sleep(0.5) 
 
             summary = (
@@ -164,3 +167,16 @@ class HentaiFoxDownloadThread(QThread):
 
     def stop(self):
         self.is_running = False
+
+    def cancel(self):
+        """Alias for stop() so the main cancel button works correctly."""
+        self.is_running = False
+        self.progress_signal.emit("   Cancellation signal received by HentaiFox thread.")
+
+    def pause(self):
+        """Pause is not supported; no-op to satisfy the generic pause handler."""
+        pass
+
+    def resume(self):
+        """Resume is not supported; no-op to satisfy the generic pause handler."""
+        pass
