@@ -2349,7 +2349,7 @@ class DownloaderApp (QWidget ):
                 self.hide()
                 self.tray_icon.showMessage(
                     "Running in Background",
-                    "Kemono Downloader Premium is still running in the system tray.",
+                    "Kemono Downloader is still running in the system tray.",
                     QSystemTrayIcon.MessageIcon.Information,
                     2000
                 )
@@ -2772,7 +2772,7 @@ class DownloaderApp (QWidget ):
             self.log_signal.emit("⚠️ Rule34SettingsDialog file not created yet!")
 
     def _show_auto_sync_dialog(self): 
-        """Shows the dedicated Auto-Sync Premium Hub dialog."""
+        """Shows the dedicated Auto-Sync Hub dialog."""
         dialog = AutoSyncDialog(self)
         dialog.exec()
 
