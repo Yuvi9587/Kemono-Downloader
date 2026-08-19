@@ -1,16 +1,16 @@
 import os
 import time
 from curl_cffi import requests as cffi_requests
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from ...core.saint2_client import fetch_saint2_data
 from ...utils.proxy_utils import get_proxies_from_settings
 
 class Saint2DownloadThread(QThread):
     """A dedicated QThread for handling saint2.su downloads."""
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    finished_signal = pyqtSignal(int, int, bool)
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    finished_signal = Signal(int, int, bool)
 
     def __init__(self, url, output_dir, parent=None):
         super().__init__(parent)
@@ -126,4 +126,4 @@ class Saint2DownloadThread(QThread):
 
     def resume(self):
         self._is_paused = False
-        self.progress_signal.emit("   Saint2 download resumed.")
+        self.progress_signal.emit("   Saint2 download resumed.")

@@ -8,8 +8,8 @@ import json
 import re
 from collections import defaultdict
 import cloudscraper
-from PyQt5.QtCore import QCoreApplication, Qt, pyqtSignal, QThread
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QCoreApplication, Qt, Signal, QThread
+from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMessageBox, QPushButton, QVBoxLayout, QProgressBar,
     QWidget, QCheckBox
@@ -23,9 +23,9 @@ from ...utils.resolution import get_dark_theme
 
 class FavoritePostsFetcherThread (QThread ):
     """Worker thread to fetch favorite posts and creator names."""
-    status_update =pyqtSignal (str )
-    progress_bar_update =pyqtSignal (int ,int )
-    finished =pyqtSignal (list ,str )
+    status_update =Signal (str )
+    progress_bar_update =Signal (int ,int )
+    finished =Signal (list ,str )
 
     def __init__ (self ,cookies_config ,parent_logger_func ,target_domain_preference =None ):
         super ().__init__ ()

@@ -1,15 +1,15 @@
 import os
 import requests
-from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QLabel, QProgressBar, 
+from PySide6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QProgressBar, 
                              QPushButton, QMessageBox, QRadioButton, QButtonGroup, 
                              QHBoxLayout, QGroupBox, QTabWidget, QWidget, QSlider, 
                              QSpinBox, QDialogButtonBox, QScrollArea, QCheckBox,
                              QLineEdit)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSettings
+from PySide6.QtCore import Qt, QThread, Signal, QSettings
 
 class UpdateCheckerThread(QThread):
     """Background thread to silently check if a new fallback.csv exists."""
-    update_available_signal = pyqtSignal(bool, str)
+    update_available_signal = Signal(bool, str)
 
     def __init__(self, url, current_etag):
         super().__init__()
@@ -33,9 +33,9 @@ class UpdateCheckerThread(QThread):
 
 
 class DownloadWorker(QThread):
-    status_signal = pyqtSignal(str)
-    progress_signal = pyqtSignal(int)
-    finished_signal = pyqtSignal(bool, str, bool)
+    status_signal = Signal(str)
+    progress_signal = Signal(int)
+    finished_signal = Signal(bool, str, bool)
 
     def __init__(self, files, models_dir, model_path, csv_path, is_full_download=True):
         super().__init__()
@@ -127,7 +127,7 @@ class BestSettingsInfoDialog(QDialog):
         close_btn = QPushButton("Close")
         close_btn.setFixedWidth(100)
         close_btn.clicked.connect(self.accept)
-        layout.addWidget(close_btn, alignment=Qt.AlignCenter)
+        layout.addWidget(close_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.setStyleSheet("background-color: #2D2D2D;")
 
@@ -145,7 +145,7 @@ class VisualSortSetupDialog(QDialog):
         
         self.setMinimumSize(520, 600)
         self.resize(550, 650) 
-        self.setWindowModality(Qt.WindowModal)
+        self.setWindowModality(Qt.WindowModality.WindowModal)
         
         self.settings = QSettings("MediaDownloader", "VisualSort")
 
@@ -222,7 +222,7 @@ class VisualSortSetupDialog(QDialog):
     def show_help_dialog(self):
         msg = QMessageBox(self)
         msg.setWindowTitle("How Visual Sort Works")
-        msg.setIcon(QMessageBox.Information)
+        msg.setIcon(QMessageBox.Icon.Information)
         msg.setObjectName("HelpDialog") 
         
         help_text = """
@@ -254,11 +254,11 @@ class VisualSortSetupDialog(QDialog):
             QPushButton { background-color: #3D3D3D; color: #EEEEEE; padding: 6px 15px; border-radius: 4px; border: 1px solid #555; }
             QPushButton:hover { background-color: #4D4D4D; }
         """)
-        msg.exec_()
+        msg.exec()
 
     def show_best_settings_dialog(self):
         dialog = BestSettingsInfoDialog(self)
-        dialog.exec_()
+        dialog.exec()
 
     def start_known_txt_download(self):
         known_txt_url = self.known_txt_url 
@@ -270,8 +270,8 @@ class VisualSortSetupDialog(QDialog):
         if os.path.exists(target_path):
             reply = QMessageBox.question(self, "Overwrite Known.txt?", 
                                          "A Known.txt file already exists in your app folder. Do you want to replace it with the developer's master list?",
-                                         QMessageBox.Yes | QMessageBox.No)
-            if reply == QMessageBox.No:
+                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.No:
                 return
 
         self.tabs.setCurrentIndex(0) 
@@ -432,7 +432,7 @@ class VisualSortSetupDialog(QDialog):
         settings_layout.addWidget(threshold_label)
 
         slider_layout = QHBoxLayout()
-        self.threshold_slider = QSlider(Qt.Horizontal)
+        self.threshold_slider = QSlider(Qt.Orientation.Horizontal)
         self.threshold_slider.setRange(1, 100)
         self.threshold_spin = QSpinBox()
         self.threshold_spin.setRange(1, 100)
@@ -460,7 +460,7 @@ class VisualSortSetupDialog(QDialog):
         settings_layout.addWidget(fallback_label)
 
         fallback_slider_layout = QHBoxLayout()
-        self.fallback_slider = QSlider(Qt.Horizontal)
+        self.fallback_slider = QSlider(Qt.Orientation.Horizontal)
         self.fallback_slider.setRange(1, 5)
         self.fallback_slider.setTickPosition(QSlider.TicksBelow)
         self.fallback_slider.setTickInterval(1)
@@ -490,7 +490,7 @@ class VisualSortSetupDialog(QDialog):
         settings_layout.addWidget(fb_thresh_label)
 
         fb_thresh_layout = QHBoxLayout()
-        self.fb_thresh_slider = QSlider(Qt.Horizontal)
+        self.fb_thresh_slider = QSlider(Qt.Orientation.Horizontal)
         self.fb_thresh_slider.setRange(1, 100)
         self.fb_thresh_spin = QSpinBox()
         self.fb_thresh_spin.setRange(1, 100)
@@ -574,8 +574,8 @@ class VisualSortSetupDialog(QDialog):
         if selected_id == installed_id and os.path.exists(self.model_path):
             reply = QMessageBox.question(self, "Model Already Installed", 
                                          "This model is already installed and active. Do you want to re-download and replace it?",
-                                         QMessageBox.Yes | QMessageBox.No)
-            if reply == QMessageBox.No:
+                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.No:
                 return
 
         self.group_box.setEnabled(False)
@@ -690,7 +690,7 @@ class VisualSortSetupDialog(QDialog):
         
         scroll_widget = QWidget()
         self.series_checkbox_layout = QVBoxLayout(scroll_widget)
-        self.series_checkbox_layout.setAlignment(Qt.AlignTop)
+        self.series_checkbox_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.series_checkboxes = []
         self.populate_series_checkboxes()

@@ -1,7 +1,7 @@
 import os
 import sys
-from PyQt5.QtCore import pyqtSignal, Qt, QSettings
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal, Qt, QSettings
+from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
     QStackedWidget, QScrollArea, QFrame, QWidget, QCheckBox
 )
@@ -21,10 +21,10 @@ class TourStepWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(25, 20, 25, 20)
         layout.setSpacing(15)
-        layout.setAlignment(Qt.AlignHCenter)
+        layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         title_label = QLabel(title_text)
-        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setWordWrap(True)
         title_label.setStyleSheet("font-size: 18pt; font-weight: bold; color: #E0E0E0; padding-bottom: 10px;")
         layout.addWidget(title_label)
@@ -35,13 +35,13 @@ class TourStepWidget(QWidget):
         
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.NoFrame)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
         content_label = QLabel(content_text)
         content_label.setWordWrap(True)
-        content_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        content_label.setTextFormat(Qt.RichText)
+        content_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        content_label.setTextFormat(Qt.TextFormat.RichText)
         content_label.setOpenExternalLinks(True)
         content_label.setStyleSheet("font-size: 11pt; color: #C8C8C8; padding-left: 5px; padding-right: 5px;")
         
@@ -54,8 +54,8 @@ class TourDialog(QDialog):
     """
     A redesigned, multi-page tour dialog with a visual progress indicator.
     """
-    tour_finished_normally = pyqtSignal()
-    tour_skipped = pyqtSignal()
+    tour_finished_normally = Signal()
+    tour_skipped = Signal()
     CONFIG_APP_NAME_TOUR = "ApplicationTour"
     TOUR_SHOWN_KEY = "neverShowTourAgainV20"
     CONFIG_ORGANIZATION_NAME = CONFIG_ORGANIZATION_NAME
@@ -128,7 +128,7 @@ class TourDialog(QDialog):
 
         buttons_and_check_layout = QHBoxLayout()
         self.never_show_again_checkbox = QCheckBox(self._tr("tour_dialog_never_show_checkbox", "Never show this again"))
-        buttons_and_check_layout.addWidget(self.never_show_again_checkbox, 0, Qt.AlignLeft)
+        buttons_and_check_layout.addWidget(self.never_show_again_checkbox, 0, Qt.AlignmentFlag.AlignLeft)
         buttons_and_check_layout.addStretch()
 
         self.skip_button = QPushButton(self._tr("tour_dialog_skip_button", "Skip"))

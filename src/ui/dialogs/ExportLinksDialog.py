@@ -3,14 +3,15 @@ import json
 import re
 import csv
 from collections import defaultdict
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QTextEdit, QPushButton,
     QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QListWidget, QRadioButton,
     QButtonGroup, QCheckBox, QSplitter, QGroupBox, QDialog, QStackedWidget,
     QScrollArea, QListWidgetItem, QSizePolicy, QProgressBar, QAbstractItemView, QFrame,
-    QMainWindow, QAction, QGridLayout, 
+    QMainWindow, QGridLayout,
 )
-from PyQt5.QtCore import Qt
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction
 
 class ExportLinksDialog(QDialog):
     """
@@ -106,7 +107,7 @@ class ExportLinksDialog(QDialog):
         for p_text, p_tooltip, _ in filtered_placeholders:
             btn = QPushButton(p_text)
             btn.setToolTip(p_tooltip)
-            btn.setCursor(Qt.PointingHandCursor)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
             
             def insert_text(checked=False, t=p_text):
                 formatted = f" {t}\n" if t == '{url}' else f"[{t}] "
@@ -133,8 +134,8 @@ class ExportLinksDialog(QDialog):
         main_layout.addWidget(self.txt_options_group)
 
         separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setFrameShadow(QFrame.Sunken)
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
         main_layout.addWidget(separator)
         
         self.check_separate_files = QCheckBox("Save each platform to a separate file (e.g., export_mega.txt)")
@@ -155,7 +156,7 @@ class ExportLinksDialog(QDialog):
         
         button_layout = QHBoxLayout()
         self.reset_btn = QPushButton("Reset to Default")
-        self.reset_btn.setCursor(Qt.PointingHandCursor)
+        self.reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.reset_btn.clicked.connect(self._reset_custom_template)
         button_layout.addWidget(self.reset_btn)
         button_layout.addStretch(1)

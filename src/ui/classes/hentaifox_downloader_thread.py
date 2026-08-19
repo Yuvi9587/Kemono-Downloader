@@ -1,17 +1,17 @@
 import os
 import time
 import requests
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 from ...core.hentaifox_client import get_gallery_metadata, get_image_link_for_page, get_gallery_id
 from ...utils.file_utils import clean_folder_name
 from ...core.database_manager import DatabaseManager
 from ...utils.proxy_utils import get_proxies_from_settings
 
 class HentaiFoxDownloadThread(QThread):
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    finished_signal = pyqtSignal(int, int, bool, list)
-    overall_progress_signal = pyqtSignal(int, int)
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    finished_signal = Signal(int, int, bool, list)
+    overall_progress_signal = Signal(int, int)
 
     def __init__(self, url_or_id, output_dir, parent=None, export_all_links_mode=False):
         super().__init__(parent)

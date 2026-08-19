@@ -1,6 +1,6 @@
 import threading
 import time
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from ...core.Hentai2read_client import run_hentai2read_download as h2r_run_download
 from ...utils.proxy_utils import get_proxies_from_settings
@@ -11,10 +11,10 @@ class Hentai2readDownloadThread(QThread):
     A dedicated QThread that calls the self-contained Hentai2Read client to
     perform scraping and downloading.
     """
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    finished_signal = pyqtSignal(int, int, bool)
-    overall_progress_signal = pyqtSignal(int, int)
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    finished_signal = Signal(int, int, bool)
+    overall_progress_signal = Signal(int, int)
 
     def __init__(self, url, output_dir, parent=None, export_all_links_mode=False):
         super().__init__(parent)

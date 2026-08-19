@@ -5,14 +5,13 @@ import re
 import json
 import sqlite3
 from ..assets import get_asset_path
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QPushButton, QCheckBox, QSpinBox, QComboBox, QGroupBox, 
-    QMessageBox, QProgressBar, QWidget, QListWidget, QCompleter, QAbstractItemView, QScrollArea, QSizePolicy,
-    QMenu, QAction
+    QMessageBox, QProgressBar, QWidget, QListWidget, QCompleter, QAbstractItemView, QScrollArea, QSizePolicy, QMenu
 )
-from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QEvent, QSize
+from PySide6.QtGui import QIcon, QAction
+from PySide6.QtCore import Qt, QThread, Signal, QTimer, QEvent, QSize
 
 HELP_CONTENT = {
     "General Setup": (
@@ -87,7 +86,7 @@ class MultiCompleter(QCompleter):
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.KeyPress:
-            if (event.modifiers() & Qt.ControlModifier) and event.key() == Qt.Key_Down:
+            if (event.modifiers() & Qt.KeyboardModifier.ControlModifier) and event.key() == Qt.Key.Key_Down:
                 if self.popup() and self.popup().isVisible():
                     popup = self.popup()
                     current_index = popup.currentIndex()
@@ -130,9 +129,9 @@ class MultiCompleterLineEdit(QLineEdit):
     pass 
 
 class FavoritesListWidget(QListWidget):
-    delete_requested = pyqtSignal()
+    delete_requested = Signal()
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Delete:
+        if event.key() == Qt.Key.Key_Delete:
             self.delete_requested.emit()
         else:
             super().keyPressEvent(event)
@@ -146,7 +145,7 @@ class SectionHelpButton(QPushButton):
         self.setFixedSize(24, 24)
         self.setIcon(QIcon(get_asset_path("assets/Svg/help.svg")))
         self.setIconSize(QSize(18, 18))
-        self.setCursor(Qt.PointingHandCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip(f"Help: {title}")
         
         self.setStyleSheet("""
@@ -167,7 +166,7 @@ class SectionHelpButton(QPushButton):
     def show_popup(self):
         msg = QMessageBox(self.parent())
         msg.setWindowTitle(f"Help: {self.title}")
-        msg.setTextFormat(Qt.RichText)
+        msg.setTextFormat(Qt.TextFormat.RichText)
         msg.setText(self.text_content)
         
         msg.setStyleSheet("""
@@ -192,11 +191,11 @@ class SectionHelpButton(QPushButton):
                 border: 1px solid #87ceeb;
             }
         """)
-        msg.exec_()
+        msg.exec()
 
 class HuggingFaceDownloadThread(QThread):
-    progress_signal = pyqtSignal(int)
-    finished_signal = pyqtSignal(bool, str)
+    progress_signal = Signal(int)
+    finished_signal = Signal(bool, str)
 
     def __init__(self, download_url, save_path, parent=None):
         super().__init__(parent)
@@ -242,7 +241,7 @@ class Rule34SettingsDialog(QDialog):
         
         self.setWindowTitle("Rule34 Download Settings")
         self.setWindowIcon(QIcon(get_asset_path("assets/Svg/settings.svg")))
-        self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowMaximizeButtonHint | Qt.WindowType.WindowMinimizeButtonHint)
         self.setMinimumSize(800, 500) 
         
         self.all_tags_cache = [] 
@@ -404,7 +403,7 @@ class Rule34SettingsDialog(QDialog):
         
         info_label = QLabel(f"<img src='{get_asset_path('assets/Svg/help.svg')}' width='13' height='13' align='top'> Hover checkboxes to<br>see exact blocked tags")
         info_label.setStyleSheet("color: #7f8c8d; font-size: 11px; font-style: italic;")
-        info_label.setAlignment(Qt.AlignRight | Qt.AlignBottom)
+        info_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
         
         safety_info_layout.addWidget(info_label)
         
@@ -527,7 +526,7 @@ class Rule34SettingsDialog(QDialog):
         self.expand_scene_btn = QPushButton()
         self.expand_scene_btn.setFixedSize(28, 28)
         self.expand_scene_btn.setToolTip("Expand to Full Screen")
-        self.expand_scene_btn.setCursor(Qt.PointingHandCursor)
+        self.expand_scene_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         
         if os.path.exists(self.expand_icon_path):
             self.expand_scene_btn.setIcon(QIcon(self.expand_icon_path))
@@ -653,8 +652,8 @@ class Rule34SettingsDialog(QDialog):
         save_btn = QPushButton("Save Settings")
         cancel_btn = QPushButton("Cancel")
         
-        save_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        cancel_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        save_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        cancel_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         
         save_btn.clicked.connect(self.accept)
         cancel_btn.clicked.connect(self.reject)
@@ -728,7 +727,7 @@ class Rule34SettingsDialog(QDialog):
     def add_scene_tag(self):
         tags = [t.strip().lower() for t in self.scene_input.text().split(',') if t.strip()]
         for tag in tags:
-            items = self.scene_list_widget.findItems(tag, Qt.MatchExactly)
+            items = self.scene_list_widget.findItems(tag, Qt.MatchFlag.MatchExactly)
             if not items:
                 self.scene_list_widget.insertItem(0, tag) 
         self.scene_input.clear()
@@ -842,7 +841,7 @@ class Rule34SettingsDialog(QDialog):
         if not new_chars: return
         
         for new_char in reversed(new_chars):
-            items = self.fav_list_widget.findItems(new_char, Qt.MatchExactly)
+            items = self.fav_list_widget.findItems(new_char, Qt.MatchFlag.MatchExactly)
             if not items:
                 self.fav_list_widget.insertItem(0, new_char)
                 
@@ -917,7 +916,7 @@ class Rule34SettingsDialog(QDialog):
     def setup_autocomplete(self):
         def make_completer(line_edit):
             completer = MultiCompleter([], self)
-            completer.setFilterMode(Qt.MatchContains)
+            completer.setFilterMode(Qt.MatchFlag.MatchContains)
             completer.setCaseSensitivity(Qt.CaseInsensitive)
             completer.setMaxVisibleItems(15) 
             completer.setWrapAround(False) 
@@ -1033,7 +1032,7 @@ class Rule34SettingsDialog(QDialog):
         completer.complete()
 
     def open_custom_tags_editor(self):
-        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QPushButton
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QPushButton
         dialog = QDialog(self)
         dialog.setWindowTitle("Custom Exclusion Tags")
         dialog.setMinimumSize(350, 450)
@@ -1050,7 +1049,7 @@ class Rule34SettingsDialog(QDialog):
         layout.addLayout(input_layout)
         
         completer = MultiCompleter([], self)
-        completer.setFilterMode(Qt.MatchContains)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
         completer.setCaseSensitivity(Qt.CaseInsensitive)
         completer.setMaxVisibleItems(15)
         completer.setWrapAround(False)
@@ -1070,7 +1069,7 @@ class Rule34SettingsDialog(QDialog):
             if text:
                 for t in text.split(','):
                     t = t.strip()
-                    if t and not list_widget.findItems(t, Qt.MatchExactly):
+                    if t and not list_widget.findItems(t, Qt.MatchFlag.MatchExactly):
                         list_widget.addItem(t)
                 tag_input.clear()
                 
@@ -1084,7 +1083,7 @@ class Rule34SettingsDialog(QDialog):
         remove_btn.clicked.connect(remove_tags)
         
         def keyPressEvent(event):
-            if event.key() == Qt.Key_Delete:
+            if event.key() == Qt.Key.Key_Delete:
                 remove_tags()
             else:
                 QListWidget.keyPressEvent(list_widget, event)
@@ -1109,6 +1108,6 @@ class Rule34SettingsDialog(QDialog):
                 
         dialog.finished.connect(lambda result: on_close())
         
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             tags = [list_widget.item(i).text() for i in range(list_widget.count())]
             self.custom_safety_tags_str = ",".join(tags)

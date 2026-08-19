@@ -1,8 +1,8 @@
 import os
 import sys
-from PyQt5.QtCore import QUrl, QSize, Qt
-from PyQt5.QtGui import QIcon, QDesktopServices
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QUrl, QSize, Qt
+from PySide6.QtGui import QIcon, QDesktopServices
+from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
     QStackedWidget, QListWidget, QFrame, QWidget, QScrollArea
 )
@@ -24,21 +24,21 @@ class TourStepWidget(QWidget):
         content_font_size = int(11 * scale)
 
         title_label = QLabel(title_text)
-        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setStyleSheet(f"font-size: {title_font_size}pt; font-weight: bold; color: #87CEEB; padding-bottom: 15px;")
         layout.addWidget(title_label)
         
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.NoFrame)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setStyleSheet("background-color: transparent;")
 
         content_label = QLabel(content_text)
         content_label.setWordWrap(True)
-        content_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        content_label.setTextFormat(Qt.RichText)
+        content_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        content_label.setTextFormat(Qt.TextFormat.RichText)
         content_label.setOpenExternalLinks(True)
         content_label.setStyleSheet(f"font-size: {content_font_size}pt; color: #C8C8C8; line-height: 1.5;")
         scroll_area.setWidget(content_label)
@@ -641,7 +641,7 @@ class HelpGuideDialog(QDialog):
         scale = getattr(self.parent_app, 'scale_factor', 1.0)
         title_font_size = int(16 * scale)
         title_label.setStyleSheet(f"font-size: {title_font_size}pt; font-weight: bold; color: #87CEEB;")
-        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(title_label)
 
         content_layout = QHBoxLayout()

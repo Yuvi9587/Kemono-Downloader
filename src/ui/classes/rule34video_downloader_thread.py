@@ -1,7 +1,7 @@
 import os
 import time
 import requests
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 import cloudscraper
 
 from PIL import Image
@@ -19,9 +19,9 @@ from ...utils.proxy_utils import get_proxies_from_settings
 
 class Rule34VideoDownloadThread(QThread):
     """A dedicated QThread for handling rule34video.com downloads."""
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    finished_signal = pyqtSignal(int, int, bool)
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    finished_signal = Signal(int, int, bool)
 
     def __init__(self, url, output_dir, parent=None, export_all_links_mode=False):
         super().__init__(parent)

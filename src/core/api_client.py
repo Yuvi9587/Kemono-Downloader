@@ -72,6 +72,9 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
                 return response.json()
 
         except requests.exceptions.RequestException as e:
+            if e.response is not None and e.response.status_code == 404:
+                raise RuntimeError(f"HTTP_404_NOT_FOUND: {offset}")
+
             if e.response is not None and e.response.status_code == 403 and offset == 0:
                 logger("   ❌ Access Denied (403 Forbidden) on the first page.")
                 logger("      This is likely a rate limit or a Cloudflare block.")
@@ -327,6 +330,12 @@ def download_from_api(
 
     should_fetch_all = fetch_all_first or is_manga_mode_fetch_all_and_sort_oldest_first  
     api_base_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}/posts"
+    fallback_api_url_base = None
+    if 'pawchive' in api_domain.lower():
+        api_base_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}"
+        fallback_api_url_base = f"https://{api_domain}/api/v1/{service}/user/{user_id}/posts"
+        logger(f"   ℹ️ Using primary Pawchive endpoint: {api_base_url}")
+        
     page_size = 50
     
     if is_manga_mode_fetch_all_and_sort_oldest_first:
@@ -379,6 +388,11 @@ def download_from_api(
                 current_offset_manga += page_size
                 time.sleep(0.6)
             except RuntimeError as e:
+                if "HTTP_404_NOT_FOUND" in str(e) and fallback_api_url_base:
+                    logger(f"   ⚠️ Primary API endpoint returned 404. Switching to backup endpoint: {fallback_api_url_base}")
+                    api_base_url = fallback_api_url_base
+                    fallback_api_url_base = None
+                    continue
                 if "cancelled by user" in str(e).lower():
                     logger(f"ℹ️ Manga mode pagination stopped due to cancellation: {e}")
                 else:
@@ -470,6 +484,11 @@ def download_from_api(
                 logger(f"❌ API Error: Expected list of posts, got {type(raw_posts_batch)} at page {current_page_num} (offset {current_offset}).")
                 break
         except RuntimeError as e:
+            if "HTTP_404_NOT_FOUND" in str(e) and fallback_api_url_base:
+                logger(f"   ⚠️ Primary API endpoint returned 404. Switching to backup endpoint: {fallback_api_url_base}")
+                api_base_url = fallback_api_url_base
+                fallback_api_url_base = None
+                continue
             if "cancelled by user" in str(e).lower():
                 logger(f"ℹ️ Pagination stopped due to cancellation: {e}")
             else:

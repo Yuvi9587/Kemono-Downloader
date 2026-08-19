@@ -2,7 +2,7 @@ import os
 import time
 import datetime
 import requests
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from ..dialogs.discord_pdf_generator import create_pdf_from_discord_messages
 
@@ -12,9 +12,9 @@ USERAGENT_FIREFOX = (f"Mozilla/5.0 (Windows NT 10.0; Win64; x64; "
 
 class DiscordDownloadThread(QThread):
     """A dedicated QThread for handling all official Discord downloads."""
-    progress_signal = pyqtSignal(str)
-    progress_label_signal = pyqtSignal(str)
-    finished_signal = pyqtSignal(int, int, bool, list)
+    progress_signal = Signal(str)
+    progress_label_signal = Signal(str)
+    finished_signal = Signal(int, int, bool, list)
 
     def __init__(self, mode, session, token, output_dir, server_id, channel_id, url, app_base_dir, limit=None, parent=None):
         super().__init__(parent)

@@ -3,7 +3,7 @@ import sqlite3
 import hashlib
 import threading
 
-from PyQt5.QtCore import QSettings
+from PySide6.QtCore import QSettings
 
 class DatabaseManager:
     _shared_lock = threading.Lock()

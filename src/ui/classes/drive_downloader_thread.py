@@ -1,4 +1,4 @@
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from ...services.drive_downloader import (
     download_dropbox_file,
@@ -10,9 +10,9 @@ from ...services.drive_downloader import (
 
 class DriveDownloadThread(QThread):
     """A dedicated QThread for handling direct Mega, GDrive, and Dropbox links."""
-    file_progress_signal = pyqtSignal(str, object)
-    finished_signal = pyqtSignal(int, int, bool, list)
-    overall_progress_signal = pyqtSignal(int, int)
+    file_progress_signal = Signal(str, object)
+    finished_signal = Signal(int, int, bool, list)
+    overall_progress_signal = Signal(int, int)
 
     def __init__(self, url, output_dir, platform, use_post_subfolder, cancellation_event, pause_event, logger_func, parent=None):
         super().__init__(parent)

@@ -1,5 +1,5 @@
 import threading
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from ...core.mangadex_client import fetch_mangadex_data
 from ...utils.proxy_utils import get_proxies_from_settings
@@ -7,10 +7,10 @@ from ...utils.proxy_utils import get_proxies_from_settings
 
 class MangaDexDownloadThread(QThread):
     """A wrapper QThread for running the MangaDex client function."""
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    finished_signal = pyqtSignal(int, int, bool)
-    overall_progress_signal = pyqtSignal(int, int)
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    finished_signal = Signal(int, int, bool)
+    overall_progress_signal = Signal(int, int)
 
     def __init__(self, url, output_dir, parent=None, export_all_links_mode=False):
         super().__init__(parent)

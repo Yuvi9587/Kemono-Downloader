@@ -2,8 +2,8 @@ import json
 import os
 import sys
 
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QPushButton, QMessageBox, QAbstractItemView, QLabel, QCheckBox
 )
@@ -54,7 +54,7 @@ class UpdateCheckDialog(QDialog):
         layout.addWidget(self.info_label)
         
         self.list_widget = QListWidget()
-        self.list_widget.setSelectionMode(QAbstractItemView.NoSelection)
+        self.list_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.list_widget.itemChanged.connect(self._handle_item_changed)
         layout.addWidget(self.list_widget)
 
@@ -138,9 +138,9 @@ class UpdateCheckDialog(QDialog):
 
         for profile_info in profiles_found:
             item = QListWidgetItem(profile_info['name'])
-            item.setData(Qt.UserRole, profile_info)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Unchecked)
+            item.setData(Qt.ItemDataRole.UserRole, profile_info)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Unchecked)
             self.list_widget.addItem(item)
             
         if not profiles_found:
@@ -154,12 +154,12 @@ class UpdateCheckDialog(QDialog):
     def _toggle_all_checkboxes(self):
         """Handles Select All and Deselect All button clicks."""
         sender = self.sender()
-        check_state = Qt.Checked if sender == self.select_all_button else Qt.Unchecked
+        check_state = Qt.CheckState.Checked if sender == self.select_all_button else Qt.CheckState.Unchecked
         
         self.list_widget.blockSignals(True)
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
-            if item.flags() & Qt.ItemIsUserCheckable:
+            if item.flags() & Qt.ItemFlag.ItemIsUserCheckable:
                 item.setCheckState(check_state)
         self.list_widget.blockSignals(False)
         
@@ -172,7 +172,7 @@ class UpdateCheckDialog(QDialog):
         """
         checked_count = 0
         for i in range(self.list_widget.count()):
-            if self.list_widget.item(i).checkState() == Qt.Checked:
+            if self.list_widget.item(i).checkState() == Qt.CheckState.Checked:
                 checked_count += 1
         
         if checked_count > 1:
@@ -192,8 +192,8 @@ class UpdateCheckDialog(QDialog):
         
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
-            if item.checkState() == Qt.Checked:
-                profile_info = item.data(Qt.UserRole)
+            if item.checkState() == Qt.CheckState.Checked:
+                profile_info = item.data(Qt.ItemDataRole.UserRole)
                 if profile_info:
                     self.selected_profiles_list.append(profile_info)
         

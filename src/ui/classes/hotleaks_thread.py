@@ -8,18 +8,18 @@ import requests
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 from ...core.hotleaks_client import HotleaksClient
 from ...utils.proxy_utils import get_proxies_from_settings
 
 MAX_WORKERS = 2  
 
 class HotleaksThread(QThread):
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    overall_progress_signal = pyqtSignal(int, int)
-    finished_signal = pyqtSignal(int, int, bool, list)
-    error_signal = pyqtSignal(str)
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    overall_progress_signal = Signal(int, int)
+    finished_signal = Signal(int, int, bool, list)
+    error_signal = Signal(str)
 
     def __init__(self, url, save_directory, main_app, export_all_links_mode=False):
         super().__init__(main_app)

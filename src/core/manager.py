@@ -11,6 +11,8 @@ from ..config.constants import (
     MAX_THREADS
 )
 from ..utils.file_utils import clean_folder_name
+from ..utils.network_utils import get_link_platform
+from .platform_database import PlatformDatabaseManager
 from .visual_sorter import VisualSorter
 
 class DownloadManager:
@@ -279,16 +281,8 @@ class DownloadManager:
         return {}
 
     def _save_creator_profile(self, data):
-        """Saves the provided data to the current creator's profile file."""
-        if not self.current_creator_profile_path:
-            return
-        try:
-            temp_path = self.current_creator_profile_path + ".tmp"
-            with open(temp_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
-            os.replace(temp_path, self.current_creator_profile_path)
-        except OSError as e:
-            self._log(f"❌ Error saving creator profile to '{self.current_creator_profile_path}': {e}")
+        """(DEPRECATED) Replaced by SQLite PlatformDatabaseManager. Does nothing."""
+        return
 
     def cancel_session(self):
         """Cancels the current running session."""

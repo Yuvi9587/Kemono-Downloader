@@ -1,6 +1,6 @@
 from collections import defaultdict
-from PyQt5.QtCore import pyqtSignal, Qt
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal, Qt
+from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
     QMessageBox, QPushButton, QVBoxLayout, QAbstractItemView, QLineEdit
 )
@@ -13,7 +13,7 @@ class DownloadExtractedLinksDialog(QDialog):
     A dialog to select and initiate the download for extracted, supported links
     from external cloud services like Mega, Google Drive, and Dropbox.
     """
-    download_requested = pyqtSignal(list)
+    download_requested = Signal(list)
 
     def __init__(self, links_data, parent_app, parent=None):
         """
@@ -43,23 +43,23 @@ class DownloadExtractedLinksDialog(QDialog):
         layout = QVBoxLayout(self)
 
         self.main_info_label = QLabel()
-        self.main_info_label.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
+        self.main_info_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         self.main_info_label.setWordWrap(True)
         layout.addWidget(self.main_info_label)
         self.search_input = QLineEdit()
         self.search_input.textChanged.connect(self._filter_links)
         layout.addWidget(self.search_input)
         self.links_list_widget = QListWidget()
-        self.links_list_widget.setSelectionMode(QAbstractItemView.NoSelection)
+        self.links_list_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self._populate_list()
         layout.addWidget(self.links_list_widget)
         button_layout = QHBoxLayout()
         self.select_all_button = QPushButton()
-        self.select_all_button.clicked.connect(lambda: self._set_all_items_checked(Qt.Checked))
+        self.select_all_button.clicked.connect(lambda: self._set_all_items_checked(Qt.CheckState.Checked))
         button_layout.addWidget(self.select_all_button)
 
         self.deselect_all_button = QPushButton()
-        self.deselect_all_button.clicked.connect(lambda: self._set_all_items_checked(Qt.Unchecked))
+        self.deselect_all_button.clicked.connect(lambda: self._set_all_items_checked(Qt.CheckState.Unchecked))
         button_layout.addWidget(self.deselect_all_button)
         button_layout.addStretch()
 
@@ -84,7 +84,7 @@ class DownloadExtractedLinksDialog(QDialog):
 
         for post_title_key in sorted_post_titles:
             header_item = QListWidgetItem(f"{post_title_key}")
-            header_item.setFlags(Qt.NoItemFlags)
+            header_item.setFlags(Qt.ItemFlag.NoItemFlags)
             font = header_item.font()
             font.setBold(True)
             font.setPointSize(font.pointSize() + 1)
@@ -94,9 +94,9 @@ class DownloadExtractedLinksDialog(QDialog):
                 platform_display = link_info_data.get('platform', 'unknown').upper()
                 display_text = f"  [{platform_display}] {link_info_data['link_text']} ({link_info_data['url']})"
                 item = QListWidgetItem(display_text)
-                item.setData(Qt.UserRole, link_info_data)
-                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-                item.setCheckState(Qt.Checked)
+                item.setData(Qt.ItemDataRole.UserRole, link_info_data)
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Checked)
                 self.links_list_widget.addItem(item)
 
     def _tr(self, key, default_text=""):
@@ -124,17 +124,17 @@ class DownloadExtractedLinksDialog(QDialog):
             self.setStyleSheet(get_dark_theme(scale))
         else:
             self.setStyleSheet("")
-        header_color = Qt.cyan if is_dark_theme else Qt.blue
+        header_color = Qt.cyan if is_dark_theme else Qt.GlobalColor.blue
         for i in range(self.links_list_widget.count()):
             item = self.links_list_widget.item(i)
-            if not item.flags() & Qt.ItemIsUserCheckable:
+            if not item.flags() & Qt.ItemFlag.ItemIsUserCheckable:
                 item.setForeground(header_color)
 
     def _set_all_items_checked(self, check_state):
         """Sets the checked state for all visible checkable items in the list."""
         for i in range(self.links_list_widget.count()):
             item = self.links_list_widget.item(i)
-            if (item.flags() & Qt.ItemIsUserCheckable) and not item.isHidden():
+            if (item.flags() & Qt.ItemFlag.ItemIsUserCheckable) and not item.isHidden():
                 item.setCheckState(check_state)
 
     def _handle_download_selected(self):
@@ -142,8 +142,8 @@ class DownloadExtractedLinksDialog(QDialog):
         selected_links = []
         for i in range(self.links_list_widget.count()):
             item = self.links_list_widget.item(i)
-            if item.flags() & Qt.ItemIsUserCheckable and item.checkState() == Qt.Checked and item.data(Qt.UserRole) is not None:
-                selected_links.append(item.data(Qt.UserRole))
+            if item.flags() & Qt.ItemFlag.ItemIsUserCheckable and item.checkState() == Qt.CheckState.Checked and item.data(Qt.ItemDataRole.UserRole) is not None:
+                selected_links.append(item.data(Qt.ItemDataRole.UserRole))
 
         if selected_links:
             self.download_requested.emit(selected_links)
@@ -165,14 +165,14 @@ class DownloadExtractedLinksDialog(QDialog):
         for i in range(self.links_list_widget.count()):
             item = self.links_list_widget.item(i)
             
-            if not (item.flags() & Qt.ItemIsUserCheckable):
+            if not (item.flags() & Qt.ItemFlag.ItemIsUserCheckable):
                 if current_header is not None:
                     current_header.setHidden(visible_children_count == 0)
                     
                 current_header = item
                 visible_children_count = 0
             else:
-                link_data = item.data(Qt.UserRole)
+                link_data = item.data(Qt.ItemDataRole.UserRole)
                 if not link_data:
                     continue
                     

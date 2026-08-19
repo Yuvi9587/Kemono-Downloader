@@ -1,8 +1,8 @@
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QGroupBox, QRadioButton,
     QPushButton, QHBoxLayout, QButtonGroup, QLabel, QLineEdit
 )
-from PyQt5.QtGui import QIntValidator
+from PySide6.QtGui import QIntValidator
 from ...i18n.translator import get_translation
 from ...config.constants import DUPLICATE_HANDLING_HASH, DUPLICATE_HANDLING_KEEP_ALL
 

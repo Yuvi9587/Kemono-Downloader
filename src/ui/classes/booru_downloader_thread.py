@@ -14,7 +14,7 @@ try:
 except ImportError:
     imagehash = None
     IMAGEHASH_AVAILABLE = False
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from PIL import Image
 
@@ -30,9 +30,9 @@ USERAGENT_FIREFOX = (f"Mozilla/5.0 (Windows NT 10.0; Win64; x64; "
 
 class BooruDownloadThread(QThread):
     """A dedicated QThread for handling Gelbooru/Danbooru with Rule34 DB & Filters."""
-    progress_signal = pyqtSignal(str)
-    overall_progress_signal = pyqtSignal(int, int)
-    finished_signal = pyqtSignal(int, int, bool)
+    progress_signal = Signal(str)
+    overall_progress_signal = Signal(int, int)
+    finished_signal = Signal(int, int, bool)
 
     def __init__(self, url, output_dir, api_key, user_id, parent=None):
         super().__init__(parent)

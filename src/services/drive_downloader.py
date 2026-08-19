@@ -283,7 +283,7 @@ def download_mega_file(mega_url, download_path, logger_func=print, progress_call
     folder_match = re.search(r'mega(?:\.co)?\.nz/folder/([a-zA-Z0-9]+)#([a-zA-Z0-9_.-]+)', mega_url)
     file_match = re.search(r'mega(?:\.co)?\.nz/(?:file/|#!)?([a-zA-Z0-9]+)(?:#|!)([a-zA-Z0-9_.-]+)', mega_url)
     session = requests.Session()
-    session.headers.update({'User-Agent': 'Kemono-Downloader-PyQt/1.0'})
+    session.headers.update({'User-Agent': 'Kemono-Downloader-Premium/1.0'})
 
     if folder_match:
         folder_id, folder_key = folder_match.groups()

@@ -1,8 +1,8 @@
 import os
 import time
 import json
-from PyQt5.QtCore import Qt, QStandardPaths, QTimer
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt, QStandardPaths, QTimer
+from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QScrollArea,
     QPushButton, QVBoxLayout, QSplitter, QWidget, QGroupBox,
     QFileDialog, QMessageBox

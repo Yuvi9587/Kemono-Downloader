@@ -9,11 +9,11 @@ from urllib.parse import urlparse
 
 import requests
 
-from PyQt5.QtCore import pyqtSignal, QCoreApplication, QSize, QThread, QTimer, Qt
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal, QCoreApplication, QSize, QThread, QTimer, Qt
+from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMessageBox, QPushButton, QVBoxLayout, QAbstractItemView,
-    QSplitter, QProgressBar, QWidget, QFileDialog, QStackedWidget
+    QSplitter, QProgressBar, QWidget, QFileDialog, QStackedWidget, QCheckBox
 )
 
 from ...i18n.translator import get_translation
@@ -24,9 +24,9 @@ from ...utils.resolution import get_dark_theme
 from .UpdateCheckDialog import UpdateCheckDialog
 
 class CreatorDownloadThread(QThread):
-    progress_signal = pyqtSignal(int)
-    status_signal = pyqtSignal(str)
-    finished_signal = pyqtSignal(bool, str)
+    progress_signal = Signal(int)
+    status_signal = Signal(str)
+    finished_signal = Signal(bool, str)
 
     def __init__(self, url, save_path):
         super().__init__()
@@ -70,10 +70,10 @@ class CreatorDownloadThread(QThread):
             self.finished_signal.emit(False, str(e))
 
 class PostsFetcherThread (QThread ):
-    status_update =pyqtSignal (str )
-    posts_fetched_signal =pyqtSignal (object ,list )
-    fetch_error_signal =pyqtSignal (object ,str )
-    finished_signal =pyqtSignal ()
+    status_update =Signal (str )
+    posts_fetched_signal =Signal (object ,list )
+    fetch_error_signal =Signal (object ,str )
+    finished_signal =Signal ()
 
     def __init__ (self ,creators_to_fetch ,parent_dialog_ref ):
         super ().__init__ ()
@@ -227,7 +227,7 @@ class EmptyPopupDialog (QDialog ):
         dl_layout = QVBoxLayout(self.download_page)
         
         self.dl_info_label = QLabel("The Creators database (approx. 50MB) is missing.\nWould you like to download it now to enable Creator Selection?")
-        self.dl_info_label.setAlignment(Qt.AlignCenter)
+        self.dl_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.dl_info_label.setStyleSheet("font-size: 14px; margin-bottom: 10px;")
         
         self.dl_progress = QProgressBar()
@@ -285,10 +285,15 @@ class EmptyPopupDialog (QDialog ):
         self .scope_button =QPushButton ()
         self .scope_button .clicked .connect (self ._toggle_scope_mode )
         left_bottom_buttons_layout .addWidget (self .scope_button )
+        
+        self.use_pawchive_cb = QCheckBox("Use Pawchive for Kemono")
+        self.use_pawchive_cb.setToolTip("When adding Kemono creators to the queue, use pawchive.pw URLs instead.")
+        if hasattr(self.parent_app, 'settings'):
+            self.use_pawchive_cb.setChecked(self.parent_app.settings.value("popup_use_pawchive", False, type=bool))
+            self.use_pawchive_cb.stateChanged.connect(lambda state: self.parent_app.settings.setValue("popup_use_pawchive", bool(state)))
+        left_bottom_buttons_layout.addWidget(self.use_pawchive_cb)
+        
         left_pane_layout .addLayout (left_bottom_buttons_layout )
-        self.update_button = QPushButton()
-        self.update_button.clicked.connect(self._handle_update_check) 
-        left_bottom_buttons_layout.addWidget(self.update_button)
 
         self .right_pane_widget =QWidget ()
         right_pane_layout =QVBoxLayout (self .right_pane_widget )
@@ -388,30 +393,6 @@ class EmptyPopupDialog (QDialog ):
             except AttributeError :
                 pass 
 
-    def _handle_update_check(self):
-        """
-        --- MODIFIED FUNCTION ---
-        Opens the new UpdateCheckDialog instead of a QFileDialog.
-        If a profile is selected, it sets the dialog's result properties
-        and accepts the dialog, just like the old file dialog logic did.
-        """
-        dialog = UpdateCheckDialog(self.user_data_path, self.parent_app, self)
-        
-        if dialog.exec_() == QDialog.Accepted:
-            selected_profiles = dialog.get_selected_profiles()
-            self.load_settings_into_ui_requested = dialog.should_load_into_ui()
-            
-            if selected_profiles:
-                try:
-                    self.update_profiles_list = selected_profiles
-                    
-                    self.update_profile_data = selected_profiles[0]['data']
-                    self.update_creator_name = selected_profiles[0]['name']
-                    
-                    self.accept()
-                except Exception as e:
-                    QMessageBox.critical(self, "Error Loading Profile",
-                                         f"Could not process the selected profile data:\n\n{e}")
 
     def _handle_fetch_posts_click (self ):
         selected_creators =list (self .globally_selected_creators .values ())
@@ -468,7 +449,6 @@ class EmptyPopupDialog (QDialog ):
         self .add_selected_button .setText (self ._tr ("creator_popup_add_selected_button","Add Selected"))
         self .fetch_posts_button .setText (self ._tr ("fetch_posts_button_text","Fetch Posts"))
         self ._update_scope_button_text_and_tooltip ()
-        self.update_button.setText(self._tr("check_for_updates_button", "Check for Updates"))
 
         self .posts_search_input .setPlaceholderText (self ._tr ("creator_popup_posts_search_placeholder","Search fetched posts by title..."))
 

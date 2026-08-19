@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 import cloudscraper
 import requests
 from curl_cffi import requests as cffi_requests
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from PIL import Image
 try:
@@ -41,10 +41,10 @@ except ImportError:
 
 
 class SimpCityDownloadThread(QThread):
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    finished_signal = pyqtSignal(int, int, bool, list)
-    overall_progress_signal = pyqtSignal(int, int)
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    finished_signal = Signal(int, int, bool, list)
+    overall_progress_signal = Signal(int, int)
 
     def __init__(self, url, post_id, output_dir, cookies, parent=None):
         super().__init__(parent)

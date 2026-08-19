@@ -2,12 +2,12 @@
 import sys
 import os
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QPushButton, QSizePolicy
 )
-from PyQt5.QtCore import Qt, QSize, QUrl
-from PyQt5.QtGui import QPixmap, QDesktopServices
+from PySide6.QtCore import Qt, QSize, QUrl
+from PySide6.QtGui import QPixmap, QDesktopServices
 
 from ...utils.resolution import get_dark_theme
 from ..assets import get_asset_path
@@ -33,8 +33,8 @@ class SupportDialog(QDialog):
     ):
         """Reusable clickable card widget with icon, title, and subtitle."""
         button = QPushButton()
-        button.setCursor(Qt.PointingHandCursor)
-        button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         button.setMinimumHeight(min_height)
 
         button.setStyleSheet(f"""
@@ -60,9 +60,9 @@ class SupportDialog(QDialog):
             scale = getattr(self.parent_app, 'scale_factor', 1.0)
             scaled_size = int(icon_size * scale)
             icon_label.setPixmap(
-                pixmap.scaled(QSize(scaled_size, scaled_size), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pixmap.scaled(QSize(scaled_size, scaled_size), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             )
-        icon_label.setAlignment(Qt.AlignCenter)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(icon_label)
 
         title_label = QLabel(title)
@@ -70,14 +70,14 @@ class SupportDialog(QDialog):
         font.setPointSize(11)
         font.setBold(True)
         title_label.setFont(font)
-        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setStyleSheet("background-color: transparent; border: none;")
         layout.addWidget(title_label)
 
         if subtitle:
             subtitle_label = QLabel(subtitle)
             subtitle_label.setStyleSheet("color: #A8A8A8; background-color: transparent; border: none;")
-            subtitle_label.setAlignment(Qt.AlignCenter)
+            subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(subtitle_label)
 
         button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
@@ -90,7 +90,7 @@ class SupportDialog(QDialog):
         font.setPointSize(13)
         font.setBold(True)
         label.setFont(font)
-        label.setAlignment(Qt.AlignCenter)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setStyleSheet("margin-top: 10px; margin-bottom: 5px;")
         return label
 
@@ -104,7 +104,7 @@ class SupportDialog(QDialog):
         font.setPointSize(17)
         font.setBold(True)
         header_label.setFont(font)
-        header_label.setAlignment(Qt.AlignCenter)
+        header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(header_label)
 
         subtext = QLabel(
@@ -112,7 +112,7 @@ class SupportDialog(QDialog):
             "Your help keeps the project alive and growing!"
         )
         subtext.setWordWrap(True)
-        subtext.setAlignment(Qt.AlignCenter)
+        subtext.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(subtext)
 
         main_layout.addWidget(self._create_section_title("Contribute Financially"))
@@ -134,8 +134,8 @@ class SupportDialog(QDialog):
         main_layout.addLayout(donation_layout)
 
         line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
         main_layout.addWidget(line)
 
         main_layout.addWidget(self._create_section_title("Get Help & Connect"))

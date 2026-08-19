@@ -14,6 +14,7 @@ from datetime import datetime
 import hashlib
 from .visual_sorter import VisualSorter
 from .database_manager import DatabaseManager
+from .platform_database import PlatformDatabaseManager
 from concurrent.futures import ThreadPoolExecutor, as_completed, CancelledError, Future
 from io import BytesIO
 from urllib .parse import urlparse 
@@ -47,7 +48,7 @@ try:
     from docx import Document
 except ImportError:
     Document = None
-from PyQt5 .QtCore import Qt ,QThread ,pyqtSignal ,QMutex ,QMutexLocker ,QObject ,QTimer ,QSettings ,QStandardPaths ,QCoreApplication ,QUrl ,QSize ,QProcess 
+from PySide6.QtCore import Qt, QThread, Signal, QMutex, QMutexLocker, QObject, QTimer, QSettings, QStandardPaths, QCoreApplication, QUrl, QSize, QProcess
 from .api_client import download_from_api, fetch_post_comments, fetch_single_post_data, fetch_post_revisions
 from ..services.multipart_downloader import download_file_in_parts, MULTIPART_DOWNLOADER_AVAILABLE
 from ..services.drive_downloader import (
@@ -82,13 +83,13 @@ def robust_clean_name(name):
     return cleaned_name
 
 class PostProcessorSignals (QObject ):
-    progress_signal =pyqtSignal (str )
-    file_download_status_signal =pyqtSignal (bool )
-    external_link_signal =pyqtSignal (str ,str ,str ,str ,str )
-    file_progress_signal =pyqtSignal (str ,object )
-    file_successfully_downloaded_signal =pyqtSignal (dict )
-    missed_character_post_signal =pyqtSignal (str ,str )
-    worker_finished_signal = pyqtSignal(tuple)
+    progress_signal =Signal (str )
+    file_download_status_signal =Signal (bool )
+    external_link_signal =Signal (str ,str ,str ,str ,str )
+    file_progress_signal =Signal (str ,object )
+    file_successfully_downloaded_signal =Signal (dict )
+    missed_character_post_signal =Signal (str ,str )
+    worker_finished_signal = Signal(tuple)
 
 class PostProcessorWorker:
     # Class-level flag + lock: prints the full pawchive pending explanation only once per
@@ -155,7 +156,8 @@ class PostProcessorWorker:
                  download_revisions=False,
                  visual_sort_active=False, 
                  user_data_path=None,
-                 export_all_links_mode=False
+                 export_all_links_mode=False,
+                 retry_404_errors=False
                  ):
         # self.db is initialized below based on the api_url
         self.post = post_data
@@ -237,11 +239,20 @@ class PostProcessorWorker:
         self.download_revisions = download_revisions
         self.visual_sort_active = visual_sort_active 
         self.user_data_path = user_data_path
+        self.retry_404_errors = retry_404_errors
         
         if 'kemono' in self.api_url_input.lower():
             self.db = DatabaseManager()
         else:
             self.db = None
+            
+        platform_name = get_link_platform(self.api_url_input)
+        if not platform_name:
+            platform_name = "unknown"
+            
+        appdata_dir = os.path.dirname(self.session_file_path) if self.session_file_path else os.path.join(self.app_base_dir, "appdata")
+        self.platform_db = PlatformDatabaseManager.get_instance(platform_name, appdata_dir)
+        
         self.export_all_links_mode = export_all_links_mode
 
 
@@ -339,7 +350,6 @@ class PostProcessorWorker:
                 parsed = urlparse(file_url)
                 new_netloc = re.sub(r'^n\d+\.', 'img.', parsed.netloc)
                 new_netloc = re.sub(r'^file\.', 'img.', new_netloc)
-                new_netloc = re.sub(r'^fox\.', 'img.', new_netloc)
                 new_path = '/thumbnail' + parsed.path if parsed.path.startswith('/data/') else parsed.path
                 if new_netloc != parsed.netloc or new_path != parsed.path:
                     file_url = parsed._replace(netloc=new_netloc, path=new_path).geturl()
@@ -363,6 +373,14 @@ class PostProcessorWorker:
         try:
             parsed_url_for_hash = urlparse(file_url)
             url_hash = os.path.basename(parsed_url_for_hash.path).split('.')[0]
+            
+            # 1. Check SQLite Database (Cross-session, persistent)
+            if getattr(self, 'platform_db', None) and url_hash:
+                if self.platform_db.is_file_downloaded(self.user_id, url_hash):
+                    self.logger(f"   -> Skip (Database Match): File hash '{url_hash}' already recorded in database. Skipping download.")
+                    return 0, 1, file_info.get('name'), False, FILE_DOWNLOAD_STATUS_SKIPPED, None
+
+            # 2. Check Session Cache (Intra-session duplicates)
             with self.downloaded_hash_counts_lock:
                 current_count = self.downloaded_hash_counts.get(url_hash, 0)
                 if self.keep_duplicates_mode == DUPLICATE_HANDLING_HASH and current_count >= 1:
@@ -509,13 +527,17 @@ class PostProcessorWorker:
                         raw_content = str(self.post.get('content') or '')
                         clean_content = robust_clean_name(strip_html_tags(raw_content)).strip()[:60] 
 
+                        # Pre-truncate dynamic text values so they don't push the suffix off the 260-char limit
+                        title_val = str(self.post.get('title', ''))[:80].strip()
+                        name_val = original_filename_cleaned_base[:80].strip()
+
                         format_values = {
                             'id': str(self.post.get('id', '')),
                             'user': user_id,
                             'creator_name': creator_name,
                             'service': self.service,
-                            'title': str(self.post.get('title', '')),
-                            'name': original_filename_cleaned_base,
+                            'title': title_val,
+                            'name': name_val,
                             'added': format_date(added_date or published_date),
                             'published': format_date(published_date),
                             'edited': format_date(edited_date or published_date),
@@ -853,9 +875,21 @@ class PostProcessorWorker:
                     last_exception_for_retry_later = e
 
             except requests.exceptions.RequestException as e:
-                if e.response is not None and e.response.status_code == 403:
+                status_code = e.response.status_code if e.response is not None else None
+                if status_code == 403:
                     self.logger(f"   ⚠️ Download Error (403 Forbidden): {api_original_filename}. Retrying...")
                     last_exception_for_retry_later = e
+                elif status_code == 404:
+                    if self.retry_404_errors:
+                        self.logger(f"   ❌ [404 Not Found] '{api_original_filename}'. Flagged as permanent failure (will retry on next sync if applicable).")
+                        last_exception_for_retry_later = e
+                        is_permanent_error = True
+                        break
+                    else:
+                        # 404 = file not on server (Pawchive pending / never imported).
+                        # Silently skip — no need to populate the error dialog.
+                        self.logger(f"   ⏳ [404 Not Found] '{api_original_filename}' is not available on the server. Skipping silently.")
+                        return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
                 else:
                     self.logger(f"   ❌ Download Error (Non-Retryable): {api_original_filename}. Error: {e}")
                     last_exception_for_retry_later = e
@@ -1067,7 +1101,7 @@ class PostProcessorWorker:
                 final_filename_saved_for_return = final_filename_on_disk
                 self.logger(f"✅ Saved: '{final_filename_saved_for_return}' (from '{api_original_filename}', {downloaded_size_bytes / (1024 * 1024):.2f} MB) in '{os.path.basename(effective_save_folder)}'")
 
-                if getattr(self, 'db', None):
+                if getattr(self, 'db', None) or getattr(self, 'platform_db', None):
                     actual_final_path = os.path.join(effective_save_folder, final_filename_saved_for_return)
                     calculated_phash = None
                     valid_exts = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
@@ -1078,12 +1112,38 @@ class PostProcessorWorker:
                         except Exception:
                             pass
                     
-                    self.db.record_tagless_download(
-                        file_path=actual_final_path,
-                        file_name=final_filename_saved_for_return,
-                        file_hash=calculated_file_hash, 
-                        phash=calculated_phash
-                    )
+                    if getattr(self, 'db', None):
+                        self.db.record_tagless_download(
+                            file_path=actual_final_path,
+                            file_name=final_filename_saved_for_return,
+                            file_hash=calculated_file_hash, 
+                            phash=calculated_phash
+                        )
+                        
+                    if getattr(self, 'platform_db', None):
+                        creator_name = None
+                        if isinstance(self.creator_name_cache, dict) and getattr(self, 'service', None) and getattr(self, 'user_id', None):
+                            creator_name = self.creator_name_cache.get((str(self.service).lower(), str(self.user_id)))
+                        if not creator_name:
+                            creator_name = self.post.get('user') or os.path.basename(effective_save_folder)
+                        # Use the URL hash (sha256 from CDN path) as the primary identifier.
+                        # This is what the pre-download skip check queries, so they must match.
+                        try:
+                            _parsed = urlparse(file_url)
+                            _url_hash_for_db = os.path.basename(_parsed.path).split('.')[0]
+                        except Exception:
+                            _url_hash_for_db = calculated_file_hash
+                        self.platform_db.record_download(
+                            creator_name=creator_name,
+                            file_hash=_url_hash_for_db or calculated_file_hash,
+                            phash=calculated_phash,
+                            post_id=str(original_post_id_for_log),
+                            original_filename=api_original_filename,
+                            saved_filename=final_filename_saved_for_return,
+                            creator_id=str(self.user_id),
+                            service=getattr(self, 'service', None),
+                            saved_path=actual_final_path
+                        )
 
                 downloaded_file_details = {
                     'disk_filename': final_filename_saved_for_return,
@@ -2567,18 +2627,18 @@ class PostProcessorWorker:
             return result_tuple
 
 class DownloadThread(QThread):
-    progress_signal = pyqtSignal(str)
-    add_character_prompt_signal = pyqtSignal(str)
-    file_download_status_signal = pyqtSignal(bool)
-    finished_signal = pyqtSignal(int, int, bool, list)
-    external_link_signal = pyqtSignal(str, str, str, str, str)
-    file_successfully_downloaded_signal = pyqtSignal(dict)
-    file_progress_signal = pyqtSignal(str, object)
-    retryable_file_failed_signal = pyqtSignal(list)
-    missed_character_post_signal = pyqtSignal(str, str)
-    post_processed_for_history_signal = pyqtSignal(dict)
-    final_history_entries_signal = pyqtSignal(list)
-    permanent_file_failed_signal = pyqtSignal(list)
+    progress_signal = Signal(str)
+    add_character_prompt_signal = Signal(str)
+    file_download_status_signal = Signal(bool)
+    finished_signal = Signal(int, int, bool, list)
+    external_link_signal = Signal(str, str, str, str, str)
+    file_successfully_downloaded_signal = Signal(dict)
+    file_progress_signal = Signal(str, object)
+    retryable_file_failed_signal = Signal(list)
+    missed_character_post_signal = Signal(str, str)
+    post_processed_for_history_signal = Signal(dict)
+    final_history_entries_signal = Signal(list)
+    permanent_file_failed_signal = Signal(list)
 
     def __init__(self, api_url_input, output_dir, known_names_copy,
                  cancellation_event,

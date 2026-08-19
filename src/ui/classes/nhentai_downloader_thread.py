@@ -1,17 +1,17 @@
 import os
 import time
 import requests 
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from ...utils.file_utils import clean_folder_name
 from ...core.database_manager import DatabaseManager
 
 
 class NhentaiDownloadThread(QThread):
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    finished_signal = pyqtSignal(int, int, bool)
-    overall_progress_signal = pyqtSignal(int, int)
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    finished_signal = Signal(int, int, bool)
+    overall_progress_signal = Signal(int, int)
 
     IMAGE_SERVERS = [
         "https://i.nhentai.net", "https://i2.nhentai.net", "https://i3.nhentai.net",
@@ -191,4 +191,4 @@ class NhentaiDownloadThread(QThread):
 
     def resume(self):
         self._is_paused = False
-        self.progress_signal.emit("   Nhentai download resumed.")
+        self.progress_signal.emit("   Nhentai download resumed.")

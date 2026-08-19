@@ -1,13 +1,13 @@
 
 import os
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QSplitter, QScrollArea, QFrame, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QStackedWidget, QButtonGroup, QRadioButton, QCheckBox,
     QListWidget, QTextEdit, QApplication
 )
-from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtGui import QIntValidator, QFont, QIcon
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QIntValidator, QFont, QIcon
 
 from ..config.constants import *
 from ..ui.assets import get_asset_path
@@ -28,11 +28,11 @@ def setup_ui(main_app):
     default_font.setPointSize(int(base_font_size * scale))
     main_app.setFont(default_font)
 
-    main_app.main_splitter = QSplitter(Qt.Horizontal)
+    main_app.main_splitter = QSplitter(Qt.Orientation.Horizontal)
     
     left_scroll_area = QScrollArea()
     left_scroll_area.setWidgetResizable(True)
-    left_scroll_area.setFrameShape(QFrame.NoFrame)
+    left_scroll_area.setFrameShape(QFrame.Shape.NoFrame)
 
     left_panel_widget = QWidget()
     left_layout = QVBoxLayout(left_panel_widget)
@@ -66,8 +66,8 @@ def setup_ui(main_app):
     main_app.url_placeholder_widget = QWidget()
     placeholder_layout = QHBoxLayout(main_app.url_placeholder_widget)
     placeholder_layout.setContentsMargins(0, 0, 0, 0)
-    main_app.fav_mode_active_label = QLabel(main_app._tr("fav_mode_active_label_text", f"<img src='{get_asset_path('assets/Svg/star.svg')}' width='13' height='13' align='top'> Favorite Mode is active..."))
-    main_app.fav_mode_active_label.setAlignment(Qt.AlignCenter)
+    main_app.fav_mode_active_label = QLabel(main_app._tr("fav_mode_active_label_text", f"<img src='file:///{get_asset_path('assets/Svg/star.svg').replace(chr(92), '/')}' width='13' height='13' align='top'> Favorite Mode is active..."))
+    main_app.fav_mode_active_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     placeholder_layout.addWidget(main_app.fav_mode_active_label)
     main_app.url_or_placeholder_stack = QStackedWidget()
     main_app.url_or_placeholder_stack.addWidget(main_app.url_input_widget)
@@ -118,7 +118,7 @@ def setup_ui(main_app):
     character_filter_v_layout = QVBoxLayout(main_app.character_filter_widget)
     character_filter_v_layout.setContentsMargins(0, 0, 0, 0)
     character_filter_v_layout.setSpacing(2)
-    main_app.character_label = QLabel(f"<img src='{get_asset_path('assets/Svg/target.svg')}' width='13' height='13' align='top'> Filter by Character(s) (comma-separated):")
+    main_app.character_label = QLabel(f"<img src='file:///{get_asset_path('assets/Svg/target.svg').replace(chr(92), '/')}' width='13' height='13' align='top'> Filter by Character(s) (comma-separated):")
     character_filter_v_layout.addWidget(main_app.character_label)
     char_input_and_button_layout = QHBoxLayout()
     char_input_and_button_layout.setContentsMargins(0, 0, 0, 0)
@@ -218,7 +218,7 @@ def setup_ui(main_app):
     main_app.booru_creds_input.setToolTip("Paste your raw API string directly from the URL bar for Gelbooru, Danbooru, or Rule34")
     
     main_app.rule34_settings_btn = QPushButton("⚙️ Rule34 Settings")
-    main_app.rule34_settings_btn.setCursor(Qt.PointingHandCursor)
+    main_app.rule34_settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
     
     booru_inputs_layout.addWidget(main_app.booru_creds_input, stretch=3)
     booru_inputs_layout.addWidget(main_app.rule34_settings_btn, stretch=1)
@@ -252,7 +252,7 @@ def setup_ui(main_app):
     advanced_settings_layout = QVBoxLayout(main_app.advanced_settings_widget)
     advanced_settings_layout.setContentsMargins(0, 0, 0, 0)
     advanced_settings_layout.setSpacing(10)
-    advanced_settings_label = QLabel(f"<img src='{get_asset_path('assets/Svg/settings.svg')}' width='13' height='13' align='top'> Advanced Settings:")
+    advanced_settings_label = QLabel(f"<img src='file:///{get_asset_path('assets/Svg/settings.svg').replace(chr(92), '/')}' width='13' height='13' align='top'> Advanced Settings:")
     advanced_settings_layout.addWidget(advanced_settings_label)
 
     main_app.advanced_row1_layout = QHBoxLayout()
@@ -404,7 +404,7 @@ def setup_ui(main_app):
     left_layout.addSpacing(10)
     known_chars_label_layout = QHBoxLayout()
     known_chars_label_layout.setSpacing(10)
-    main_app.known_chars_label = QLabel(f"<img src='{get_asset_path('assets/Svg/mask.svg')}' width='13' height='13' align='top'> Known Shows/Characters (for Folder Names):")
+    main_app.known_chars_label = QLabel(f"<img src='file:///{get_asset_path('assets/Svg/mask.svg').replace(chr(92), '/')}' width='13' height='13' align='top'> Known Shows/Characters (for Folder Names):")
     known_chars_label_layout.addWidget(main_app.known_chars_label)
     main_app.open_known_txt_button = QPushButton("Open Known.txt")
     main_app.open_known_txt_button.setFixedWidth(int(120 * scale))
@@ -452,22 +452,22 @@ def setup_ui(main_app):
     main_app.future_settings_button.setFixedWidth(int(45 * scale))
     main_app.future_settings_button.setToolTip("Open Settings")
     main_app.future_settings_button.clicked.connect(main_app._show_future_settings_dialog)
-    main_app.support_button = QPushButton("Support")
-    main_app.support_button.setIcon(QIcon(get_asset_path("assets/Svg/heart.svg")))
-    main_app.support_button.setIconSize(QSize(int(16 * scale), int(16 * scale)))
-    main_app.support_button.setFixedWidth(int(100 * scale))
-    main_app.support_button.setToolTip("Support the application developer.")
+    main_app.auto_sync_button = QPushButton("Auto-Sync")
+    main_app.auto_sync_button.setIcon(QIcon(get_asset_path("assets/Svg/sync.svg")))
+    main_app.auto_sync_button.setIconSize(QSize(int(16 * scale), int(16 * scale)))
+    main_app.auto_sync_button.setFixedWidth(int(140 * scale))
+    main_app.auto_sync_button.setToolTip("Open the dedicated Auto-Sync Hub and Database Repair tools.")
     char_manage_layout.addWidget(main_app.add_to_filter_button, 1)
     char_manage_layout.addWidget(main_app.delete_char_button, 1)
     char_manage_layout.addWidget(main_app.known_names_help_button, 0)
     char_manage_layout.addWidget(main_app.history_button, 0)
     char_manage_layout.addWidget(main_app.future_settings_button, 0)
-    char_manage_layout.addWidget(main_app.support_button, 0)
+    char_manage_layout.addWidget(main_app.auto_sync_button, 0)
     left_layout.addLayout(char_manage_layout)
     left_layout.addStretch(0)
     right_panel_widget.setLayout(right_layout)
     log_title_layout = QHBoxLayout()
-    main_app.progress_log_label = QLabel(f"<img src='{get_asset_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:")
+    main_app.progress_log_label = QLabel(f"<img src='file:///{get_asset_path('assets/Svg/scroll.svg').replace(chr(92), '/')}' width='13' height='13' align='top'> Progress Log:")
     log_title_layout.addWidget(main_app.progress_log_label)
     log_title_layout.addStretch(1)
     main_app.link_search_input = QLineEdit()
@@ -533,7 +533,7 @@ def setup_ui(main_app):
     main_app.reset_button.setFixedWidth(int(80 * scale))
     log_title_layout.addWidget(main_app.reset_button)
     right_layout.addLayout(log_title_layout)
-    main_app.log_splitter = QSplitter(Qt.Vertical)
+    main_app.log_splitter = QSplitter(Qt.Orientation.Vertical)
     main_app.log_view_stack = QStackedWidget()
     main_app.main_log_output = QTextEdit()
     main_app.main_log_output.setReadOnly(True)
@@ -624,8 +624,6 @@ def get_dark_theme(scale=1):
     button_padding_v = int(5 * scale)
     button_padding_h = int(12 * scale)
     tooltip_padding = int(4 * scale)
-    indicator_size = int(14 * scale)
-    
     return f"""
     QWidget {{ 
         background-color: #2E2E2E; 
@@ -659,7 +657,6 @@ def get_dark_theme(scale=1):
     QPushButton:disabled {{ background-color: #404040; color: #888; border-color: #555; }}
     QLabel {{ font-weight: bold; color: #C0C0C0; }}
     QRadioButton, QCheckBox {{ spacing: {int(5 * scale)}px; color: #E0E0E0; }}
-    QRadioButton::indicator, QCheckBox::indicator {{ width: {indicator_size}px; height: {indicator_size}px; }}
     QListWidget {{ alternate-background-color: #353535; }}
     QListWidget::item:selected {{ background-color: #007ACC; color: #FFFFFF; }}
     QToolTip {{ 

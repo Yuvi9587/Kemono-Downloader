@@ -9,7 +9,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse, parse_qs
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 from ...config.constants import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 
 from PIL import Image
@@ -22,10 +22,10 @@ except ImportError:
 from ...core.database_manager import DatabaseManager
 
 class Rule34DownloadThread(QThread):
-    finished_signal = pyqtSignal(int, int, bool)
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    overall_progress_signal = pyqtSignal(int, int)
+    finished_signal = Signal(int, int, bool)
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    overall_progress_signal = Signal(int, int)
 
     def __init__(self, url, output_dir, api_key="", user_id="", parent=None, export_all_links_mode=False):
         super().__init__(parent)
@@ -730,4 +730,4 @@ class Rule34DownloadThread(QThread):
             if os.path.exists(save_path):
                 try: os.remove(save_path)
                 except OSError: pass
-            return False
+            return False

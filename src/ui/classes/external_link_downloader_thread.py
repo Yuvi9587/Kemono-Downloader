@@ -1,4 +1,4 @@
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from ...services.drive_downloader import (
     download_dropbox_file,
@@ -9,11 +9,11 @@ from ...services.drive_downloader import (
 
 class ExternalLinkDownloadThread(QThread):
     """A QThread to handle downloading multiple external links sequentially."""
-    progress_signal = pyqtSignal(str)
-    file_complete_signal = pyqtSignal(str, bool)
-    finished_signal = pyqtSignal()
-    overall_progress_signal = pyqtSignal(int, int)
-    file_progress_signal = pyqtSignal(str, object)
+    progress_signal = Signal(str)
+    file_complete_signal = Signal(str, bool)
+    finished_signal = Signal()
+    overall_progress_signal = Signal(int, int)
+    file_progress_signal = Signal(str, object)
 
     def __init__(self, tasks_to_download, download_base_path, parent_logger_func, parent=None, use_post_subfolder=False):
         super().__init__(parent)

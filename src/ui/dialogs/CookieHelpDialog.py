@@ -1,6 +1,6 @@
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 )
 
@@ -50,7 +50,7 @@ class CookieHelpDialog(QDialog):
         main_layout = QVBoxLayout(self)
 
         self.info_label = QLabel()
-        self.info_label.setTextFormat(Qt.RichText)
+        self.info_label.setTextFormat(Qt.TextFormat.RichText)
         self.info_label.setOpenExternalLinks(True)
         self.info_label.setWordWrap(True)
         main_layout.addWidget(self.info_label)

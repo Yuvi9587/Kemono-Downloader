@@ -1,7 +1,7 @@
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QRadioButton, QDialogButtonBox, QButtonGroup, QLabel, QComboBox, QHBoxLayout, QCheckBox
 )
-from PyQt5.QtCore import Qt
+from PySide6.QtCore import Qt
 from ...utils.resolution import get_dark_theme
 
 class MoreOptionsDialog(QDialog):

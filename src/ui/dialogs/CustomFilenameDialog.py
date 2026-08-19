@@ -1,8 +1,8 @@
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, 
     QDialogButtonBox, QTextEdit
 )
-from PyQt5.QtCore import Qt
+from PySide6.QtCore import Qt
 
 class CustomFilenameDialog(QDialog):
     """A dialog for creating a custom filename format string."""

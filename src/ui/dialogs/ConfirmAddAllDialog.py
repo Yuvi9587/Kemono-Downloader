@@ -1,5 +1,5 @@
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
     QPushButton, QVBoxLayout
 )
@@ -87,9 +87,9 @@ class ConfirmAddAllDialog(QDialog):
         for filter_obj in self.new_filter_objects_list:
             item_text = filter_obj["name"]
             list_item = QListWidgetItem(item_text)
-            list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)
-            list_item.setCheckState(Qt.Checked)
-            list_item.setData(Qt.UserRole, filter_obj)
+            list_item.setFlags(list_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            list_item.setCheckState(Qt.CheckState.Checked)
+            list_item.setData(Qt.ItemDataRole.UserRole, filter_obj)
             self.names_list_widget.addItem(list_item)
 
     def _tr(self, key, default_text=""):
@@ -116,20 +116,20 @@ class ConfirmAddAllDialog(QDialog):
     def _select_all_items(self):
         """Checks all items in the list."""
         for i in range(self.names_list_widget.count()):
-            self.names_list_widget.item(i).setCheckState(Qt.Checked)
+            self.names_list_widget.item(i).setCheckState(Qt.CheckState.Checked)
 
     def _deselect_all_items(self):
         """Unchecks all items in the list."""
         for i in range(self.names_list_widget.count()):
-            self.names_list_widget.item(i).setCheckState(Qt.Unchecked)
+            self.names_list_widget.item(i).setCheckState(Qt.CheckState.Unchecked)
 
     def _accept_add_selected(self):
         """Sets the user choice to the list of selected items and accepts the dialog."""
         selected_objects = []
         for i in range(self.names_list_widget.count()):
             item = self.names_list_widget.item(i)
-            if item.checkState() == Qt.Checked:
-                filter_obj = item.data(Qt.UserRole)
+            if item.checkState() == Qt.CheckState.Checked:
+                filter_obj = item.data(Qt.ItemDataRole.UserRole)
                 if filter_obj:
                     selected_objects.append(filter_obj)
         
@@ -151,7 +151,7 @@ class ConfirmAddAllDialog(QDialog):
         Overrides the default exec_ to handle the return value logic, ensuring a
         sensible default if no items are selected but the "Add" button is clicked.
         """
-        super().exec_()
+        super().exec()
         if isinstance(self.user_choice, list) and not self.user_choice:
             return CONFIRM_ADD_ALL_SKIP_ADDING
         return self.user_choice

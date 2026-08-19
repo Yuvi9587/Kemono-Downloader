@@ -1,5 +1,5 @@
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QPushButton, QVBoxLayout
 )
@@ -105,9 +105,9 @@ class KnownNamesFilterDialog(QDialog):
         self.names_list_widget.clear()
         for entry_obj in self.all_known_name_entries:
             item = QListWidgetItem(entry_obj['name'])
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Unchecked)
-            item.setData(Qt.UserRole, entry_obj)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Unchecked)
+            item.setData(Qt.ItemDataRole.UserRole, entry_obj)
             self.names_list_widget.addItem(item)
 
     def _filter_list_display(self):
@@ -115,7 +115,7 @@ class KnownNamesFilterDialog(QDialog):
         search_text_lower = self.search_input.text().lower()
         for i in range(self.names_list_widget.count()):
             item = self.names_list_widget.item(i)
-            entry_obj = item.data(Qt.UserRole)
+            entry_obj = item.data(Qt.ItemDataRole.UserRole)
             matches_search = not search_text_lower or search_text_lower in entry_obj['name'].lower()
             item.setHidden(not matches_search)
 
@@ -124,20 +124,20 @@ class KnownNamesFilterDialog(QDialog):
         for i in range(self.names_list_widget.count()):
             item = self.names_list_widget.item(i)
             if not item.isHidden():
-                item.setCheckState(Qt.Checked)
+                item.setCheckState(Qt.CheckState.Checked)
 
     def _deselect_all_items(self):
         """Unchecks all items in the list widget."""
         for i in range(self.names_list_widget.count()):
-            self.names_list_widget.item(i).setCheckState(Qt.Unchecked)
+            self.names_list_widget.item(i).setCheckState(Qt.CheckState.Unchecked)
 
     def _accept_selection_action(self):
         """Gathers the selected entries and accepts the dialog."""
         self.selected_entries_to_return = []
         for i in range(self.names_list_widget.count()):
             item = self.names_list_widget.item(i)
-            if item.checkState() == Qt.Checked:
-                self.selected_entries_to_return.append(item.data(Qt.UserRole))
+            if item.checkState() == Qt.CheckState.Checked:
+                self.selected_entries_to_return.append(item.data(Qt.ItemDataRole.UserRole))
         self.accept()
 
     def get_selected_entries(self):

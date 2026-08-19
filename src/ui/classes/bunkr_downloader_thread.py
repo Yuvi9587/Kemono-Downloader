@@ -4,7 +4,7 @@ import time
 import requests
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from ...core.bunkr_client import fetch_bunkr_data
 from ...utils.proxy_utils import get_proxies_from_settings
@@ -14,9 +14,9 @@ BUNKR_IMG_THREADS = 6
 
 class BunkrDownloadThread(QThread):
     """A dedicated QThread for handling Bunkr downloads."""
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    finished_signal = pyqtSignal(int, int, bool, list)
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    finished_signal = Signal(int, int, bool, list)
 
     def __init__(self, url, output_dir, parent=None):
         super().__init__(parent)
@@ -218,4 +218,4 @@ class BunkrDownloadThread(QThread):
 
     def resume(self):
         self._is_paused = False
-        self.progress_signal.emit("   Bunkr download resumed.")
+        self.progress_signal.emit("   Bunkr download resumed.")

@@ -10,7 +10,7 @@ try:
 except ImportError:
     imagehash = None
     IMAGEHASH_AVAILABLE = False
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from PIL import Image
 from ...core.database_manager import DatabaseManager
@@ -19,10 +19,10 @@ from ...core.deviantart_client import DeviantArtClient
 from ...utils.file_utils import clean_folder_name
 
 class DeviantArtDownloadThread(QThread):
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    overall_progress_signal = pyqtSignal(int, int)
-    finished_signal = pyqtSignal(int, int, bool, list)
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    overall_progress_signal = Signal(int, int)
+    finished_signal = Signal(int, int, bool, list)
 
     def __init__(self, url, output_dir, pause_event, cancellation_event, parent=None, proxies=None, export_all_links_mode=False):
         super().__init__(parent)

@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 import cloudscraper
 import requests
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from ...core.allcomic_client import (fetch_chapter_data as allcomic_fetch_data,
                                      get_chapter_list as allcomic_get_list)
@@ -14,10 +14,10 @@ from ...utils.file_utils import clean_folder_name
 
 class AllcomicDownloadThread(QThread):
     """A dedicated QThread for handling allcomic.com downloads."""
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    finished_signal = pyqtSignal(int, int, bool) 
-    overall_progress_signal = pyqtSignal(int, int) 
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    finished_signal = Signal(int, int, bool) 
+    overall_progress_signal = Signal(int, int) 
 
     def __init__(self, url, output_dir, parent=None, proxies=None, export_all_links_mode=False):
         super().__init__(parent)

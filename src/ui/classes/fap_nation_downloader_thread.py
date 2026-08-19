@@ -3,7 +3,7 @@ import sys
 import re
 import threading
 import time
-from PyQt5.QtCore import QThread, pyqtSignal, QProcess
+from PySide6.QtCore import QThread, Signal, QProcess
 import cloudscraper
 
 from ...core.fap_nation_client import fetch_fap_nation_data
@@ -15,10 +15,10 @@ class FapNationDownloadThread(QThread):
     A dedicated QThread for Fap-Nation that uses a hybrid approach, choosing
     between yt-dlp for HLS streams and a multipart downloader for direct links.
     """
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    finished_signal = pyqtSignal(int, int, bool, list)
-    overall_progress_signal = pyqtSignal(int, int)
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    finished_signal = Signal(int, int, bool, list)
+    overall_progress_signal = Signal(int, int)
 
     def __init__(self, url, output_dir, use_post_subfolder, pause_event, cancellation_event, gui_signals, parent=None, export_all_links_mode=False):
         super().__init__(parent)

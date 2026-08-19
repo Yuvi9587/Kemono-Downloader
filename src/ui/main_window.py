@@ -17,27 +17,27 @@ import cloudscraper
 import unicodedata
 import itertools
 import uuid
-import sip
+import shiboken6
 from urllib.parse import urlparse, parse_qs
 from collections import deque, defaultdict, Counter
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor, CancelledError
 
-from PyQt5.QtGui import QIcon, QIntValidator, QDesktopServices, QTextCharFormat
+from PySide6.QtGui import QIcon, QIntValidator, QDesktopServices, QTextCharFormat, QAction
 from .assets import get_asset_path
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QTextEdit, QPushButton,
     QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QListWidget, QRadioButton,
     QButtonGroup, QCheckBox, QSplitter, QGroupBox, QDialog, QStackedWidget,
     QScrollArea, QListWidgetItem, QSizePolicy, QProgressBar, QAbstractItemView, QFrame,
-    QMainWindow, QAction, QGridLayout, 
+    QMainWindow, QGridLayout, QSystemTrayIcon, QMenu
 )
 try:
     from PIL import Image
 except ImportError:
     Image = None
 
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject, QTimer, QSettings, QStandardPaths, QUrl, QSize, QProcess, QMutex, QMutexLocker, QCoreApplication
+from PySide6.QtCore import Qt, QThread, Signal, QObject, QTimer, QSettings, QStandardPaths, QUrl, QSize, QProcess, QMutex, QMutexLocker, QCoreApplication
 from ..services.drive_downloader import (
     download_mega_file as drive_download_mega_file,
     download_gdrive_file,
@@ -49,6 +49,7 @@ from ..services.multipart_downloader import download_file_in_parts, MULTIPART_DO
 from ..core.api_client import download_from_api
 from ..core.discord_client import fetch_server_channels, fetch_channel_messages 
 from ..core.manager import DownloadManager
+from ..core.platform_database import PlatformDatabaseManager
 from ..core.fap_nation_client import fetch_fap_nation_data
 from ..core.nhentai_client import fetch_nhentai_gallery
 from ..core.bunkr_client import fetch_bunkr_data
@@ -61,10 +62,11 @@ from ..core.toonily_client import get_chapter_list as toonily_get_list, fetch_ch
 from ..core.pixeldrain_client import fetch_pixeldrain_data 
 from ..core.simpcity_client import fetch_single_simpcity_page
 from ..core.booru_client import fetch_booru_data, BooruClientException
+from ..core.auto_sync_manager import AutoSyncManager
 from .assets import get_app_icon_object
 from ..config.constants import *
 from ..utils.file_utils import KNOWN_NAMES, clean_folder_name
-from ..utils.network_utils import extract_post_info, prepare_cookies_for_request
+from ..utils.network_utils import extract_post_info, prepare_cookies_for_request, get_link_platform
 from ..utils.resolution import setup_ui, get_dark_theme, get_dark_theme as get_theme_stylesheet
 from ..utils.command import parse_commands_from_text
 from ..i18n.translator import get_translation
@@ -84,7 +86,7 @@ from .dialogs.ConfirmAddAllDialog import ConfirmAddAllDialog
 from .dialogs.MoreOptionsDialog import MoreOptionsDialog
 from .dialogs.SinglePDF import create_single_pdf_from_content
 from .dialogs.discord_pdf_generator import create_pdf_from_discord_messages
-from .dialogs.SupportDialog import SupportDialog
+from .dialogs.AutoSyncDialog import AutoSyncDialog
 from .dialogs.KeepDuplicatesDialog import KeepDuplicatesDialog
 from .dialogs.MultipartScopeDialog import MultipartScopeDialog
 from .dialogs.ExportLinksDialog import ExportLinksDialog
@@ -131,29 +133,29 @@ class DynamicFilterHolder:
 
 class PostProcessorSignals(QObject):
     """A collection of signals for the DownloaderApp to communicate with itself across threads."""
-    progress_signal = pyqtSignal(str)
-    file_download_status_signal = pyqtSignal(bool)
-    external_link_signal = pyqtSignal(str, str, str, str, str)
-    file_progress_signal = pyqtSignal(str, object)
-    file_successfully_downloaded_signal = pyqtSignal(dict)
-    missed_character_post_signal = pyqtSignal(str, str)
-    worker_finished_signal = pyqtSignal(tuple)
-    finished_signal = pyqtSignal(int, int, bool, list)
-    retryable_file_failed_signal = pyqtSignal(list)
-    permanent_file_failed_signal = pyqtSignal(list)
+    progress_signal = Signal(str)
+    file_download_status_signal = Signal(bool)
+    external_link_signal = Signal(str, str, str, str, str)
+    file_progress_signal = Signal(str, object)
+    file_successfully_downloaded_signal = Signal(dict)
+    missed_character_post_signal = Signal(str, str)
+    worker_finished_signal = Signal(tuple)
+    finished_signal = Signal(int, int, bool, list)
+    retryable_file_failed_signal = Signal(list)
+    permanent_file_failed_signal = Signal(list)
 
 class DownloaderApp (QWidget ):
-    character_prompt_response_signal =pyqtSignal (bool )
-    log_signal =pyqtSignal (str )
-    add_character_prompt_signal =pyqtSignal (str )
-    overall_progress_signal =pyqtSignal (int ,int )
-    file_successfully_downloaded_signal =pyqtSignal (dict )
-    post_processed_for_history_signal =pyqtSignal (dict )
-    finished_signal =pyqtSignal (int ,int ,bool ,list )
-    external_link_signal =pyqtSignal (str ,str ,str ,str ,str )
-    file_progress_signal =pyqtSignal (str ,object )
-    fetch_only_complete_signal = pyqtSignal(list)
-    batch_update_check_complete_signal = pyqtSignal(list)
+    character_prompt_response_signal =Signal (bool )
+    log_signal =Signal (str )
+    add_character_prompt_signal =Signal (str )
+    overall_progress_signal =Signal (int ,int )
+    file_successfully_downloaded_signal =Signal (dict )
+    post_processed_for_history_signal =Signal (dict )
+    finished_signal =Signal (int ,int ,bool ,list )
+    external_link_signal =Signal (str ,str ,str ,str ,str )
+    file_progress_signal =Signal (str ,object )
+    fetch_only_complete_signal = Signal(list)
+    batch_update_check_complete_signal = Signal(list)
 
 
     def __init__(self):
@@ -210,6 +212,7 @@ class DownloaderApp (QWidget ):
         self.download_thread = None
         self.thread_pool = None
         self.cancellation_event = threading.Event()
+        self.early_stop_event = threading.Event()
         self.session_lock = threading.Lock()
         self.interrupted_session_data = None
         self.is_restore_pending = False
@@ -410,6 +413,13 @@ class DownloaderApp (QWidget ):
         self.skip_words_label_widget = None
         self.setWindowTitle("Kemono Downloader v9.3.5")
         setup_ui(self)
+        self._setup_system_tray()
+        
+        # Initialize Auto Sync Manager
+        self.is_silent_background_sync = False
+        self.active_sync_log_dialog = None  # Set when AutoSyncDialog is open
+        self.auto_sync_manager = AutoSyncManager(self)
+        
         self._connect_signals()
 
         if self.main_log_output: self.main_log_output.document().setMaximumBlockCount(10000)
@@ -790,14 +800,14 @@ class DownloaderApp (QWidget ):
         else:
             self.setStyleSheet("")
         msg_box = QMessageBox(self)
-        msg_box.setIcon(QMessageBox.Information)
+        msg_box.setIcon(QMessageBox.Icon.Information)
         msg_box.setWindowTitle(self._tr("theme_change_title", "Theme Changed"))
         msg_box.setText(self._tr("language_change_message", "A restart is required for these changes to take effect."))
         msg_box.setInformativeText(self._tr("language_change_informative", "Would you like to restart now?"))
         restart_button = msg_box.addButton(self._tr("restart_now_button", "Restart Now"), QMessageBox.ApplyRole)
         ok_button = msg_box.addButton(self._tr("ok_button", "OK"), QMessageBox.AcceptRole)
         msg_box.setDefaultButton(ok_button)
-        msg_box.exec_()
+        msg_box.exec()
 
         if msg_box.clickedButton() == restart_button:
             self._request_restart_application()
@@ -824,23 +834,8 @@ class DownloaderApp (QWidget ):
         return {}
 
     def _save_creator_profile(self, creator_name, data, session_file_path):
-        """Saves the provided data to the current creator's profile file."""
-        if not creator_name:
-            return
-        
-        appdata_dir = os.path.dirname(session_file_path)
-        creator_profiles_dir = os.path.join(appdata_dir, "creator_profiles")
-        safe_filename = clean_folder_name(creator_name) + ".json"
-        profile_path = os.path.join(creator_profiles_dir, safe_filename)
-
-        try:
-            temp_path = profile_path + ".tmp"
-            with open(temp_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
-            os.replace(temp_path, profile_path)
-        except OSError as e:
-            self.log_signal.emit(f"❌ Error saving creator profile to '{profile_path}': {e}")
-
+        """(DEPRECATED) Replaced by SQLite PlatformDatabaseManager. Does nothing."""
+        return
     def _create_initial_session_file(self, api_url_for_session, override_output_dir_for_session, remaining_queue=None):
         """Creates the initial session file at the start of a new download."""
         if self.is_restore_pending:
@@ -918,6 +913,9 @@ class DownloaderApp (QWidget ):
         settings['skip_words_scope'] = self.skip_words_scope
         settings['char_filter_scope'] = self.char_filter_scope
         settings['manga_filename_style'] = self.manga_filename_style
+        settings['manga_custom_filename_format'] = getattr(self, 'custom_manga_filename_format', '{published} {title}')
+        settings['manga_custom_date_format'] = getattr(self, 'manga_custom_date_format', 'YYYY-MM-DD')
+        settings['manga_custom_suffix_format'] = getattr(self, 'custom_manga_suffix_format', '001')
         settings['allow_multipart_download'] = self.allow_multipart_download_setting
         settings['more_filter_scope'] = self.more_filter_scope
         settings['text_export_format'] = self.text_export_format
@@ -927,12 +925,23 @@ class DownloaderApp (QWidget ):
         settings['keep_duplicates_limit'] = self.keep_duplicates_limit
         settings['user_data_path'] = getattr(self, 'user_data_path', "")        
 
-        settings['proxy_enabled'] = self.settings.value(PROXY_ENABLED_KEY, False, type=bool)
-        settings['proxy_host'] = self.settings.value(PROXY_HOST_KEY, "", type=str)
-        settings['proxy_port'] = self.settings.value(PROXY_PORT_KEY, "", type=str)
-        settings['proxy_username'] = self.settings.value(PROXY_USERNAME_KEY, "", type=str)
-        settings['proxy_password'] = self.settings.value(PROXY_PASSWORD_KEY, "", type=str)
-        proxy_type_str = self.settings.value("proxy_type", "HTTP", type=str)
+        is_auto_sync = getattr(self, 'currently_running_is_auto_sync', False)
+        proxy_override = self.settings.value("auto_sync_proxy_override", True, type=bool)
+
+        if is_auto_sync and proxy_override:
+            settings['proxy_enabled'] = self.settings.value("auto_sync_proxy_enabled", False, type=bool)
+            settings['proxy_host'] = self.settings.value("auto_sync_proxy_host", "", type=str)
+            settings['proxy_port'] = self.settings.value("auto_sync_proxy_port", "", type=str)
+            settings['proxy_username'] = self.settings.value("auto_sync_proxy_username", "", type=str)
+            settings['proxy_password'] = self.settings.value("auto_sync_proxy_password", "", type=str)
+            proxy_type_str = self.settings.value("auto_sync_proxy_type", "HTTP", type=str)
+        else:
+            settings['proxy_enabled'] = self.settings.value(PROXY_ENABLED_KEY, False, type=bool)
+            settings['proxy_host'] = self.settings.value(PROXY_HOST_KEY, "", type=str)
+            settings['proxy_port'] = self.settings.value(PROXY_PORT_KEY, "", type=str)
+            settings['proxy_username'] = self.settings.value(PROXY_USERNAME_KEY, "", type=str)
+            settings['proxy_password'] = self.settings.value(PROXY_PASSWORD_KEY, "", type=str)
+            proxy_type_str = self.settings.value("proxy_type", "HTTP", type=str)
 
         settings['proxies'] = None
         if settings['proxy_enabled'] and settings['proxy_host'] and settings['proxy_port']:
@@ -950,13 +959,66 @@ class DownloaderApp (QWidget ):
             
             settings['proxies'] = {'http': proxy_str, 'https': proxy_str}
 
+        # --- Rule34 settings snapshot ---
+        # If this is a Rule34 download, freeze all r34_* keys from QSettings into the
+        # profile so Auto-Sync can replay the exact same configuration later.
+        target_url = settings.get('api_url', '')
+        _is_booru_url = any(d in target_url for d in ('rule34.xxx', 'gelbooru.com', 'danbooru.donmai.us', 'safebooru.donmai.us'))
+        if _is_booru_url:
+            r34_keys = [
+                ('r34_custom_blacklist', '', str),
+                ('r34_whitelist', '', str),
+                ('r34_exclude_gore', False, bool),
+                ('r34_exclude_scat', False, bool),
+                ('r34_exclude_furry', False, bool),
+                ('r34_exclude_loli', False, bool),
+                ('r34_exclude_vore', False, bool),
+                ('r34_exclude_insects', False, bool),
+                ('r34_exclude_necro', False, bool),
+                ('r34_exclude_custom', False, bool),
+                ('r34_custom_safety_tags', '', str),
+                ('r34_rating_filter', 0, int),
+                ('r34_min_score', 0, int),
+                ('r34_max_downloads', 0, int),
+                ('r34_download_images', True, bool),
+                ('r34_download_videos', True, bool),
+                ('r34_api_key', '', str),
+                ('r34_user_id', '', str),
+                ('r34_favorites_only', False, bool),
+                ('r34_use_scene_sort', False, bool),
+                ('r34_scene_tags', '1girl,bikini,beach', str),
+                ('r34_tag_aliases', '1girl = solo, single, women', str),
+                ('r34_smart_sort', False, bool),
+                ('r34_character_favorites', '', str),
+            ]
+            for key, default, type_ in r34_keys:
+                settings[key] = self.settings.value(key, default, type=type_)
+            # Also capture the booru credentials widget value for Gelbooru/Danbooru.
+            # These are stored in a UI text field, not QSettings, so we save the raw string.
+            if hasattr(self, 'booru_creds_input'):
+                settings['booru_creds_raw'] = self.booru_creds_input.text().strip()
+
         return settings
+
 
 
     def _tr (self ,key ,default_text =""):
         """Helper to get translation based on current app language for the main window."""
         if callable (get_translation ):
-            return get_translation (self .current_selected_language ,key ,default_text )
+            res = get_translation (self .current_selected_language ,key ,default_text )
+            if "<img" in res:
+                import re
+                def replacer(match):
+                    path = match.group(1)
+                    if not path.startswith("file:///"):
+                        if path.lower().startswith("assets/"):
+                            path = get_asset_path(path)
+                        path = path.replace(chr(92), '/')
+                        if not path.startswith("file:///"):
+                            path = "file:///" + path
+                    return f"<img src='{path}'"
+                res = re.sub(r"<img\s+src=['\"]([^'\"]+)['\"]", replacer, res, flags=re.IGNORECASE)
+            return res
         return default_text 
 
     def _load_saved_download_location (self ):
@@ -1056,6 +1118,9 @@ class DownloaderApp (QWidget ):
                     self.log_signal.emit(f"❌ Failed to remove temp session file: {e_rem}")
 
     def _update_button_states_and_connections(self):
+        if getattr(self, 'is_silent_background_sync', False):
+            return
+            
         try:
             self.download_btn.clicked.disconnect()
             self.pause_btn.clicked.disconnect()
@@ -1290,12 +1355,12 @@ class DownloaderApp (QWidget ):
 
         num_threads = int(self.thread_count_input.text()) if self.use_multithreading_checkbox.isChecked() else 1
         self.thread_pool = ThreadPoolExecutor(max_workers=num_threads, thread_name_prefix='PostWorker_')
-
+        self.early_stop_event.clear()
         self.total_posts_to_process = len(self.fetched_posts_for_download)
         self.processed_posts_count = 0
         self.overall_progress_signal.emit(self.total_posts_to_process, 0)
 
-        ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:]
+        ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:PostProcessorWorker.__init__.__code__.co_argcount]
 
         for post_data in self.fetched_posts_for_download:
             self._submit_post_to_worker_pool(
@@ -1584,8 +1649,8 @@ class DownloaderApp (QWidget ):
             self .error_btn .clicked .connect (self ._show_error_files_dialog )
         if hasattr(self, 'export_all_links_btn'):
             self.export_all_links_btn.clicked.connect(self._export_all_links_action)
-        if hasattr(self, 'support_button'): 
-            self.support_button.clicked.connect(self._show_support_dialog)
+        if hasattr(self, 'auto_sync_button'): 
+            self.auto_sync_button.clicked.connect(self._show_auto_sync_dialog)
 
         if hasattr(self, 'use_subfolders_checkbox'):
             self.use_subfolders_checkbox.toggled.connect(self._enforce_visual_sort_pipeline_rules)
@@ -1603,7 +1668,7 @@ class DownloaderApp (QWidget ):
         try:
             
             dialog = VisualSortSetupDialog(self)
-            if dialog.exec_() == QDialog.Accepted:
+            if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.log_signal.emit("✅ Visual Sort enabled and settings applied.")
                 self._enforce_visual_sort_pipeline_rules(True)
             else:
@@ -2099,7 +2164,197 @@ class DownloaderApp (QWidget ):
                 self.log_signal.emit(log_msg)
             QMessageBox.warning(self, "Config Save Error", f"Could not save list to {self.config_file}:\n{e}")
 
+    def _handle_background_sync_download(self, url, sync_settings_json=""):
+        """Called by AutoSyncManager to trigger a silent download in the background."""
+        creator_name = ""
+        if sync_settings_json:
+            try:
+                settings = json.loads(sync_settings_json)
+                creator_name = settings.get('_auto_sync_creator_name', "")
+            except Exception:
+                pass
+
+        if creator_name:
+            self.log_signal.emit(f"🔄 Auto-Sync Manager triggering download for: {url} | Creator: {creator_name}")
+        else:
+            self.log_signal.emit(f"🔄 Auto-Sync Manager triggering download for: {url}")
+        self.currently_running_is_auto_sync = True
+        
+        # Snapshot the FULL current UI state so we can restore it after the sync.
+        # start_download() launches an async thread and returns immediately, so
+        # restoring right after that call is safe — the thread has already read
+        # all settings by the time we reach the restore block.
+        ui_snapshot = self._get_current_ui_settings_as_dict()
+        booru_creds_snapshot = self.booru_creds_input.text() if hasattr(self, 'booru_creds_input') else ''
+        
+        self.link_input.setText(url)
+        
+        # Inject per-creator sync settings if they exist
+        if sync_settings_json:
+            try:
+                settings = json.loads(sync_settings_json)
+                self.log_signal.emit(f"⚙️ Restoring UI configuration profile for sync...")
+                
+                # Output directory
+                if 'output_dir' in settings and settings['output_dir']:
+                    self.dir_input.setText(settings['output_dir'])
+                
+                # Checkboxes
+                if 'use_subfolders' in settings:
+                    self.use_subfolders_checkbox.setChecked(settings['use_subfolders'])
+                if 'use_post_subfolders' in settings:
+                    self.use_subfolder_per_post_checkbox.setChecked(settings['use_post_subfolders'])
+                if 'use_date_prefix_for_subfolder' in settings and hasattr(self, 'date_prefix_checkbox'):
+                    self.date_prefix_checkbox.setChecked(settings['use_date_prefix_for_subfolder'])
+                if 'manga_mode_active' in settings:
+                    self.manga_mode_checkbox.setChecked(settings['manga_mode_active'])
+                if 'skip_zip' in settings:
+                    self.skip_zip_checkbox.setChecked(settings['skip_zip'])
+                if 'compress_images' in settings:
+                    self.compress_images_checkbox.setChecked(settings['compress_images'])
+                if 'download_thumbnails' in settings:
+                    self.download_thumbnails_checkbox.setChecked(settings['download_thumbnails'])
+                if 'use_multithreading' in settings and hasattr(self, 'multithreading_checkbox'):
+                    self.multithreading_checkbox.setChecked(settings['use_multithreading'])
+                    
+                # Thread count
+                if 'num_threads' in settings and hasattr(self, 'num_threads_input'):
+                    self.num_threads_input.setValue(int(settings['num_threads']))
+
+                # Renaming / filename style — must be set AFTER manga_mode_checkbox
+                if 'manga_filename_style' in settings:
+                    self.manga_filename_style = settings['manga_filename_style']
+                    self._update_manga_filename_style_button_text()
+                    
+                # Custom filename format fields
+                if 'manga_custom_filename_format' in settings:
+                    self.custom_manga_filename_format = settings['manga_custom_filename_format']
+                    self.settings.setValue(MANGA_CUSTOM_FORMAT_KEY, self.custom_manga_filename_format)
+                if 'manga_custom_date_format' in settings:
+                    self.manga_custom_date_format = settings['manga_custom_date_format']
+                    self.settings.setValue(MANGA_CUSTOM_DATE_FORMAT_KEY, self.manga_custom_date_format)
+                if 'manga_custom_suffix_format' in settings:
+                    self.custom_manga_suffix_format = settings['manga_custom_suffix_format']
+                    self.settings.setValue(MANGA_CUSTOM_SUFFIX_FORMAT_KEY, self.custom_manga_suffix_format)
+                    
+                # Other simple inputs
+                if 'custom_folder_name' in settings:
+                    self.custom_folder_input.setText(settings['custom_folder_name'])
+                if 'character_filter_text' in settings:
+                    self.character_input.setText(settings['character_filter_text'])
+                if 'skip_words_text' in settings:
+                    self.skip_words_input.setText(settings['skip_words_text'])
+                if 'remove_words_text' in settings:
+                    self.remove_from_filename_input.setText(settings['remove_words_text'])
+                    
+                # Radio buttons
+                if 'filter_mode' in settings:
+                    mode = settings['filter_mode']
+                    if mode == 'image': self.radio_images.setChecked(True)
+                    elif mode == 'video': self.radio_videos.setChecked(True)
+                    elif mode == 'archive': self.radio_only_archives.setChecked(True)
+                    elif mode == 'audio' and hasattr(self, 'radio_only_audio'): self.radio_only_audio.setChecked(True)
+                    else: self.radio_all.setChecked(True)
+
+                # Rule34 settings restore
+                # If the synced URL is Rule34, write the frozen r34_* profile back into
+                # QSettings so the Rule34DownloadThread reads the correct configuration.
+                _is_booru_url = any(d in url for d in ('rule34.xxx', 'gelbooru.com', 'danbooru.donmai.us', 'safebooru.donmai.us'))
+                if _is_booru_url:
+                    r34_keys_types = {
+                        'r34_custom_blacklist': str, 'r34_whitelist': str,
+                        'r34_exclude_gore': bool, 'r34_exclude_scat': bool,
+                        'r34_exclude_furry': bool, 'r34_exclude_loli': bool,
+                        'r34_exclude_vore': bool, 'r34_exclude_insects': bool,
+                        'r34_exclude_necro': bool, 'r34_exclude_custom': bool,
+                        'r34_custom_safety_tags': str, 'r34_rating_filter': int,
+                        'r34_min_score': int, 'r34_max_downloads': int,
+                        'r34_download_images': bool, 'r34_download_videos': bool,
+                        'r34_api_key': str, 'r34_user_id': str,
+                        'r34_favorites_only': bool, 'r34_use_scene_sort': bool,
+                        'r34_scene_tags': str, 'r34_tag_aliases': str,
+                        'r34_smart_sort': bool, 'r34_character_favorites': str,
+                    }
+                    for key in r34_keys_types:
+                        if key in settings:
+                            self.settings.setValue(key, settings[key])
+                    self.settings.sync()
+                    # Also restore the booru credentials widget for Gelbooru/Danbooru.
+                    if 'booru_creds_raw' in settings and hasattr(self, 'booru_creds_input'):
+                        self.booru_creds_input.setText(settings['booru_creds_raw'])
+                    self.log_signal.emit("⚙️ Restored Booru configuration profile for this sync session.")
+
+            except Exception as e:
+                self.log_signal.emit(f"⚠️ Error parsing sync_settings_json: {e}")
+        
+        try:
+            self.load_known_names_from_util()
+            self.log_signal.emit("🔄 Reloaded known.txt for auto-sync session.")
+        except Exception as e:
+            self.log_signal.emit(f"⚠️ Failed to reload known.txt: {e}")
+            
+        # Start download directly.
+        # The is_silent_background_sync flag ensures we don't popup dialogues.
+        self.start_download()
+        
+        # Restore the full UI back to what the user had before the sync ran.
+        try:
+            self._load_ui_from_settings_dict(ui_snapshot)
+            if hasattr(self, 'booru_creds_input'):
+                self.booru_creds_input.setText(booru_creds_snapshot)
+        except Exception as e:
+            self.log_signal.emit(f"⚠️ Failed to restore UI state after auto-sync: {e}")
+
+    def _setup_system_tray(self):
+        """Initializes the system tray icon and its context menu."""
+        self.tray_icon = QSystemTrayIcon(self)
+        app_icon = get_app_icon_object()
+        if app_icon:
+            self.tray_icon.setIcon(app_icon)
+        
+        self.tray_menu = QMenu()
+        
+        self.action_show = QAction("Open Kemono Downloader Premium", self)
+        self.action_show.triggered.connect(self.showNormal)
+        self.tray_menu.addAction(self.action_show)
+        
+        self.tray_menu.addSeparator()
+        
+        self.action_quit = QAction("Quit", self)
+        self.action_quit.triggered.connect(self._force_quit)
+        self.tray_menu.addAction(self.action_quit)
+        
+        self.tray_icon.setContextMenu(self.tray_menu)
+        self.tray_icon.activated.connect(self._on_tray_icon_activated)
+        
+        # Show tray icon if minimize_to_tray is enabled
+        if self.settings.value("minimize_to_tray", False, type=bool):
+            self.tray_icon.show()
+
+    def _on_tray_icon_activated(self, reason):
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self.showNormal()
+            self.activateWindow()
+
+    def _force_quit(self):
+        """Forces the application to quit by bypassing the minimize to tray check."""
+        self.is_force_quitting = True
+        self.close()
+
     def closeEvent (self ,event ):
+        # Check if we should minimize to tray instead of closing
+        if getattr(self, 'is_force_quitting', False) == False:
+            if self.settings.value("minimize_to_tray", False, type=bool):
+                event.ignore()
+                self.hide()
+                self.tray_icon.showMessage(
+                    "Running in Background",
+                    "Kemono Downloader Premium is still running in the system tray.",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    2000
+                )
+                return
+
         self .save_known_names ()
         self .settings .setValue (MANGA_FILENAME_STYLE_KEY ,self .manga_filename_style )
         self .settings .setValue (ALLOW_MULTIPART_DOWNLOAD_KEY ,self .allow_multipart_download_setting )
@@ -2502,7 +2757,7 @@ class DownloaderApp (QWidget ):
         """Shows the placeholder dialog for future settings."""
         
         dialog = FutureSettingsDialog(self)
-        dialog.exec_()
+        dialog.exec()
 
     def _show_rule34_settings_dialog(self):
         """Opens the dedicated settings dialog for Rule34 downloads."""
@@ -2510,16 +2765,16 @@ class DownloaderApp (QWidget ):
             
             dialog = Rule34SettingsDialog(self)
             
-            if dialog.exec_() == QDialog.Accepted:
+            if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.log_signal.emit("✅ Rule34 Settings updated.")
                     
         except ImportError:
             self.log_signal.emit("⚠️ Rule34SettingsDialog file not created yet!")
 
-    def _show_support_dialog(self): 
-        """Shows the support/donation dialog."""
-        dialog = SupportDialog(self)
-        dialog.exec_()
+    def _show_auto_sync_dialog(self): 
+        """Shows the dedicated Auto-Sync Premium Hub dialog."""
+        dialog = AutoSyncDialog(self)
+        dialog.exec()
 
     def _check_if_all_work_is_done(self):
         """
@@ -2705,6 +2960,20 @@ class DownloaderApp (QWidget ):
             return
             
         is_html_message = message.startswith(HTML_PREFIX)
+        
+        # --- Auto-Sync Log Routing ---
+        # --- Auto-Sync Log Routing ---
+        # If the background daemon is active, ALWAYS suppress the main log.
+        # Route to the Activity Log tab if the dialog is open; otherwise silently discard.
+        if getattr(self, 'is_silent_background_sync', False):
+            dialog = getattr(self, 'active_sync_log_dialog', None)
+            if dialog is not None:
+                try:
+                    clean_msg = message[len(HTML_PREFIX):] if is_html_message else message
+                    dialog.append_sync_log(clean_msg)
+                except Exception:
+                    pass
+            return  # Always suppress main log during background sync
         
         try:
             if is_html_message:
@@ -3276,8 +3545,8 @@ class DownloaderApp (QWidget ):
     def _open_simpcity_external_links_config_dialog(self):
         from .dialogs.ExportLinksDialog import ExportLinksDialog
         dialog = ExportLinksDialog(links_data=None, parent=self, default_config=getattr(self, 'simpcity_external_links_config', None), context='simpcity')
-        from PyQt5.QtWidgets import QDialog
-        if dialog.exec_() == QDialog.Accepted:
+        from PySide6.QtWidgets import QDialog
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             self.simpcity_external_links_config = dialog.get_config()
             self.log_signal.emit("✅ 'Save External Links' configured.")
         else:
@@ -3301,7 +3570,7 @@ class DownloaderApp (QWidget ):
 
         dialog = ExportLinksDialog(self.extracted_links_cache, self, context='kemono')
         
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             self.log_signal.emit("✅ Links successfully exported with selected options.")
         else:
             self.log_signal.emit("ℹ️ Link export was cancelled by the user.")
@@ -3561,7 +3830,7 @@ class DownloaderApp (QWidget ):
                 is_simpcity=is_simpcity
             )
 
-            if dialog.exec_() == QDialog.Accepted:
+            if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.more_filter_scope = dialog.get_selected_scope()
                 self.text_export_format = dialog.get_selected_format()
                 self.single_pdf_setting = dialog.get_single_pdf_state()
@@ -4015,7 +4284,7 @@ class DownloaderApp (QWidget ):
             is_simpcity=is_simpcity
         )
         
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             self.custom_manga_filename_format = dialog.get_format_string()
             self.manga_custom_date_format = dialog.get_date_format_string()
             self.custom_manga_suffix_format = dialog.get_suffix_format_string()
@@ -4079,6 +4348,9 @@ class DownloaderApp (QWidget ):
 
     def update_progress_display(self, total, processed, unit="posts"):
         """Updates the main progress label with total, processed, and percentage."""
+        if getattr(self, 'is_silent_background_sync', False):
+            return
+            
         if total > 0:
             progress_percent = (processed / total) * 100
             self.progress_label.setText(f"Progress: {processed} / {total} {unit} ({progress_percent:.1f}%)")
@@ -4367,11 +4639,28 @@ class DownloaderApp (QWidget ):
                 self.start_discord_pdf_save()
                 return
 
+        if getattr(self, 'currently_running_is_auto_sync', False) and not getattr(self, 'is_silent_background_sync', False):
+            if getattr(self, 'is_main_download_active', False):
+                self.log_signal.emit("🛑 Preempting background Auto-Sync to prioritize manual download...")
+                self.cancel_download_button_action()
+                self.resume_auto_sync_after_manual = True
+                
+                # Delay the start of the manual download to let background threads gracefully die
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(2500, lambda: self.start_download(direct_api_url, override_output_dir, is_restore, is_continuation, item_type_from_queue))
+                return
+            else:
+                self.currently_running_is_auto_sync = False
+
         # Fix: Reset cancellation event so the next download isn't immediately aborted
         # (cancellation_event stays set after cancel_download_button_action() calls .set())
         if self.cancellation_event.is_set():
             self.cancellation_event.clear()
         self.is_main_download_active = True
+        
+        # If it's a manual download starting successfully, clear the auto-sync tracking flag
+        if not getattr(self, 'is_silent_background_sync', False):
+            self.currently_running_is_auto_sync = False
 
 
         if not is_restore and not is_continuation:
@@ -4570,15 +4859,16 @@ class DownloaderApp (QWidget ):
         self.is_finishing = False
         self.downloaded_hash_counts.clear()
 
-        if not is_restore and not is_continuation:
+        if not getattr(self, 'is_silent_background_sync', False):
+            if not is_restore and not is_continuation:
 
-            if not self.is_running_job_queue:
+                if not self.is_running_job_queue:
+                    self.permanently_failed_files_for_dialog.clear()
+
                 self.permanently_failed_files_for_dialog.clear()
 
-            self.permanently_failed_files_for_dialog.clear()
-
-        self.retryable_failed_files_info.clear()
-        self._update_error_button_count()
+            self.retryable_failed_files_info.clear()
+            self._update_error_button_count()
 
         self._clear_stale_temp_files()
         self.session_temp_files = []
@@ -4662,10 +4952,13 @@ class DownloaderApp (QWidget ):
                 return False
 
             if not skip_dir_check and main_ui_download_dir and not os.path.isdir(main_ui_download_dir):
-                reply = QMessageBox.question(self, "Create Directory?",
-                                             f"The directory '{main_ui_download_dir}' does not exist.\nCreate it now?",
-                                             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
-                if reply == QMessageBox.Yes:
+                if getattr(self, 'is_silent_background_sync', False):
+                    reply = QMessageBox.StandardButton.Yes
+                else:
+                    reply = QMessageBox.question(self, "Create Directory?",
+                                                 f"The directory '{main_ui_download_dir}' does not exist.\nCreate it now?",
+                                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes)
+                if reply == QMessageBox.StandardButton.Yes:
                     try:
                         os.makedirs(main_ui_download_dir, exist_ok=True)
                         self.log_signal.emit(f"ℹ️ Created directory: {main_ui_download_dir}")
@@ -4703,7 +4996,22 @@ class DownloaderApp (QWidget ):
         
         service, id1, id2 = extract_post_info(api_url)
 
-        ui_settings = self._get_current_ui_settings_as_dict()
+        ui_settings = self._get_current_ui_settings_as_dict(
+            api_url_override=api_url, 
+            output_dir_override=effective_output_dir_for_run
+        )
+        
+        if not getattr(self, 'is_silent_background_sync', False):
+            try:
+                platform_name = get_link_platform(api_url)
+                if platform_name and id1:
+                    db_manager = PlatformDatabaseManager.get_instance(platform_name, os.path.join(self.app_base_dir, 'appdata'))
+                    settings_json = json.dumps(ui_settings, default=str)
+                    db_manager.update_sync_settings(id1, service, settings_json)
+                    self.log_signal.emit(f"💾 Saved UI configuration profile for sync.")
+            except Exception as e:
+                self.log_signal.emit(f"⚠️ Could not save sync settings: {e}")
+
         proxies_to_use = ui_settings.get('proxies')
 
         specialized_thread = create_downloader_thread(
@@ -4719,7 +5027,7 @@ class DownloaderApp (QWidget ):
         if specialized_thread:
             if specialized_thread == "COOKIE_ERROR":
                 cookie_dialog = CookieHelpDialog(self, offer_download_without_option=False)
-                cookie_dialog.exec_()
+                cookie_dialog.exec()
                 return False
 
             if specialized_thread == "FETCH_ERROR":
@@ -4789,6 +5097,10 @@ class DownloaderApp (QWidget ):
                 if self.active_update_profile:
                     self.log_signal.emit("   Update session active: Loading existing processed post IDs to find new content.")
                     profile_processed_ids = set(creator_profile_data.get('processed_post_ids', []))
+                    
+                elif getattr(self, 'is_silent_background_sync', False):
+                    self.log_signal.emit("   Auto-sync session active: Loading existing processed post IDs to find new content.")
+                    profile_processed_ids = set(creator_profile_data.get('processed_post_ids', []))
                 
                 elif not is_restore:
                     self.log_signal.emit("   Fresh download session: Clearing previous post history for this creator to re-download all.")
@@ -4817,6 +5129,10 @@ class DownloaderApp (QWidget ):
         except ValueError:
             QMessageBox.critical(self, "Thread Count Error", "Invalid number of threads. Please enter a positive number.")
             return False
+
+        if getattr(self, 'is_silent_background_sync', False):
+            self.log_signal.emit("⚙️ Enforcing 1 thread for background auto-sync to reduce server load.")
+            num_threads_from_gui = 1
 
         if use_multithreading_enabled_by_checkbox:
             if num_threads_from_gui > MAX_THREADS:
@@ -4868,12 +5184,12 @@ class DownloaderApp (QWidget ):
             )
             if temp_cookies_for_check is None:
                 cookie_dialog = CookieHelpDialog(self, offer_download_without_option=True)
-                dialog_exec_result = cookie_dialog.exec_()
+                dialog_exec_result = cookie_dialog.exec()
 
-                if cookie_dialog.user_choice == CookieHelpDialog.CHOICE_PROCEED_WITHOUT_COOKIES and dialog_exec_result == QDialog.Accepted:
+                if cookie_dialog.user_choice == CookieHelpDialog.CHOICE_PROCEED_WITHOUT_COOKIES and dialog_exec_result == QDialog.DialogCode.Accepted:
                     self.log_signal.emit("ℹ️ User chose to download without cookies for this session.")
                     use_cookie_for_this_run = False
-                elif cookie_dialog.user_choice == CookieHelpDialog.CHOICE_CANCEL_DOWNLOAD or dialog_exec_result == QDialog.Rejected:
+                elif cookie_dialog.user_choice == CookieHelpDialog.CHOICE_CANCEL_DOWNLOAD or dialog_exec_result == QDialog.DialogCode.Rejected:
                     self.log_signal.emit("❌ Download cancelled by user at cookie prompt.")
                     return False
                 else:
@@ -4996,7 +5312,7 @@ class DownloaderApp (QWidget ):
 
                 if filter_objects_to_potentially_add_to_known_list:
                     confirm_dialog = ConfirmAddAllDialog(filter_objects_to_potentially_add_to_known_list, self, self)
-                    dialog_result = confirm_dialog.exec_()
+                    dialog_result = confirm_dialog.exec()
 
                     if dialog_result == CONFIRM_ADD_ALL_CANCEL_DOWNLOAD:
                         self.log_signal.emit("❌ Download cancelled by user at new name confirmation stage.")
@@ -5285,6 +5601,7 @@ class DownloaderApp (QWidget ):
             'sfp_threshold': download_commands.get('sfp_threshold'),
             'min_files_threshold': download_commands.get('min_files_threshold'),
             'handle_unknown_mode': handle_unknown_command,
+            'retry_404_errors': self.settings.value("auto_sync_retry_404", False, type=bool),
             'add_info_in_pdf': self.add_info_in_pdf_setting,     
             'proxies': current_proxies,  
             'download_revisions': self.revisions_checkbox.isChecked() if hasattr(self, 'revisions_checkbox') else False,                
@@ -5511,7 +5828,7 @@ class DownloaderApp (QWidget ):
         """Shows the dialog with files that were skipped due to errors."""
         dialog = ErrorFilesDialog(self.permanently_failed_files_for_dialog, self, self)
         dialog.retry_selected_signal.connect(self._handle_retry_from_error_dialog)
-        dialog.exec_()
+        dialog.exec()
         
     def _handle_retry_from_error_dialog (self ,selected_files_to_retry ):
         self ._start_failed_files_retry_session (files_to_retry_list =selected_files_to_retry )
@@ -5652,7 +5969,7 @@ class DownloaderApp (QWidget ):
 
         dialog = UpdateCheckDialog(self.user_data_path, self, self)
         
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             profiles = dialog.get_selected_profiles()
             if not profiles: return
 
@@ -5699,12 +6016,12 @@ class DownloaderApp (QWidget ):
 
         num_threads = int(self.thread_count_input.text()) if self.use_multithreading_checkbox.isChecked() else 1
         self.thread_pool = ThreadPoolExecutor(max_workers=num_threads, thread_name_prefix='PostWorker_')
-
+        self.early_stop_event.clear()
         self.total_posts_to_process = len(self.fetched_posts_for_batch_update)
         self.processed_posts_count = 0
         self.overall_progress_signal.emit(self.total_posts_to_process, 0)
         
-        ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:]
+        ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:PostProcessorWorker.__init__.__code__.co_argcount]
         
         current_proxies = self._get_current_ui_settings_as_dict().get('proxies')        
         live_runtime_args = {
@@ -5993,11 +6310,14 @@ class DownloaderApp (QWidget ):
             if self.pause_event: self.pause_event.clear()
             self.is_paused = False
             self.thread_pool = ThreadPoolExecutor(max_workers=num_post_workers, thread_name_prefix='PostWorker_')
+            self.early_stop_event.clear()
 
         self.active_futures = []
         self.processed_posts_count = 0; self.total_posts_to_process = 0; self.download_counter = 0; self.skip_counter = 0
         self.all_kept_original_filenames = []
         self.is_fetcher_thread_running = True
+        # Early-stop counter for auto-sync: tracks consecutive posts where nothing was downloaded.
+        self._consecutive_all_skipped_posts = 0
 
         fetcher_thread_args = {
             'api_url': kwargs.get('api_url_input'),
@@ -6028,7 +6348,8 @@ class DownloaderApp (QWidget ):
         worker_args_template = fetcher_args['worker_args_template']
         def logger_func(msg):
             try:
-                if not sip.isdeleted(self):
+                import shiboken6
+                if shiboken6.isValid(self):
                     self.log_signal.emit(f"[Fetcher] {msg}")
             except (RuntimeError, ImportError, AttributeError):
                 pass
@@ -6051,7 +6372,7 @@ class DownloaderApp (QWidget ):
                 proxies=worker_args_template.get('proxies')
             )
 
-            ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:]
+            ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:PostProcessorWorker.__init__.__code__.co_argcount]
             num_file_dl_threads = worker_args_template.get('num_file_threads_for_worker', 1)
             emitter = worker_args_template.get('emitter')
             
@@ -6070,23 +6391,41 @@ class DownloaderApp (QWidget ):
                     self._submit_post_to_worker_pool(post_data, worker_args_template, num_file_dl_threads, emitter, ppw_expected_keys, {})
 
             else:
+                pages_fetched = 0
+                original_max_pages = self.settings.value("auto_sync_max_pages", 0, type=int) if hasattr(self, 'settings') else 0
+                max_pages = original_max_pages
+                
                 for posts_batch_from_api in post_generator:
-                    if self.cancellation_event.is_set():
-                        break
-
                     processed_post_ids_set = set(worker_args_template.get('processed_post_ids', []))
                     new_posts_to_process = [
                         post for post in posts_batch_from_api if post.get('id') not in processed_post_ids_set
                     ]
 
+                    if getattr(self, 'is_silent_background_sync', False) and max_pages > 0:
+                        pages_fetched += 1
+                        
+                        if pages_fetched == original_max_pages and new_posts_to_process:
+                            max_pages += 1
+                            logger_func(f"ℹ️ Found new posts on page {pages_fetched}. Extending max page limit to {max_pages} for safety.")
+                            
+                    if self.cancellation_event.is_set() or self.early_stop_event.is_set():
+                        break
+
                     if new_posts_to_process:
                         for post_data in new_posts_to_process:
-                            if self.cancellation_event.is_set():
+                            if self.cancellation_event.is_set() or self.early_stop_event.is_set():
                                 break
                             self._submit_post_to_worker_pool(post_data, worker_args_template, num_file_dl_threads, emitter, ppw_expected_keys, {})
                         
                         self.total_posts_to_process += len(new_posts_to_process)
                         self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
+
+                    if getattr(self, 'is_silent_background_sync', False) and max_pages > 0:
+                        if pages_fetched >= max_pages:
+                            logger_func(f"⏩ Auto-sync early stop: Reached max page limit ({max_pages}).")
+                            self._early_stop_triggered = True
+                            self.early_stop_event.set()
+                            break
 
         except Exception as e:
             logger_func(f"❌ Critical error during post fetching: {e}\n{traceback.format_exc(limit=2)}")
@@ -6101,7 +6440,7 @@ class DownloaderApp (QWidget ):
         Updates the progress bar, logs skipped/failed files, and checks if the entire job is done.
         """
         if getattr(self, 'is_in_retry_session', False):
-            return
+            returnpage
 
         self.processed_posts_count += 1
         
@@ -6129,12 +6468,34 @@ class DownloaderApp (QWidget ):
                 self._update_error_button_count()
             
             if history_data and not permanent:
-                self._add_to_history_candidates(history_data)
+                is_one_time_export = getattr(self, 'radio_only_links', None) and self.radio_only_links.isChecked()
+                is_text_pdf_export = getattr(self, 'radio_more', None) and self.radio_more.isChecked()
+                if not is_one_time_export and not is_text_pdf_export:
+                    self._add_to_history_candidates(history_data)
             elif history_data and permanent:
                 post_id = history_data.get('post_id', 'N/A')
                 self.log_signal.emit(f"⚠️ Post {post_id} had permanent file failures. It will NOT be marked as processed and will be retried on the next session/update.")
 
             self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
+
+            # --- Auto-sync early stop ---
+            if getattr(self, 'is_silent_background_sync', False):
+                enable_early_stop = self.settings.value("auto_sync_enable_early_stop", True, type=bool) if hasattr(self, 'settings') else True
+                early_stop_threshold = self.settings.value("auto_sync_early_stop_threshold", 5, type=int) if hasattr(self, 'settings') else 5
+                
+                if enable_early_stop and early_stop_threshold > 0:
+                    if downloaded == 0 and not permanent:
+                        self._consecutive_all_skipped_posts = getattr(self, '_consecutive_all_skipped_posts', 0) + 1
+                        if self._consecutive_all_skipped_posts >= early_stop_threshold:
+                            if not self.early_stop_event.is_set():
+                                self.log_signal.emit(
+                                    f"⏩ Auto-sync early stop: {early_stop_threshold} consecutive already-downloaded posts. "
+                                    f"Stopping scan — no new content found further back."
+                                )
+                                self._early_stop_triggered = True
+                                self.early_stop_event.set()
+                    else:
+                        self._consecutive_all_skipped_posts = 0
 
         except Exception as e:
             self.log_signal.emit(f"❌ Error in _handle_worker_result: {e}\n{traceback.format_exc(limit=2)}")
@@ -6383,9 +6744,9 @@ class DownloaderApp (QWidget ):
         subfolders_currently_on =self .use_subfolders_checkbox .isChecked ()
         if self.use_subfolder_per_post_checkbox :
             self.use_subfolder_per_post_checkbox .setEnabled (enabled or (self .is_paused and self.use_subfolder_per_post_checkbox in widgets_to_enable_on_pause ))
-        if self .cancel_btn :self .cancel_btn .setEnabled (download_is_active_or_paused )
+        if self .cancel_btn :self .cancel_btn .setEnabled (download_is_active_or_paused and not getattr(self, 'is_silent_background_sync', False))
         if self .pause_btn :
-            self .pause_btn .setEnabled (download_is_active_or_paused )
+            self .pause_btn .setEnabled (download_is_active_or_paused and not getattr(self, 'is_silent_background_sync', False))
             if download_is_active_or_paused :
                 self .pause_btn .setText (self ._tr ("resume_download_button_text","Resume Download")if self .is_paused else self ._tr ("pause_download_button_text","Pause Download"))
                 self.pause_btn.setIcon(QIcon(get_asset_path("assets/Svg/resume.svg")) if self.is_paused else QIcon(get_asset_path("assets/Svg/pause.svg")))
@@ -6616,24 +6977,30 @@ class DownloaderApp (QWidget ):
                 self._finish_export_all_links()
 
             if cancelled_by_user:
-                self.log_signal.emit("✅ Cancellation complete. Resetting UI.")
-                
-                if getattr(self, 'is_running_job_queue', False):
-                    self.log_signal.emit("🛑 Queue execution stopped by user.")
-                    self.is_running_job_queue = False
-                    self.current_job_file = None
+                # Check if this was an internal early-stop (not a real user cancel)
+                if getattr(self, '_early_stop_triggered', False):
+                    self._early_stop_triggered = False
+                    cancelled_by_user = False  # Fall through to normal completion below
+                    self.log_signal.emit("⏩ Auto-sync: Early stop complete. Proceeding to next creator.")
+                else:
+                    self.log_signal.emit("✅ Cancellation complete. Resetting UI.")
+                    
+                    if getattr(self, 'is_running_job_queue', False):
+                        self.log_signal.emit("🛑 Queue execution stopped by user.")
+                        self.is_running_job_queue = False
+                        self.current_job_file = None
 
-                self._clear_session_file()
-                self.interrupted_session_data = None
-                self.is_restore_pending = False
-                current_url = self.link_input.text()
-                current_dir = self.dir_input.text()
-                self._perform_soft_ui_reset(preserve_url=current_url, preserve_dir=current_dir)
-                self.progress_label.setText(f"{self._tr('status_cancelled_by_user', 'Cancelled by user')}. {self._tr('ready_for_new_task_text', 'Ready for new task.')}")
-                self.file_progress_label.setText("")
-                if self.pause_event: self.pause_event.clear()
-                self.is_paused = False
-                return
+                    self._clear_session_file()
+                    self.interrupted_session_data = None
+                    self.is_restore_pending = False
+                    current_url = self.link_input.text()
+                    current_dir = self.dir_input.text()
+                    self._perform_soft_ui_reset(preserve_url=current_url, preserve_dir=current_dir)
+                    self.progress_label.setText(f"{self._tr('status_cancelled_by_user', 'Cancelled by user')}. {self._tr('ready_for_new_task_text', 'Ready for new task.')}")
+                    self.file_progress_label.setText("")
+                    if self.pause_event: self.pause_event.clear()
+                    self.is_paused = False
+                    return
 
             self.log_signal.emit("🏁 Download of current item complete.")
 
@@ -6752,6 +7119,8 @@ class DownloaderApp (QWidget ):
                 f"{total_downloaded} {self._tr('files_downloaded_label', 'downloaded')}, "
                 f"{total_skipped} {self._tr('files_skipped_label', 'skipped')}."
             )
+            if getattr(self, 'currently_running_is_auto_sync', False):
+                self.log_signal.emit(f"Download complete: {total_downloaded} downloaded, {total_skipped} skipped.")
             self.file_progress_label.setText("")
 
             if not cancelled_by_user and self.retryable_failed_files_info:
@@ -6764,7 +7133,7 @@ class DownloaderApp (QWidget ):
 
             auto_retry_enabled = self.settings.value(AUTO_RETRY_ON_FINISH_KEY, False, type=bool)
             
-            if not cancelled_by_user and auto_retry_enabled and self.permanently_failed_files_for_dialog:
+            if not cancelled_by_user and auto_retry_enabled and self.permanently_failed_files_for_dialog and not getattr(self, '_prevent_auto_retry', False):
                 num_files_to_retry = len(self.permanently_failed_files_for_dialog)
                 self.log_signal.emit("=" * 40)
                 self.log_signal.emit(f"🔄 Auto-retry is enabled. Starting pass 1 of up to 3 for {num_files_to_retry} previously failed file(s)...")
@@ -6809,6 +7178,14 @@ class DownloaderApp (QWidget ):
             self._update_button_states_and_connections()
             self.cancellation_message_logged_this_session = False
             self.active_update_profile = None 
+            
+            if getattr(self, 'resume_auto_sync_after_manual', False):
+                self.log_signal.emit("🔄 Manual download complete. Resuming background Auto-Sync...")
+                self.resume_auto_sync_after_manual = False
+                if hasattr(self, 'auto_sync_manager'):
+                    # Trigger the next sync cycle automatically
+                    from PySide6.QtCore import QTimer
+                    QTimer.singleShot(2000, self.auto_sync_manager.run_sync_cycle)
         
         finally:
             if lock_held:
@@ -6842,7 +7219,7 @@ class DownloaderApp (QWidget ):
             parent=self
         )
 
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             self.log_signal.emit(f"ℹ️ Performing post-download action: {action.capitalize()}")
             try:
                 if sys.platform == "win32":
@@ -6873,7 +7250,7 @@ class DownloaderApp (QWidget ):
             if getattr(self, '_is_loading_settings', False):
                 return
             dialog = KeepDuplicatesDialog(self.keep_duplicates_mode, self.keep_duplicates_limit, self)
-            if dialog.exec_() == QDialog.Accepted:
+            if dialog.exec() == QDialog.DialogCode.Accepted:
                 options = dialog.get_selected_options()
                 self.keep_duplicates_mode = options["mode"]
                 self.keep_duplicates_limit = options["limit"]
@@ -7060,8 +7437,8 @@ class DownloaderApp (QWidget ):
         Reconstructs the original environment (Known.txt rules, AI rules, output paths) 
         for a single failed file and forces the PostProcessorWorker to try downloading it again.
         """
-        import sip
-        if sip.isdeleted(self):
+        import shiboken6
+        if not shiboken6.isValid(self):
             return False
 
         file_info = job_details.get('file_info', {})
@@ -7120,8 +7497,6 @@ class DownloaderApp (QWidget ):
         self.log_signal.emit(f"   🔄 Retry Pipeline: Processing '{file_info.get('name', 'file')}' in '{override_dir}'...")
         result_tuple = worker.process()
         
-        result_tuple = worker.process()
-        
         dl_count = result_tuple[0]
         skip_count = result_tuple[1]
         retryable_errors = result_tuple[3]
@@ -7136,8 +7511,8 @@ class DownloaderApp (QWidget ):
         return is_successful_download or is_resolved_as_skipped
 
     def _handle_retry_future_result (self ,future ):
-        import sip
-        if sip.isdeleted(self):
+        import shiboken6
+        if not shiboken6.isValid(self):
             return
 
         self .processed_retry_count +=1 
@@ -7160,15 +7535,22 @@ class DownloaderApp (QWidget ):
             self .log_signal .emit (f"❌ Error in _handle_retry_future_result: {e }")
             self .failed_retry_count_in_session +=1 
 
-        progress_percent_retry =(self .processed_retry_count /self .total_files_for_retry *100 )if self .total_files_for_retry >0 else 0 
-        self .progress_label .setText (
-        self ._tr ("progress_posts_text","Progress: {processed_posts} / {total_posts} posts ({progress_percent:.1f}%)").format (processed_posts =self .processed_retry_count ,total_posts =self .total_files_for_retry ,progress_percent =progress_percent_retry ).replace ("posts","files")+
-        f" ({self ._tr ('succeeded_text','Succeeded')}: {self .succeeded_retry_count }, {self ._tr ('failed_text','Failed')}: {self .failed_retry_count_in_session })"
-        )
+        progress_percent_retry = (self.processed_retry_count / self.total_files_for_retry * 100) if self.total_files_for_retry > 0 else 0 
 
-        if self .processed_retry_count >=self .total_files_for_retry :
-            if all (f .done ()for f in self .active_retry_futures ):
-                QTimer .singleShot (0 ,self ._retry_session_finished )
+        def update_ui():
+            self.progress_label.setText(
+                self._tr("progress_posts_text", "Progress: {processed_posts} / {total_posts} posts ({progress_percent:.1f}%)").format(
+                    processed_posts=self.processed_retry_count, total_posts=self.total_files_for_retry, progress_percent=progress_percent_retry
+                ).replace("posts", "files") +
+                f" ({self._tr('succeeded_text', 'Succeeded')}: {self.succeeded_retry_count}, {self._tr('failed_text', 'Failed')}: {self.failed_retry_count_in_session})"
+            )
+
+            if self.processed_retry_count >= self.total_files_for_retry:
+                if all(f.done() for f in self.active_retry_futures):
+                    self._retry_session_finished()
+
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, self, update_ui)
 
 
     def _retry_session_finished(self):
@@ -7243,6 +7625,12 @@ class DownloaderApp (QWidget ):
         self.is_paused = False
         
         self._update_error_button_count()
+
+        # Resume main queue processing and background tasks
+        self.is_main_download_active = True
+        self._prevent_auto_retry = True
+        self.download_finished(0, 0, False)
+        self._prevent_auto_retry = False
 
     def toggle_active_log_view (self ):
         if self .current_log_view =='progress':
@@ -7420,7 +7808,7 @@ class DownloaderApp (QWidget ):
         creator URL, collects all direct file download links, then writes them to a .txt file.
         No files are downloaded to disk.
         """
-        from PyQt5.QtWidgets import QMessageBox
+        from PySide6.QtWidgets import QMessageBox
         if self._is_download_active():
             self.log_signal.emit("⚠️ Cannot start Export All Links while a download is in progress.")
             return
@@ -7439,8 +7827,8 @@ class DownloaderApp (QWidget ):
         if not os.path.isdir(main_ui_download_dir):
             reply = QMessageBox.question(self, "Create Directory?",
                                          f"The directory '{main_ui_download_dir}' does not exist.\nCreate it now?",
-                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
-            if reply == QMessageBox.Yes:
+                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes)
+            if reply == QMessageBox.StandardButton.Yes:
                 try:
                     os.makedirs(main_ui_download_dir, exist_ok=True)
                     self.log_signal.emit(f"ℹ️ Created directory: {main_ui_download_dir}")
@@ -7489,7 +7877,7 @@ class DownloaderApp (QWidget ):
         if not filepath:
             return
 
-        from PyQt5.QtWidgets import QMessageBox
+        from PySide6.QtWidgets import QMessageBox
         try:
             lines = []
             for entry in self.export_all_links_buffer:
@@ -7542,7 +7930,7 @@ class DownloaderApp (QWidget ):
         current_scope = self.multipart_scope if self.allow_multipart_download_setting else 'both'
         dialog = MultipartScopeDialog(current_scope, self.multipart_parts_count, self.multipart_min_size_mb, self)
         
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             self.multipart_scope = dialog.get_selected_scope()
             self.multipart_parts_count = dialog.get_selected_parts()
             self.multipart_min_size_mb = dialog.get_selected_min_size()
@@ -7789,7 +8177,7 @@ class DownloaderApp (QWidget ):
         self.processed_posts_count = 0
         self.overall_progress_signal.emit(self.total_posts_to_process, 0)
         
-        ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:]
+        ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:PostProcessorWorker.__init__.__code__.co_argcount]
         
         for post_data in self.new_posts_for_update:
             self._submit_post_to_worker_pool(
@@ -7805,7 +8193,7 @@ class DownloaderApp (QWidget ):
                                              "Please 'Restore Download' or 'Discard Session' before selecting new creators."))
             return
         dialog = EmptyPopupDialog(self.user_data_path, self)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             
 
             if hasattr(dialog, 'update_profiles_list') and dialog.update_profiles_list:
@@ -7833,6 +8221,9 @@ class DownloaderApp (QWidget ):
                     creator_id = creator_data.get('id')
                     creator_name = creator_data.get('name', 'Unknown Creator')
                     domain = self._get_domain_for_service(service)
+                    
+                    if hasattr(dialog, 'use_pawchive_cb') and dialog.use_pawchive_cb.isChecked() and domain.startswith("kemono"):
+                        domain = "pawchive.pw"
 
                     if service and creator_id:
                         url = f"https://{domain}/{service}/user/{creator_id}"
@@ -7996,7 +8387,7 @@ class DownloaderApp (QWidget ):
             else:
                 self.log_signal.emit("  ↳ No valid cookies loaded for any supported domain.")
                 cookie_help_dialog = CookieHelpDialog(self, self)
-                cookie_help_dialog.exec_()
+                cookie_help_dialog.exec()
                 return
         else :
             self .log_signal .emit ("Favorite Posts: 'Use Cookie' is NOT checked. Cookies are required.")
@@ -8116,7 +8507,7 @@ class DownloaderApp (QWidget ):
             QTimer.singleShot(100, self._process_next_favorite_download)
 
 class PdfGenerationThread(QThread):
-    finished_signal = pyqtSignal(bool, str)
+    finished_signal = Signal(bool, str)
 
     def __init__(self, posts_data, output_filename, font_path, add_info_page, logger_func):
         super().__init__()

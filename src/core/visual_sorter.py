@@ -5,7 +5,7 @@ import warnings
 import re
 import numpy as np
 from PIL import Image
-from PyQt5.QtCore import QSettings
+from PySide6.QtCore import QSettings
 
 warnings.filterwarnings("ignore", category=UserWarning, module="onnxruntime")
 
@@ -37,19 +37,19 @@ class VisualSorter:
             self.model = ort.InferenceSession(model_path, providers=providers)
             active_providers = self.model.get_providers()
             print("\n" + "="*40)
-            print("🤖 VISUAL SORT ENGINE INITIALIZED")
+            print("[AI] VISUAL SORT ENGINE INITIALIZED")
             print("="*40)
             if "CUDAExecutionProvider" in active_providers:
-                print("✅ Hardware Status : NVIDIA GPU (CUDA) Active!")
+                print("[OK] Hardware Status : NVIDIA GPU (CUDA) Active!")
             elif "DmlExecutionProvider" in active_providers:
-                print("✅ Hardware Status : AMD/Intel GPU (DirectML) Active!")
+                print("[OK] Hardware Status : AMD/Intel GPU (DirectML) Active!")
             else:
-                print("⚠️ Hardware Status : CPU Mode Active (Standard/Fallback)")
-            print(f"⚙️ Loaded Providers : {active_providers}")
+                print("[!!] Hardware Status : CPU Mode Active (Standard/Fallback)")
+            print(f"[  ] Loaded Providers : {active_providers}")
             print("="*40 + "\n")
         except Exception as e:
-            print(f"\n❌ Hardware Error: Failed to load '{hw_choice}'. Reason: {e}")
-            print("⚠️ Falling back to safe CPU mode...\n")
+            print(f"\n[X] Hardware Error: Failed to load '{hw_choice}'. Reason: {e}")
+            print("[!] Falling back to safe CPU mode...\n")
             self.model = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
         
         self.tags = []

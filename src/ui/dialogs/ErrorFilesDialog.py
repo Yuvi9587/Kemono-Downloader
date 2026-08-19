@@ -1,7 +1,7 @@
 import os
 import re
-from PyQt5.QtCore import pyqtSignal, Qt, QSize
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal, Qt, QSize
+from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
     QMessageBox, QPushButton, QVBoxLayout, QAbstractItemView, QFileDialog, QCheckBox, QWidget
 )
@@ -17,7 +17,7 @@ class ErrorFilesDialog(QDialog):
     Dialog to display files that were skipped due to errors and
     allows the user to retry downloading them or export the list of URLs.
     """
-    retry_selected_signal = pyqtSignal(list)
+    retry_selected_signal = Signal(list)
 
     def __init__(self, error_files_info_list, parent_app, parent=None):
         super().__init__(parent)
@@ -47,7 +47,7 @@ class ErrorFilesDialog(QDialog):
         main_layout.addWidget(self.info_label)
 
         self.files_list_widget = QListWidget()
-        self.files_list_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.files_list_widget.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.files_list_widget.itemClicked.connect(self._toggle_item_check_state)
         main_layout.addWidget(self.files_list_widget)
         self._populate_list()
@@ -229,7 +229,7 @@ class ErrorFilesDialog(QDialog):
         layout.setContentsMargins(5, 5, 5, 5)
 
         info_label = QLabel(item_text)
-        info_label.setTextFormat(Qt.RichText)
+        info_label.setTextFormat(Qt.TextFormat.RichText)
         info_label.setWordWrap(True)
         layout.addWidget(info_label, stretch=1)
 
@@ -238,7 +238,7 @@ class ErrorFilesDialog(QDialog):
             error_code = str(error_reason).split(':')[0].strip()
             error_label = QLabel(f"⚠️ {error_code}")
             error_label.setStyleSheet("color: #ff6b6b; font-weight: bold;")
-            error_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            error_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             error_label.setWordWrap(True)
             layout.addWidget(error_label)
 
@@ -246,9 +246,9 @@ class ErrorFilesDialog(QDialog):
         widget.setLayout(layout)
 
         list_item = QListWidgetItem()
-        list_item.setData(Qt.UserRole, error_info)
-        list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)
-        list_item.setCheckState(Qt.Unchecked)
+        list_item.setData(Qt.ItemDataRole.UserRole, error_info)
+        list_item.setFlags(list_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        list_item.setCheckState(Qt.CheckState.Unchecked)
         
         list_item.setSizeHint(QSize(0, 50))
 
@@ -256,12 +256,12 @@ class ErrorFilesDialog(QDialog):
         self.files_list_widget.setItemWidget(list_item, widget)
 
     def _toggle_item_check_state(self, item):
-        new_state = Qt.Checked if item.checkState() == Qt.Unchecked else Qt.Unchecked
+        new_state = Qt.CheckState.Checked if item.checkState() == Qt.CheckState.Unchecked else Qt.CheckState.Unchecked
         item.setCheckState(new_state)
     def _select_all_items(self):
         """Toggles checking all items in the list."""
-        is_currently_checked = self.files_list_widget.item(0).checkState() == Qt.Checked if self.files_list_widget.count() > 0 else False
-        new_state = Qt.Unchecked if is_currently_checked else Qt.Checked
+        is_currently_checked = self.files_list_widget.item(0).checkState() == Qt.CheckState.Checked if self.files_list_widget.count() > 0 else False
+        new_state = Qt.CheckState.Unchecked if is_currently_checked else Qt.CheckState.Checked
         for i in range(self.files_list_widget.count()):
             self.files_list_widget.item(i).setCheckState(new_state)
 
@@ -284,8 +284,8 @@ class ErrorFilesDialog(QDialog):
         
         for i in range(self.files_list_widget.count()):
             item = self.files_list_widget.item(i)
-            if item.checkState() == Qt.Checked:
-                error_info = dict(item.data(Qt.UserRole))
+            if item.checkState() == Qt.CheckState.Checked:
+                error_info = dict(item.data(Qt.ItemDataRole.UserRole))
                 
 
                 
@@ -312,7 +312,7 @@ class ErrorFilesDialog(QDialog):
             return
 
         options_dialog = ExportOptionsDialog(parent_app=self.parent_app, parent=self)
-        if not options_dialog.exec_() == QDialog.Accepted:
+        if not options_dialog.exec() == QDialog.DialogCode.Accepted:
             return
 
         export_option = options_dialog.get_selected_option()

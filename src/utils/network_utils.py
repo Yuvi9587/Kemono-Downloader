@@ -232,9 +232,14 @@ def get_link_platform(url):
         if 'twitter.com' in domain or 'x.com' in domain: return 'twitter/x'
         if 'discord.gg' in domain or 'discord.com/invite' in domain: return 'discord invite'
         if 'pixiv.net' in domain: return 'pixiv'
-        if 'kemono.su' in domain or 'kemono.party' in domain or 'kemono.cr' in domain or 'pawchive.st' in domain or 'pawchive.pw' in domain: return 'kemono'
+        if 'kemono.su' in domain or 'kemono.party' in domain or 'kemono.cr' in domain: return 'kemono'
+        if 'pawchive.st' in domain or 'pawchive.pw' in domain: return 'pawchive'
         if 'hotleaks.tv' in domain or 'hotleaks.vip' in domain: return 'hotleaks'
         if 'coomer.su' in domain or 'coomer.party' in domain or 'coomer.st' in domain: return 'coomer'
+        if 'rule34.xxx' in domain: return 'rule34'
+        if 'gelbooru.com' in domain: return 'gelbooru'
+        if 'danbooru.donmai.us' in domain: return 'danbooru'
+        if 'safebooru.donmai.us' in domain: return 'safebooru'
         
         parts = domain.split('.')
         if len(parts) >= 2:

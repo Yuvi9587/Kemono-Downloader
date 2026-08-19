@@ -2,8 +2,8 @@ import html
 import re
 
 import cloudscraper
-from PyQt5.QtCore import QCoreApplication, Qt
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QCoreApplication, Qt
+from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMessageBox, QPushButton, QVBoxLayout
 )
@@ -164,7 +164,7 @@ class FavoriteArtistsDialog (QDialog ):
                 self.status_label.setText(self._tr("fav_artists_cookies_required_status", "Error: Cookies enabled but could not be loaded for any source."))
                 self._logger("Error: Cookies enabled but no valid cookies were loaded. Showing help dialog.")
                 cookie_help_dialog = CookieHelpDialog(self.parent_app, self)
-                cookie_help_dialog.exec_()
+                cookie_help_dialog.exec()
                 self.download_button.setEnabled(False)
                 return
 

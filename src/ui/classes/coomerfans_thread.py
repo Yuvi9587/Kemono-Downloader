@@ -4,18 +4,18 @@ import threading
 import urllib.parse
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 from ...core.coomerfans_client import CoomerfansClient
 from ...utils.proxy_utils import get_proxies_from_settings
 
 MAX_WORKERS = 2  
 
 class CoomerfansThread(QThread):
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    overall_progress_signal = pyqtSignal(int, int)
-    finished_signal = pyqtSignal(int, int, bool, list)
-    error_signal = pyqtSignal(str)
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    overall_progress_signal = Signal(int, int)
+    finished_signal = Signal(int, int, bool, list)
+    error_signal = Signal(str)
 
     def __init__(self, url, save_directory, main_app):
         super().__init__()

@@ -5,7 +5,7 @@ import threading
 import cloudscraper
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 try:
     from ...core.discord_client import fetch_server_channels, fetch_channel_messages
@@ -24,11 +24,11 @@ class KemonoDiscordDownloadThread(QThread):
     using the Kemono API via discord_client and multithreading for file downloads.
     Includes a single retry attempt after a 15-second delay for specific errors.
     """
-    progress_signal = pyqtSignal(str)
-    progress_label_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    permanent_file_failed_signal = pyqtSignal(list)
-    finished_signal = pyqtSignal(int, int, bool, list)
+    progress_signal = Signal(str)
+    progress_label_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    permanent_file_failed_signal = Signal(list)
+    finished_signal = Signal(int, int, bool, list)
 
     def __init__(self, server_id, channel_id, output_dir, cookies_dict, parent):
         """

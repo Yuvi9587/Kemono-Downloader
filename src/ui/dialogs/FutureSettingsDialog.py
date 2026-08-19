@@ -2,13 +2,14 @@ import os
 import json
 import sys
 
-from PyQt5.QtCore import Qt, QStandardPaths, QTimer
-from PyQt5.QtGui import QIntValidator
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt, QStandardPaths, QTimer
+from PySide6.QtGui import QIntValidator
+from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
     QGroupBox, QComboBox, QMessageBox, QGridLayout, QCheckBox, QLineEdit,
-    QTabWidget, QWidget, QFileDialog
+    QTabWidget, QWidget, QFileDialog, QTableWidget, QTableWidgetItem, QHeaderView
 )
+from ...core.platform_database import PlatformDatabaseManager
 from ...i18n.translator import get_translation
 from ...utils.resolution import get_dark_theme
 from ..assets import get_app_icon_object
@@ -55,7 +56,7 @@ class CountdownMessageBox(QDialog):
         
         self.message_label = QLabel(text)
         self.message_label.setWordWrap(True)
-        self.message_label.setAlignment(Qt.AlignCenter)
+        self.message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(self.message_label)
 
         buttons_layout = QHBoxLayout()
@@ -123,10 +124,11 @@ class FutureSettingsDialog(QDialog):
 
         screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 800
         scale_factor = screen_height / 1000.0 
-        base_min_w, base_min_h = 550, 450
+        base_min_w, base_min_h = 750, 600
         scaled_min_w = int(base_min_w * scale_factor)
         scaled_min_h = int(base_min_h * scale_factor)
         self.setMinimumSize(scaled_min_w, scaled_min_h)
+        self.resize(scaled_min_w, scaled_min_h)
 
         self._init_ui()
         self._retranslate_ui()
@@ -322,7 +324,6 @@ class FutureSettingsDialog(QDialog):
         button_layout.addWidget(self.ok_button)
         main_layout.addLayout(button_layout)
 
-
     def _retranslate_ui(self):
         self.setWindowTitle(self._tr("settings_dialog_title", "Settings"))
         
@@ -470,8 +471,8 @@ class FutureSettingsDialog(QDialog):
         
         reply = QMessageBox.question(self, self._tr("update_available_title", "Update Available"),
                                      self._tr("update_available_message", f"A new version (v{new_version}) is available.\nWould you like to download and install it now?"),
-                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
-        if reply == QMessageBox.Yes:
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes)
+        if reply == QMessageBox.StandardButton.Yes:
             self.ok_button.setEnabled(False)
             self.check_update_button.setEnabled(False)
             self.update_status_label.setText(self._tr("update_status_downloading", "Downloading update..."))
@@ -509,17 +510,17 @@ class FutureSettingsDialog(QDialog):
         self.create_database_checkbox.blockSignals(False)
 
     def _creator_json_setting_changed(self, state):
-        is_checked = state == Qt.Checked
+        is_checked = state == Qt.CheckState.Checked
         self.parent_app.settings.setValue(SAVE_CREATOR_JSON_KEY, is_checked)
         self.parent_app.settings.sync()
 
     def _fetch_first_setting_changed(self, state):
-        is_checked = state == Qt.Checked
+        is_checked = state == Qt.CheckState.Checked
         self.parent_app.settings.setValue(FETCH_FIRST_KEY, is_checked)
         self.parent_app.settings.sync()
 
     def _create_database_setting_changed(self, state):
-        is_checked = state == Qt.Checked
+        is_checked = state == Qt.CheckState.Checked
         self.parent_app.settings.setValue(CREATE_DATABASE_KEY, is_checked)
         self.parent_app.settings.sync()
 

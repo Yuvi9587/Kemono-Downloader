@@ -1,9 +1,9 @@
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QGroupBox, QRadioButton, QDialogButtonBox, QButtonGroup,
     QLabel, QLineEdit, QHBoxLayout, QFrame
 )
-from PyQt5.QtGui import QIntValidator
-from PyQt5.QtCore import Qt
+from PySide6.QtGui import QIntValidator
+from PySide6.QtCore import Qt
 
 MAX_PARTS = 16 
 
@@ -18,7 +18,7 @@ class MultipartScopeDialog(QDialog):
     def __init__(self, current_scope='both', current_parts=4, current_min_size_mb=100, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Multipart Download Options")
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
         self.setMinimumWidth(350)
 
         layout = QVBoxLayout(self)

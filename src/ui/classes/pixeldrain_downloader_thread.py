@@ -2,7 +2,7 @@ import os
 import time
 import requests
 import cloudscraper
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from ...core.pixeldrain_client import fetch_pixeldrain_data
 from ...utils.file_utils import clean_folder_name
@@ -11,9 +11,9 @@ from ...utils.proxy_utils import get_proxies_from_settings
 
 class PixeldrainDownloadThread(QThread):
     """A dedicated QThread for handling pixeldrain.com downloads."""
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    finished_signal = pyqtSignal(int, int, bool)
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    finished_signal = Signal(int, int, bool)
 
     def __init__(self, url, output_dir, parent=None):
         super().__init__(parent)
@@ -120,4 +120,4 @@ class PixeldrainDownloadThread(QThread):
 
     def resume(self):
         self._is_paused = False
-        self.progress_signal.emit("   Pixeldrain download resumed.")
+        self.progress_signal.emit("   Pixeldrain download resumed.")

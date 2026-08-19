@@ -4,7 +4,7 @@ import time
 from urllib.parse import urlparse
 
 import cloudscraper
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from PIL import Image
 try:
@@ -25,10 +25,10 @@ from ...utils.proxy_utils import get_proxies_from_settings
 
 class ToonilyDownloadThread(QThread):
     """A dedicated QThread for handling toonily.com series or single chapters."""
-    progress_signal = pyqtSignal(str)
-    file_progress_signal = pyqtSignal(str, object)
-    finished_signal = pyqtSignal(int, int, bool) 
-    overall_progress_signal = pyqtSignal(int, int)
+    progress_signal = Signal(str)
+    file_progress_signal = Signal(str, object)
+    finished_signal = Signal(int, int, bool) 
+    overall_progress_signal = Signal(int, int)
 
     def __init__(self, url, output_dir, parent=None):
         super().__init__(parent)

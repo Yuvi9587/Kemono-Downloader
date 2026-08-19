@@ -4,9 +4,9 @@ import os
 import time
 import traceback
 
-# --- PyQt5 Imports ---
-from PyQt5.QtWidgets import QApplication, QDialog
-from PyQt5.QtCore import QCoreApplication
+# --- PySide6 Imports ---
+from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtCore import QCoreApplication
 
 # --- Local Application Imports ---
 from src.ui.main_window import DownloaderApp
@@ -90,9 +90,10 @@ def main():
             pass  # Non-Windows platforms silently skip this.
 
         qt_app = QApplication(sys.argv)
+        qt_app.setStyle("Fusion")
 
         # --- Application-level icon (taskbar + all windows) ---
-        from PyQt5.QtGui import QIcon
+        from PySide6.QtGui import QIcon
         _icon_path = os.path.join(APP_BASE_DIR, "assets", "Kemono.ico")
         if os.path.exists(_icon_path):
             _app_icon = QIcon(_icon_path)
@@ -137,10 +138,10 @@ def main():
         # --- First-Run Welcome Tour ---
         if TourDialog.should_show_tour():
             tour_dialog = TourDialog(parent_app=downloader_app_instance)
-            tour_dialog.exec_()
+            tour_dialog.exec()
 
         # --- Start Application ---
-        exit_code = qt_app.exec_()
+        exit_code = qt_app.exec()
         print(f"Application finished with exit code: {exit_code}")
         sys.exit(exit_code)
 

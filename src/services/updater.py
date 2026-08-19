@@ -5,16 +5,16 @@ import subprocess
 import zipfile
 import shutil
 from packaging.version import parse as parse_version
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 GITHUB_REPO_URL = "https://api.github.com/repos/Yuvi9587/Kemono-Downloader/releases/latest"
 EXE_NAME = "Kemono.Downloader.exe"
 
 class UpdateChecker(QThread):
     """Checks for a new version on GitHub in a background thread."""
-    update_available = pyqtSignal(str, str)
-    up_to_date = pyqtSignal(str)
-    update_error = pyqtSignal(str)
+    update_available = Signal(str, str)
+    up_to_date = Signal(str)
+    update_error = Signal(str)
 
     def __init__(self, current_version):
         super().__init__()
@@ -50,8 +50,8 @@ class UpdateDownloader(QThread):
     Downloads the new executable and runs an updater script that kills the old process,
     replaces the file, and displays a message in the terminal.
     """
-    download_finished = pyqtSignal()
-    download_error = pyqtSignal(str)
+    download_finished = Signal()
+    download_error = Signal(str)
 
     def __init__(self, download_url, parent_app):
         super().__init__()
@@ -164,8 +164,8 @@ PATCH_JSON_URL = "https://huggingface.co/Yuvi9587/Kemono-Downloader-Patches/raw/
 
 class PatchUpdateChecker(QThread):
     """Checks for a lightweight EXE patch update on Hugging Face."""
-    patch_available = pyqtSignal(str, str)
-    up_to_date = pyqtSignal()
+    patch_available = Signal(str, str)
+    up_to_date = Signal()
     
     def __init__(self, current_version):
         super().__init__()
@@ -195,8 +195,8 @@ class PatchUpdateChecker(QThread):
 
 class PatchDownloader(QThread):
     """Downloads a raw .exe patch and swaps it with the current one."""
-    download_finished = pyqtSignal()
-    download_error = pyqtSignal(str)
+    download_finished = Signal()
+    download_error = Signal(str)
 
     def __init__(self, download_url):
         super().__init__()
