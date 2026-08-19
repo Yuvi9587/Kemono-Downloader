@@ -58,6 +58,8 @@ from ..core.saint2_client import fetch_saint2_data
 from ..core.erome_client import fetch_erome_data
 from ..core.Hentai2read_client import run_hentai2read_download as h2r_run_download
 from ..core.allcomic_client import get_chapter_list as allcomic_get_list, fetch_chapter_data as allcomic_fetch_data
+from .dialogs.ExportLinksDialog import ExportLinksDialog
+from .dialogs.MoreOptionsDialog import MoreOptionsDialog
 from ..core.toonily_client import get_chapter_list as toonily_get_list, fetch_chapter_data as toonily_fetch_data
 from ..core.pixeldrain_client import fetch_pixeldrain_data 
 from ..core.simpcity_client import fetch_single_simpcity_page
@@ -1007,7 +1009,6 @@ class DownloaderApp (QWidget ):
         if callable (get_translation ):
             res = get_translation (self .current_selected_language ,key ,default_text )
             if "<img" in res:
-                import re
                 def replacer(match):
                     path = match.group(1)
                     if not path.startswith("file:///"):
@@ -2314,7 +2315,7 @@ class DownloaderApp (QWidget ):
         
         self.tray_menu = QMenu()
         
-        self.action_show = QAction("Open Kemono Downloader Premium", self)
+        self.action_show = QAction("Open Kemono Downloader", self)
         self.action_show.triggered.connect(self.showNormal)
         self.tray_menu.addAction(self.action_show)
         
@@ -2415,7 +2416,6 @@ class DownloaderApp (QWidget ):
             self .log_signal .emit ("👋 Exiting application.")
             
             # Prevent daemon threads from crashing interpreter on shutdown due to stdout/stderr writing
-            import sys, os
             try:
                 sys.stdout = open(os.devnull, 'w')
                 sys.stderr = open(os.devnull, 'w')
@@ -3543,9 +3543,7 @@ class DownloaderApp (QWidget ):
             self.log_signal.emit("ℹ️ 'Save External Links' disabled.")
 
     def _open_simpcity_external_links_config_dialog(self):
-        from .dialogs.ExportLinksDialog import ExportLinksDialog
         dialog = ExportLinksDialog(links_data=None, parent=self, default_config=getattr(self, 'simpcity_external_links_config', None), context='simpcity')
-        from PySide6.QtWidgets import QDialog
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.simpcity_external_links_config = dialog.get_config()
             self.log_signal.emit("✅ 'Save External Links' configured.")
@@ -3931,7 +3929,6 @@ class DownloaderApp (QWidget ):
         service ,_ ,post_id =extract_post_info (url_text .strip ())
 
         if service == 'simpcity' and getattr(self, 'radio_more', None) and self.radio_more.isChecked():
-            from .dialogs.MoreOptionsDialog import MoreOptionsDialog
             if getattr(self, 'more_filter_scope', None) == MoreOptionsDialog.SCOPE_COMMENTS or getattr(self, 'add_info_in_pdf_setting', False):
                 self.more_filter_scope = MoreOptionsDialog.SCOPE_CONTENT
                 self.add_info_in_pdf_setting = False
@@ -4646,7 +4643,6 @@ class DownloaderApp (QWidget ):
                 self.resume_auto_sync_after_manual = True
                 
                 # Delay the start of the manual download to let background threads gracefully die
-                from PySide6.QtCore import QTimer
                 QTimer.singleShot(2500, lambda: self.start_download(direct_api_url, override_output_dir, is_restore, is_continuation, item_type_from_queue))
                 return
             else:
@@ -6348,7 +6344,6 @@ class DownloaderApp (QWidget ):
         worker_args_template = fetcher_args['worker_args_template']
         def logger_func(msg):
             try:
-                import shiboken6
                 if shiboken6.isValid(self):
                     self.log_signal.emit(f"[Fetcher] {msg}")
             except (RuntimeError, ImportError, AttributeError):
@@ -7184,7 +7179,6 @@ class DownloaderApp (QWidget ):
                 self.resume_auto_sync_after_manual = False
                 if hasattr(self, 'auto_sync_manager'):
                     # Trigger the next sync cycle automatically
-                    from PySide6.QtCore import QTimer
                     QTimer.singleShot(2000, self.auto_sync_manager.run_sync_cycle)
         
         finally:
@@ -7437,7 +7431,6 @@ class DownloaderApp (QWidget ):
         Reconstructs the original environment (Known.txt rules, AI rules, output paths) 
         for a single failed file and forces the PostProcessorWorker to try downloading it again.
         """
-        import shiboken6
         if not shiboken6.isValid(self):
             return False
 
@@ -7511,7 +7504,6 @@ class DownloaderApp (QWidget ):
         return is_successful_download or is_resolved_as_skipped
 
     def _handle_retry_future_result (self ,future ):
-        import shiboken6
         if not shiboken6.isValid(self):
             return
 
@@ -7549,7 +7541,6 @@ class DownloaderApp (QWidget ):
                 if all(f.done() for f in self.active_retry_futures):
                     self._retry_session_finished()
 
-        from PySide6.QtCore import QTimer
         QTimer.singleShot(0, self, update_ui)
 
 
@@ -7808,7 +7799,6 @@ class DownloaderApp (QWidget ):
         creator URL, collects all direct file download links, then writes them to a .txt file.
         No files are downloaded to disk.
         """
-        from PySide6.QtWidgets import QMessageBox
         if self._is_download_active():
             self.log_signal.emit("⚠️ Cannot start Export All Links while a download is in progress.")
             return
@@ -7877,7 +7867,6 @@ class DownloaderApp (QWidget ):
         if not filepath:
             return
 
-        from PySide6.QtWidgets import QMessageBox
         try:
             lines = []
             for entry in self.export_all_links_buffer:

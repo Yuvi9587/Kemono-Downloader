@@ -3,6 +3,7 @@ import os
 import time
 from PySide6.QtCore import QObject, QTimer, Signal, QEvent
 from PySide6.QtWidgets import QApplication
+from .platform_database import PlatformDatabaseManager
 
 class AppEventFilter(QObject):
     def __init__(self):
@@ -88,8 +89,6 @@ class AutoSyncManager(QObject):
         db_dir = os.path.join(appdata_dir, "databases")
         if not os.path.exists(db_dir):
             return subs
-            
-        from .platform_database import PlatformDatabaseManager
         
         for file in os.listdir(db_dir):
             if file.endswith(".db"):

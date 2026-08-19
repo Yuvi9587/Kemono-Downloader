@@ -17,6 +17,7 @@ from .database_manager import DatabaseManager
 from .platform_database import PlatformDatabaseManager
 from concurrent.futures import ThreadPoolExecutor, as_completed, CancelledError, Future
 from io import BytesIO
+import urllib.parse
 from urllib .parse import urlparse 
 import requests
 import cloudscraper 
@@ -1807,7 +1808,6 @@ class PostProcessorWorker:
                         if file_extension == 'pdf':
                             font_path = ""
                             if self.project_root_dir:
-                                import sys
                                 base_dir = getattr(sys, '_MEIPASS', self.project_root_dir)
                                 font_path = os.path.join(base_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
                             
@@ -2114,7 +2114,6 @@ class PostProcessorWorker:
                     final_url = post_main_file_info.get('url')
                     if not final_url or not final_url.startswith('http'):
                         final_url = f"https://{api_file_domain}/{file_path}" if file_path.startswith('/') else f"https://{api_file_domain}/data/{file_path}"
-                        import urllib.parse
                         final_url += f"?f={urllib.parse.quote(original_api_name)}"
                         
                     new_main_file_info = {
@@ -2138,7 +2137,6 @@ class PostProcessorWorker:
                         final_url = att_info.get('url')
                         if not final_url or not final_url.startswith('http'):
                             final_url = f"https://{api_file_domain}/{att_path}" if att_path.startswith('/') else f"https://{api_file_domain}/data/{att_path}"
-                            import urllib.parse
                             final_url += f"?f={urllib.parse.quote(original_api_att_name)}"
                             
                         new_att_info = {

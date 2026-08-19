@@ -11,6 +11,8 @@ from PySide6.QtCore import Qt, QThread, Signal, Slot
 import hashlib
 import json
 from ...core.platform_database import PlatformDatabaseManager
+import re as _re
+
 
 class RepairWorker(QThread):
     progress_signal = Signal(int, int)
@@ -218,7 +220,7 @@ class AutoSyncDialog(QDialog):
     def __init__(self, parent_app):
         super().__init__(parent_app)
         self.parent_app = parent_app
-        self.setWindowTitle("Auto-Sync Premium Hub")
+        self.setWindowTitle("Auto-Sync Hub")
         self.resize(800, 600)
         self.repair_worker = None
         
@@ -302,7 +304,7 @@ class AutoSyncDialog(QDialog):
         self.enable_sync_cb.stateChanged.connect(self._save_auto_sync_settings)
         settings_layout.addWidget(self.enable_sync_cb)
         
-        self.minimize_to_tray_cb = QCheckBox("Minimize to System Tray instead of closing (Highly Recommended)")
+        self.minimize_to_tray_cb = QCheckBox("Minimize to System Tray instead of closing")
         self.minimize_to_tray_cb.stateChanged.connect(self._save_auto_sync_settings)
         settings_layout.addWidget(self.minimize_to_tray_cb)
         

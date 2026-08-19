@@ -2,6 +2,8 @@ import os
 import sqlite3
 import re
 import threading
+from urllib.parse import urlparse, parse_qs
+
 
 class PlatformDatabaseManager:
     """
@@ -222,7 +224,6 @@ class PlatformDatabaseManager:
                 booru_platforms = ('rule34', 'gelbooru', 'danbooru', 'safebooru')
                 if self.platform_name in booru_platforms:
                     try:
-                        from urllib.parse import urlparse, parse_qs
                         parsed = urlparse(str(creator_id))
                         tags_value = parse_qs(parsed.query).get('tags', [''])[0].strip()
                         display_name = tags_value if tags_value else str(creator_id)
