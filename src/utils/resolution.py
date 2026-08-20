@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIntValidator, QFont, QIcon
 
 from ..config.constants import *
-from ..ui.assets import get_asset_path
+from ..ui.assets import get_asset_path, get_asset_html_path
 
 
 def setup_ui(main_app):
@@ -66,7 +66,7 @@ def setup_ui(main_app):
     main_app.url_placeholder_widget = QWidget()
     placeholder_layout = QHBoxLayout(main_app.url_placeholder_widget)
     placeholder_layout.setContentsMargins(0, 0, 0, 0)
-    main_app.fav_mode_active_label = QLabel(main_app._tr("fav_mode_active_label_text", f"<img src='file:///{get_asset_path('assets/Svg/star.svg').replace(chr(92), '/')}' width='13' height='13' align='top'> Favorite Mode is active..."))
+    main_app.fav_mode_active_label = QLabel(main_app._tr("fav_mode_active_label_text", f"<img src='{get_asset_html_path('assets/Svg/star.svg')}' width='13' height='13' align='top'> Favorite Mode is active..."))
     main_app.fav_mode_active_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     placeholder_layout.addWidget(main_app.fav_mode_active_label)
     main_app.url_or_placeholder_stack = QStackedWidget()
@@ -118,7 +118,7 @@ def setup_ui(main_app):
     character_filter_v_layout = QVBoxLayout(main_app.character_filter_widget)
     character_filter_v_layout.setContentsMargins(0, 0, 0, 0)
     character_filter_v_layout.setSpacing(2)
-    main_app.character_label = QLabel(f"<img src='file:///{get_asset_path('assets/Svg/target.svg').replace(chr(92), '/')}' width='13' height='13' align='top'> Filter by Character(s) (comma-separated):")
+    main_app.character_label = QLabel(f"<img src='{get_asset_html_path('assets/Svg/target.svg')}' width='13' height='13' align='top'> Filter by Character(s) (comma-separated):")
     character_filter_v_layout.addWidget(main_app.character_label)
     char_input_and_button_layout = QHBoxLayout()
     char_input_and_button_layout.setContentsMargins(0, 0, 0, 0)
@@ -252,7 +252,7 @@ def setup_ui(main_app):
     advanced_settings_layout = QVBoxLayout(main_app.advanced_settings_widget)
     advanced_settings_layout.setContentsMargins(0, 0, 0, 0)
     advanced_settings_layout.setSpacing(10)
-    advanced_settings_label = QLabel(f"<img src='file:///{get_asset_path('assets/Svg/settings.svg').replace(chr(92), '/')}' width='13' height='13' align='top'> Advanced Settings:")
+    advanced_settings_label = QLabel(f"<img src='{get_asset_html_path('assets/Svg/settings.svg')}' width='13' height='13' align='top'> Advanced Settings:")
     advanced_settings_layout.addWidget(advanced_settings_label)
 
     main_app.advanced_row1_layout = QHBoxLayout()
@@ -404,7 +404,7 @@ def setup_ui(main_app):
     left_layout.addSpacing(10)
     known_chars_label_layout = QHBoxLayout()
     known_chars_label_layout.setSpacing(10)
-    main_app.known_chars_label = QLabel(f"<img src='file:///{get_asset_path('assets/Svg/mask.svg').replace(chr(92), '/')}' width='13' height='13' align='top'> Known Shows/Characters (for Folder Names):")
+    main_app.known_chars_label = QLabel(f"<img src='{get_asset_html_path('assets/Svg/mask.svg')}' width='13' height='13' align='top'> Known Shows/Characters (for Folder Names):")
     known_chars_label_layout.addWidget(main_app.known_chars_label)
     main_app.open_known_txt_button = QPushButton("Open Known.txt")
     main_app.open_known_txt_button.setFixedWidth(int(120 * scale))
@@ -467,7 +467,7 @@ def setup_ui(main_app):
     left_layout.addStretch(0)
     right_panel_widget.setLayout(right_layout)
     log_title_layout = QHBoxLayout()
-    main_app.progress_log_label = QLabel(f"<img src='file:///{get_asset_path('assets/Svg/scroll.svg').replace(chr(92), '/')}' width='13' height='13' align='top'> Progress Log:")
+    main_app.progress_log_label = QLabel(f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:")
     log_title_layout.addWidget(main_app.progress_log_label)
     log_title_layout.addStretch(1)
     main_app.link_search_input = QLineEdit()

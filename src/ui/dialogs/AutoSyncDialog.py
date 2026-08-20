@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt, QThread, Signal, Slot
 import hashlib
 import json
 from ...core.platform_database import PlatformDatabaseManager
+from ..assets import get_asset_path
 import re as _re
 
 
@@ -701,7 +702,7 @@ class AutoSyncDialog(QDialog):
             line_edit = QLineEdit(current_out_dir)
             
             btn = QPushButton()
-            btn.setIcon(QIcon(os.path.join(getattr(self.parent_app, 'app_base_dir', ''), "assets", "Svg", "folder.svg")))
+            btn.setIcon(QIcon(get_asset_path("assets/Svg/folder.svg")))
             btn.setFixedSize(24, 24)
             btn.setToolTip("Browse for new download location")
             

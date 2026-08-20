@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QMessageBox, QListWidgetItem
 )
 from PySide6.QtCore import Qt
-from ..assets import get_asset_path
+from ..assets import get_asset_path, get_asset_html_path
 
 class SubscriptionsDialog(QDialog):
     def __init__(self, parent=None, app_base_dir=""):
@@ -22,7 +22,7 @@ class SubscriptionsDialog(QDialog):
         layout = QVBoxLayout(self)
 
         header_layout = QHBoxLayout()
-        icon_label = QLabel(f"<img src='{get_asset_path('assets/Svg/star.svg')}' width='20' height='20'>")
+        icon_label = QLabel(f"<img src='{get_asset_html_path('assets/Svg/star.svg')}' width='20' height='20'>")
         title_label = QLabel("<b>Set and Forget: Auto-Sync Subscriptions</b>")
         header_layout.addWidget(icon_label)
         header_layout.addWidget(title_label)

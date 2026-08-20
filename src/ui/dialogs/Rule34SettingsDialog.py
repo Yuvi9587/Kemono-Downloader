@@ -4,7 +4,7 @@ import urllib.request
 import re
 import json
 import sqlite3
-from ..assets import get_asset_path
+from ..assets import get_asset_path, get_asset_html_path
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QPushButton, QCheckBox, QSpinBox, QComboBox, QGroupBox, 
@@ -15,14 +15,14 @@ from PySide6.QtCore import Qt, QThread, Signal, QTimer, QEvent, QSize
 
 HELP_CONTENT = {
     "General Setup": (
-        f"<h3><img src='{get_asset_path('assets/Svg/settings.svg')}' width='18' height='18' align='top'> General & API Setup</h3>"
+        f"<h3><img src='{get_asset_html_path('assets/Svg/settings.svg')}' width='18' height='18' align='top'> General & API Setup</h3>"
         "<p><b>[ Auto-Extract & Save Keys ]</b><br>"
         "Rule34 restricts how many images a guest can download and will eventually block your IP. "
         "This button pulls your logged-in session data from the main window and saves it. "
         "This allows the background downloader to act as a registered user, bypassing rate limits and connection drops.</p>"
     ),
     "Content Filters": (
-        f"<h3><img src='{get_asset_path('assets/Svg/target.svg')}' width='18' height='18' align='top'> Content & Quality Filters</h3>"
+        f"<h3><img src='{get_asset_html_path('assets/Svg/target.svg')}' width='18' height='18' align='top'> Content & Quality Filters</h3>"
         "<ul>"
         "<li><b>Minimum Rating Allowed:</b> Tells the API to only fetch posts matching specific site ratings (Safe, Questionable, or Explicit).</li>"
         "<li><b>Minimum Post Score:</b> Skips any post that has fewer upvotes than the number you set. This is a great way to filter out low-effort or low-quality art.</li>"
@@ -31,21 +31,21 @@ HELP_CONTENT = {
         "</ul>"
     ),
     "Content Safety": (
-        f"<h3><img src='{get_asset_path('assets/Svg/block.svg')}' width='18' height='18' align='top'> Content Safety</h3>"
+        f"<h3><img src='{get_asset_html_path('assets/Svg/block.svg')}' width='18' height='18' align='top'> Content Safety</h3>"
         "<ul>"
         "<li><b>Quick Exclusions:</b> Pre-configured safety nets (Gore, Scatology, Furry, Loli, etc.). Checking these adds massive lists of related tags to your active blacklist so you don't have to type them manually. Hover over them to see the exact blocked words.</li>"
         "<li><b>Exclude Custom:</b> Allows you to create your own Quick Exclusion preset. Click the <b>[+]</b> button to add tags you want blocked. Checking the box instantly activates your custom blocklist without cluttering your master blacklist.</li>"
         "</ul>"
     ),
     "Tag Control": (
-        f"<h3><img src='{get_asset_path('assets/Svg/tag.svg')}' width='18' height='18' align='top'> Tag Control</h3>"
+        f"<h3><img src='{get_asset_html_path('assets/Svg/tag.svg')}' width='18' height='18' align='top'> Tag Control</h3>"
         "<ul>"
         "<li><b>Priority Whitelist:</b> The ultimate override. If a post contains a tag written here (like a favorite artist), the downloader will save it even if the post also contains tags from your Blacklist.</li>"
         "<li><b>Custom Blacklist:</b> A comma-separated list of tags. If a post contains any of these words, it is instantly skipped.</li>"
         "</ul>"
     ),
     "Character Routing": (
-        f"<h3><img src='{get_asset_path('assets/Svg/folder.svg')}' width='18' height='18' align='top'> Character Routing (The 'WHO')</h3>"
+        f"<h3><img src='{get_asset_html_path('assets/Svg/folder.svg')}' width='18' height='18' align='top'> Character Routing (The 'WHO')</h3>"
         "<ul>"
         "<li><b>Enable Automatic Character Folders:</b> Turns on the primary routing engine. It scans downloaded tags for known characters and automatically creates a folder named after them.</li>"
         "<li><b>Favorites Manager:</b> Where you type character names. Uses a custom Autocomplete system. Press <i>Ctrl + Down Arrow</i> to rapidly select and lock in names.</li>"
@@ -55,7 +55,7 @@ HELP_CONTENT = {
         "</ul>"
     ),
     "Scene Routing": (
-        f"<h3><img src='{get_asset_path('assets/Svg/palette.svg')}' width='18' height='18' align='top'> Scene & Tag Routing (The 'WHAT / WHERE')</h3>"
+        f"<h3><img src='{get_asset_html_path('assets/Svg/palette.svg')}' width='18' height='18' align='top'> Scene & Tag Routing (The 'WHAT / WHERE')</h3>"
         "<ul>"
         "<li><b>Enable Priority-Based Scene Sub-Folders:</b> Turns on the secondary routing engine. If Character sorting is on, these become sub-folders (e.g., <code>\\Makima\\Beach\\</code>).</li>"
         "<li><b>Scene Priority List:</b> The engine checks tags from Top to Bottom. If a post is tagged with both 'Bikini' and 'Beach', and 'Bikini' is higher on this list, the folder will be named <code>\\Bikini\\</code>.</li>"
@@ -63,7 +63,7 @@ HELP_CONTENT = {
         "</ul>"
     ),
     "Tag Aliases": (
-        f"<h3><img src='{get_asset_path('assets/Svg/link.svg')}' width='18' height='18' align='top'> Tag Aliases Engine (The Translator)</h3>"
+        f"<h3><img src='{get_asset_html_path('assets/Svg/link.svg')}' width='18' height='18' align='top'> Tag Aliases Engine (The Translator)</h3>"
         "<ul>"
         "<li><b>Alias Input:</b> Creates a translation rule formatted as <code>Master = alias1, alias2</code>.</li>"
         "<li><b>Alias List:</b> Shows active translations. When a file downloads, the engine instantly intercepts the internet's messy tags and standardizes them before any folders are created (e.g., intercepting 'swimwear' to 'bikini').</li>"
@@ -280,14 +280,14 @@ class Rule34SettingsDialog(QDialog):
         creds_layout = QVBoxLayout()
         
         creds_title_layout = QHBoxLayout()
-        creds_title = QLabel(f"<img src='{get_asset_path('assets/Svg/key.svg')}' width='16' height='16' align='top'> <b>API CREDENTIALS</b>")
+        creds_title = QLabel(f"<img src='{get_asset_html_path('assets/Svg/key.svg')}' width='16' height='16' align='top'> <b>API CREDENTIALS</b>")
         creds_help = SectionHelpButton("General Setup", HELP_CONTENT["General Setup"])
         creds_title_layout.addWidget(creds_title)
         creds_title_layout.addStretch()
         creds_title_layout.addWidget(creds_help)
         creds_layout.addLayout(creds_title_layout)
 
-        creds_desc = QLabel(f"<img src='{get_asset_path('assets/Svg/settings.svg')}' width='13' height='13' align='top'> Saving your credentials prevents rate-limiting!")
+        creds_desc = QLabel(f"<img src='{get_asset_html_path('assets/Svg/settings.svg')}' width='13' height='13' align='top'> Saving your credentials prevents rate-limiting!")
         creds_desc.setWordWrap(True)
         creds_layout.addWidget(creds_desc)
         
@@ -303,7 +303,7 @@ class Rule34SettingsDialog(QDialog):
         filters_layout = QVBoxLayout()
         
         filters_title_layout = QHBoxLayout()
-        filters_title = QLabel(f"<img src='{get_asset_path('assets/Svg/target.svg')}' width='16' height='16' align='top'> <b>CONTENT FILTERS</b>")
+        filters_title = QLabel(f"<img src='{get_asset_html_path('assets/Svg/target.svg')}' width='16' height='16' align='top'> <b>CONTENT FILTERS</b>")
         filters_help = SectionHelpButton("Content Filters", HELP_CONTENT["Content Filters"])
         filters_title_layout.addWidget(filters_title)
         filters_title_layout.addStretch()
@@ -342,7 +342,7 @@ class Rule34SettingsDialog(QDialog):
         safety_main_layout = QVBoxLayout()
         
         safety_title_layout = QHBoxLayout()
-        safety_title = QLabel(f"<img src='{get_asset_path('assets/Svg/block.svg')}' width='16' height='16' align='top'> <b>CONTENT SAFETY</b>")
+        safety_title = QLabel(f"<img src='{get_asset_html_path('assets/Svg/block.svg')}' width='16' height='16' align='top'> <b>CONTENT SAFETY</b>")
         safety_help = SectionHelpButton("Content Safety", HELP_CONTENT["Content Safety"])
         safety_title_layout.addWidget(safety_title)
         safety_title_layout.addStretch()
@@ -401,7 +401,7 @@ class Rule34SettingsDialog(QDialog):
         safety_info_layout = QVBoxLayout()
         safety_info_layout.addStretch()
         
-        info_label = QLabel(f"<img src='{get_asset_path('assets/Svg/help.svg')}' width='13' height='13' align='top'> Hover checkboxes to<br>see exact blocked tags")
+        info_label = QLabel(f"<img src='{get_asset_html_path('assets/Svg/help.svg')}' width='13' height='13' align='top'> Hover checkboxes to<br>see exact blocked tags")
         info_label.setStyleSheet("color: #7f8c8d; font-size: 11px; font-style: italic;")
         info_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
         
@@ -416,7 +416,7 @@ class Rule34SettingsDialog(QDialog):
         tag_control_layout = QVBoxLayout()
         
         tag_title_layout = QHBoxLayout()
-        tag_title = QLabel(f"<img src='{get_asset_path('assets/Svg/tag.svg')}' width='16' height='16' align='top'> <b>TAG CONTROL</b>")
+        tag_title = QLabel(f"<img src='{get_asset_html_path('assets/Svg/tag.svg')}' width='16' height='16' align='top'> <b>TAG CONTROL</b>")
         tag_help = SectionHelpButton("Tag Control", HELP_CONTENT["Tag Control"])
         tag_title_layout.addWidget(tag_title)
         tag_title_layout.addStretch()
@@ -441,7 +441,7 @@ class Rule34SettingsDialog(QDialog):
         db_download_layout = QVBoxLayout()
         
         db_title_layout = QHBoxLayout()
-        db_title = QLabel(f"<img src='{get_asset_path('assets/Svg/download.svg')}' width='16' height='16' align='top'> <b>DOWNLOAD DATABASE</b>")
+        db_title = QLabel(f"<img src='{get_asset_html_path('assets/Svg/download.svg')}' width='16' height='16' align='top'> <b>DOWNLOAD DATABASE</b>")
         db_title_layout.addWidget(db_title)
         db_title_layout.addStretch()
         db_download_layout.addLayout(db_title_layout)
@@ -479,7 +479,7 @@ class Rule34SettingsDialog(QDialog):
         char_layout = QVBoxLayout()
         
         char_title_layout = QHBoxLayout()
-        char_title = QLabel(f"<img src='{get_asset_path('assets/Svg/folder.svg')}' width='16' height='16' align='top'> <b>CHARACTER FOLDERS</b>")
+        char_title = QLabel(f"<img src='{get_asset_html_path('assets/Svg/folder.svg')}' width='16' height='16' align='top'> <b>CHARACTER FOLDERS</b>")
         char_help = SectionHelpButton("Character Routing", HELP_CONTENT["Character Routing"])
         char_title_layout.addWidget(char_title)
         char_title_layout.addStretch()
@@ -492,7 +492,7 @@ class Rule34SettingsDialog(QDialog):
         char_header_layout.addStretch()
         char_layout.addLayout(char_header_layout)
         
-        char_layout.addWidget(QLabel(f"<img src='{get_asset_path('assets/Svg/star.svg')}' width='13' height='13' align='top'> Favorites Manager"))
+        char_layout.addWidget(QLabel(f"<img src='{get_asset_html_path('assets/Svg/star.svg')}' width='13' height='13' align='top'> Favorites Manager"))
         fav_input_layout = QHBoxLayout()
         self.new_fav_input = MultiCompleterLineEdit()
         self.new_fav_input.setPlaceholderText("Ctrl+Down to harvest!")
@@ -517,7 +517,7 @@ class Rule34SettingsDialog(QDialog):
         scene_layout = QVBoxLayout()
         
         scene_title_layout = QHBoxLayout()
-        scene_title = QLabel(f"<img src='{get_asset_path('assets/Svg/palette.svg')}' width='16' height='16' align='top'> <b>SCENE / TAG FOLDERS (PRIORITY BASED)</b>")
+        scene_title = QLabel(f"<img src='{get_asset_html_path('assets/Svg/palette.svg')}' width='16' height='16' align='top'> <b>SCENE / TAG FOLDERS (PRIORITY BASED)</b>")
         scene_help = SectionHelpButton("Scene Routing", HELP_CONTENT["Scene Routing"])
         scene_title_layout.addWidget(scene_title)
         scene_title_layout.addStretch()
@@ -583,7 +583,7 @@ class Rule34SettingsDialog(QDialog):
         priority_btn_layout.addWidget(self.scene_del_btn)
         scene_layout.addLayout(priority_btn_layout)
 
-        scene_note = QLabel(f"<img src='{get_asset_path('assets/Svg/help.svg')}' width='13' height='13' align='top'> Note: Tags must exactly match general tags on Rule34.xxx")
+        scene_note = QLabel(f"<img src='{get_asset_html_path('assets/Svg/help.svg')}' width='13' height='13' align='top'> Note: Tags must exactly match general tags on Rule34.xxx")
         scene_note.setStyleSheet("color: gray; font-style: italic;")
         scene_layout.addWidget(scene_note)
 
@@ -594,7 +594,7 @@ class Rule34SettingsDialog(QDialog):
         alias_layout = QVBoxLayout()
         
         alias_title_layout = QHBoxLayout()
-        alias_title = QLabel(f"<img src='{get_asset_path('assets/Svg/link.svg')}' width='16' height='16' align='top'> <b>TAG ALIASES (MERGE SYNONYMS)</b>")
+        alias_title = QLabel(f"<img src='{get_asset_html_path('assets/Svg/link.svg')}' width='16' height='16' align='top'> <b>TAG ALIASES (MERGE SYNONYMS)</b>")
         alias_help = SectionHelpButton("Tag Aliases", HELP_CONTENT["Tag Aliases"])
         alias_title_layout.addWidget(alias_title)
         alias_title_layout.addStretch()

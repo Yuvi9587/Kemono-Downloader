@@ -21,6 +21,18 @@ def get_asset_path(filename):
     
     return os.path.join(base_path, filename)
 
+def get_asset_html_path(filename):
+    """
+    Return the asset path as a proper file:/// URL safe for use inside Qt HTML labels (src= attributes).
+    
+    Qt's HTML renderer does NOT accept Windows-style backslash paths (e.g. C:\\Users\\...) 
+    in src= attributes when running from a frozen .exe. This converts the path to the 
+    correct forward-slash file:/// URL format (e.g. file:///C:/Users/...).
+    """
+    path = get_asset_path(filename)
+    # Convert backslashes to forward slashes and prepend file:///
+    return 'file:///' + path.replace('\\', '/')
+
 def get_app_icon_object():
     """
     Loads and caches the application icon from the assets folder.

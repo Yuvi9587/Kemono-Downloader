@@ -24,7 +24,7 @@ import threading
 from concurrent.futures import Future, ThreadPoolExecutor, CancelledError
 
 from PySide6.QtGui import QIcon, QIntValidator, QDesktopServices, QTextCharFormat, QAction
-from .assets import get_asset_path
+from .assets import get_asset_path, get_asset_html_path
 from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QTextEdit, QPushButton,
     QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QListWidget, QRadioButton,
@@ -413,7 +413,7 @@ class DownloaderApp (QWidget ):
         self.download_location_label_widget = None
         self.remove_from_filename_label_widget = None
         self.skip_words_label_widget = None
-        self.setWindowTitle("Kemono Downloader v9.3.5")
+        self.setWindowTitle("Kemono Downloader v9.0.6")
         setup_ui(self)
         self._setup_system_tray()
         
@@ -1013,10 +1013,9 @@ class DownloaderApp (QWidget ):
                     path = match.group(1)
                     if not path.startswith("file:///"):
                         if path.lower().startswith("assets/"):
-                            path = get_asset_path(path)
-                        path = path.replace(chr(92), '/')
-                        if not path.startswith("file:///"):
-                            path = "file:///" + path
+                            path = get_asset_html_path(path)
+                        elif not path.startswith("file:///"):
+                            path = 'file:///' + path.replace(chr(92), '/')
                     return f"<img src='{path}'"
                 res = re.sub(r"<img\s+src=['\"]([^'\"]+)['\"]", replacer, res, flags=re.IGNORECASE)
             return res
@@ -1397,11 +1396,11 @@ class DownloaderApp (QWidget ):
         if self .url_label_widget :
             self .url_label_widget .setText (self ._tr ("creator_post_url_label","URL:"))
         if self .download_location_label_widget :
-            self .download_location_label_widget .setText (self ._tr ("download_location_label",f"<img src='{get_asset_path('assets/Svg/folder.svg')}' width='13' height='13' align='top'> Download Location:"))
+            self .download_location_label_widget .setText (self ._tr ("download_location_label",f"<img src='{get_asset_html_path('assets/Svg/folder.svg')}' width='13' height='13' align='top'> Download Location:"))
         if hasattr (self ,'character_label')and self .character_label :
-            self .character_label .setText (self ._tr ("filter_by_character_label",f"<img src='{get_asset_path('assets/Svg/target.svg')}' width='13' height='13' align='top'> Filter by Character(s) (comma-separated):"))
+            self .character_label .setText (self ._tr ("filter_by_character_label",f"<img src='{get_asset_html_path('assets/Svg/target.svg')}' width='13' height='13' align='top'> Filter by Character(s) (comma-separated):"))
         if self .skip_words_label_widget :
-            self .skip_words_label_widget .setText (self ._tr ("skip_with_words_label",f"<img src='{get_asset_path('assets/Svg/block.svg')}' width='13' height='13' align='top'> Skip with Words (comma-separated):"))
+            self .skip_words_label_widget .setText (self ._tr ("skip_with_words_label",f"<img src='{get_asset_html_path('assets/Svg/block.svg')}' width='13' height='13' align='top'> Skip with Words (comma-separated):"))
         if self .remove_from_filename_label_widget :
             self .remove_from_filename_label_widget .setText (self ._tr ("remove_words_from_name_label","✂️ Remove Words from name:"))
         if hasattr (self ,'radio_all'):self .radio_all .setText (self ._tr ("filter_all_radio","All"))
@@ -1438,7 +1437,7 @@ class DownloaderApp (QWidget ):
         current_download_is_active =self ._is_download_active ()if hasattr (self ,'_is_download_active')else False 
         self .set_ui_enabled (not current_download_is_active )
 
-        if hasattr (self ,'known_chars_label'):self .known_chars_label .setText (self ._tr ("known_chars_label_text",f"<img src='{get_asset_path('assets/Svg/mask.svg')}' width='13' height='13' align='top'> Known Shows/Characters (for Folder Names):"))
+        if hasattr (self ,'known_chars_label'):self .known_chars_label .setText (self ._tr ("known_chars_label_text",f"<img src='{get_asset_html_path('assets/Svg/mask.svg')}' width='13' height='13' align='top'> Known Shows/Characters (for Folder Names):"))
         if hasattr (self ,'open_known_txt_button'):self .open_known_txt_button .setText (self ._tr ("open_known_txt_button_text","Open Known.txt"));self .open_known_txt_button .setToolTip (self ._tr ("open_known_txt_button_tooltip","Open the 'Known.txt' file..."))
         if hasattr (self ,'add_char_button'):self .add_char_button .setText (self ._tr ("add_char_button_text","Add"));self .add_char_button .setToolTip (self ._tr ("add_char_button_tooltip","Add the name from the input field..."))
         if hasattr (self ,'add_to_filter_button'):self .add_to_filter_button .setText (self ._tr ("add_to_filter_button_text","Add to Filter"));self .add_to_filter_button .setToolTip (self ._tr ("add_to_filter_button_tooltip","Select names from 'Known Shows/Characters' list..."))
@@ -1448,7 +1447,7 @@ class DownloaderApp (QWidget ):
 
         if hasattr (self ,'cancel_btn'):self .cancel_btn .setToolTip (self ._tr ("cancel_button_tooltip","Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory)."))
         if hasattr (self ,'error_btn'):self .error_btn .setText (self ._tr ("error_button_text","Error"));self .error_btn .setToolTip (self ._tr ("error_button_tooltip","View files skipped due to errors and optionally retry them."))
-        if hasattr (self ,'progress_log_label'):self .progress_log_label .setText (self ._tr ("progress_log_label_text",f"<img src='{get_asset_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
+        if hasattr (self ,'progress_log_label'):self .progress_log_label .setText (self ._tr ("progress_log_label_text",f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
         if hasattr (self ,'reset_button'):self .reset_button .setText (self ._tr ("reset_button_text","🔄 Reset"));self .reset_button .setToolTip (self ._tr ("reset_button_tooltip","Reset all inputs and logs to default state (only when idle)."))
         self ._update_multipart_toggle_button_text ()
         if hasattr (self ,'progress_label')and not self ._is_download_active ():self .progress_label .setText (self ._tr ("progress_idle_text","Progress: Idle"))
@@ -1464,7 +1463,7 @@ class DownloaderApp (QWidget ):
             self .end_page_input .setPlaceholderText (self ._tr ("end_page_input_placeholder","End"))
             self .end_page_input .setToolTip (self ._tr ("end_page_input_tooltip","For creator URLs: Specify the ending page number..."))
         if hasattr (self ,'fav_mode_active_label'):
-            self .fav_mode_active_label .setText (self ._tr ("fav_mode_active_label_text",f"<img src='{get_asset_path('assets/Svg/star.svg')}' width='13' height='13' align='top'> Favorite Mode is active..."))
+            self .fav_mode_active_label .setText (self ._tr ("fav_mode_active_label_text",f"<img src='{get_asset_html_path('assets/Svg/star.svg')}' width='13' height='13' align='top'> Favorite Mode is active..."))
         if hasattr (self ,'cookie_browse_button'):
             self .cookie_browse_button .setToolTip (self ._tr ("cookie_browse_button_tooltip","Browse for a cookie file..."))
         if hasattr(self, 'rule34_settings_btn'):
@@ -2455,7 +2454,7 @@ class DownloaderApp (QWidget ):
 
     def _load_persistent_history (self ):
         """Loads download history from a persistent file."""
-        self .log_signal .emit (f"<img src='{get_asset_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Attempting to load history from: {self .persistent_history_file }")
+        self .log_signal .emit (f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Attempting to load history from: {self .persistent_history_file }")
         if os .path .exists (self .persistent_history_file ):
             try :
                 with open (self .persistent_history_file ,'r',encoding ='utf-8')as f :
@@ -2492,7 +2491,7 @@ class DownloaderApp (QWidget ):
 
     def _save_persistent_history(self):
         """Saves download history to a persistent file."""
-        self.log_signal.emit(f"<img src='{get_asset_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Attempting to save history to: {self.persistent_history_file}")
+        self.log_signal.emit(f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Attempting to save history to: {self.persistent_history_file}")
         try:
             history_dir = os.path.dirname(self.persistent_history_file)
             self.log_signal.emit(f"   History directory: {history_dir}")
@@ -3408,9 +3407,9 @@ class DownloaderApp (QWidget ):
                 self.external_links_checkbox.setChecked(False)
 
         if is_only_links:
-            self.progress_log_label.setText(f"<img src='{get_asset_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Extracted Links Log:")
+            self.progress_log_label.setText(f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Extracted Links Log:")
         else:
-            self.progress_log_label.setText(self._tr("progress_log_label_text", f"<img src='{get_asset_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
+            self.progress_log_label.setText(self._tr("progress_log_label_text", f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
         
         self.update_external_links_setting(self.external_links_checkbox.isChecked() if self.external_links_checkbox else False)
         
@@ -5733,7 +5732,7 @@ class DownloaderApp (QWidget ):
         ]
 
         if service in ['bunkr', 'nhentai']:
-            self.progress_log_label.setText(f"<img src='{get_asset_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:")
+            self.progress_log_label.setText(f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:")
             self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
             self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
             
@@ -7630,14 +7629,14 @@ class DownloaderApp (QWidget ):
             if self .log_verbosity_toggle_button :
                 self .log_verbosity_toggle_button .setIcon (QIcon (self .CLOSED_EYE_ICON_PATH ))
                 self .log_verbosity_toggle_button .setToolTip ("Current View: Missed Character Log. Click to switch to Progress Log.")
-            if self .progress_log_label :self .progress_log_label .setText (self ._tr ("missed_character_log_label_text",f"<img src='{get_asset_path('assets/Svg/block.svg')}' width='13' height='13' align='top'> Missed Character Log:"))
+            if self .progress_log_label :self .progress_log_label .setText (self ._tr ("missed_character_log_label_text",f"<img src='{get_asset_html_path('assets/Svg/block.svg')}' width='13' height='13' align='top'> Missed Character Log:"))
         else :
             self .current_log_view ='progress'
             if self .log_view_stack :self .log_view_stack .setCurrentIndex (0 )
             if self .log_verbosity_toggle_button :
                 self .log_verbosity_toggle_button .setIcon (QIcon (self .EYE_ICON_PATH ))
                 self .log_verbosity_toggle_button .setToolTip ("Current View: Progress Log. Click to switch to Missed Character Log.")
-            if self .progress_log_label :self .progress_log_label .setText (self ._tr ("progress_log_label_text",f"<img src='{get_asset_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
+            if self .progress_log_label :self .progress_log_label .setText (self ._tr ("progress_log_label_text",f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
 
     def reset_application_state(self):
         """
@@ -7680,7 +7679,7 @@ class DownloaderApp (QWidget ):
         if self.log_view_stack:
             self.log_view_stack.setCurrentIndex(0)
         if self.progress_log_label:
-            self.progress_log_label.setText(self._tr("progress_log_label_text", f"<img src='{get_asset_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
+            self.progress_log_label.setText(self._tr("progress_log_label_text", f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
         if self.log_verbosity_toggle_button:
             self.log_verbosity_toggle_button.setIcon(QIcon(self.EYE_ICON_PATH))
             self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
