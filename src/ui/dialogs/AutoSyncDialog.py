@@ -4,9 +4,9 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget, QGroupBox, 
     QCheckBox, QTableWidget, QTableWidgetItem, QHeaderView, QPushButton,
     QLabel, QAbstractItemView, QMessageBox, QFileDialog, QProgressBar, QTextEdit,
-    QSpinBox, QFormLayout, QLineEdit, QComboBox
+    QSpinBox, QFormLayout, QLineEdit, QComboBox, QMenu
 )
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QAction
 from PySide6.QtCore import Qt, QThread, Signal, Slot
 import hashlib
 import json
@@ -291,6 +291,8 @@ class AutoSyncDialog(QDialog):
         self.sync_table.setShowGrid(False)
         self.sync_table.setAlternatingRowColors(True)
         self.sync_table.itemChanged.connect(self._on_sync_item_changed)
+        self.sync_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.sync_table.customContextMenuRequested.connect(self._show_creator_context_menu)
         layout.addWidget(self.sync_table)
         
         refresh_btn = QPushButton("Refresh Creator List")
@@ -729,6 +731,67 @@ class AutoSyncDialog(QDialog):
                 appdata_dir = os.path.join(getattr(self.parent_app, 'app_base_dir', ''), "appdata")
                 db_manager = PlatformDatabaseManager.get_instance(platform_name, appdata_dir)
                 db_manager.toggle_sync_status(creator_id, is_synced)
+
+    def _show_creator_context_menu(self, pos):
+        """Show right-click context menu on the sync table."""
+        row = self.sync_table.rowAt(pos.y())
+        if row < 0:
+            return
+
+        chk_item = self.sync_table.item(row, 0)
+        if not chk_item:
+            return
+        platform_id_data = chk_item.data(Qt.UserRole)
+        if not platform_id_data:
+            return
+
+        platform_name, creator_id = platform_id_data
+        creator_name_item = self.sync_table.item(row, 1)
+        creator_name = creator_name_item.text() if creator_name_item else f"ID: {creator_id}"
+
+        menu = QMenu(self)
+
+        delete_action = QAction(f"🗑️  Delete '{creator_name}' from Database", self)
+        delete_action.triggered.connect(
+            lambda: self._delete_creator_from_db(platform_name, creator_id, creator_name)
+        )
+        menu.addAction(delete_action)
+        menu.exec(self.sync_table.viewport().mapToGlobal(pos))
+
+    def _delete_creator_from_db(self, platform_name, creator_id, creator_name):
+        """Confirm and delete a creator's entire download history from the database."""
+        reply = QMessageBox.warning(
+            self,
+            "Delete Creator Database",
+            f"<b>Are you sure you want to delete all download records for:</b><br><br>"
+            f"&nbsp;&nbsp;&nbsp;<b>{creator_name}</b>  ({platform_name})<br><br>"
+            f"This will remove all file history for this creator from the database.<br>"
+            f"<b>The actual downloaded files on disk will NOT be deleted.</b><br><br>"
+            f"After deletion, the downloader will re-download all files for this creator "
+            f"if you run it again, since it will have no record of what it already has.",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        appdata_dir = os.path.join(getattr(self.parent_app, 'app_base_dir', ''), "appdata")
+        try:
+            db_manager = PlatformDatabaseManager.get_instance(platform_name, appdata_dir)
+            success = db_manager.delete_creator(creator_id)
+            if success:
+                QMessageBox.information(
+                    self, "Deleted",
+                    f"✅ Database records for <b>{creator_name}</b> have been deleted successfully."
+                )
+                self._populate_sync_table()
+            else:
+                QMessageBox.warning(
+                    self, "Not Found",
+                    f"Could not find a database entry for '{creator_name}' (ID: {creator_id})."
+                )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to delete creator: {e}")
 
     def _browse_creator_dir(self, platform, creator_id, service, line_edit):
         start_dir = line_edit.text() if os.path.isdir(line_edit.text()) else ""

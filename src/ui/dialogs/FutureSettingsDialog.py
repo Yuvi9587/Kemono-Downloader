@@ -22,7 +22,8 @@ from ...config.constants import (
     COOKIE_TEXT_KEY, USE_COOKIE_KEY,
     FETCH_FIRST_KEY, DISCORD_TOKEN_KEY, POST_DOWNLOAD_ACTION_KEY,
     PROXY_ENABLED_KEY, PROXY_HOST_KEY, PROXY_PORT_KEY, 
-    PROXY_USERNAME_KEY, PROXY_PASSWORD_KEY, CREATE_DATABASE_KEY
+    PROXY_USERNAME_KEY, PROXY_PASSWORD_KEY, CREATE_DATABASE_KEY,
+    CREATE_POSTID_KEY
 )
 from ...services.updater import UpdateChecker, UpdateDownloader, PatchDownloader
 
@@ -220,6 +221,10 @@ class FutureSettingsDialog(QDialog):
         self.create_database_checkbox.stateChanged.connect(self._create_database_setting_changed)
         download_settings_layout.addWidget(self.create_database_checkbox, 5, 0, 1, 2)
 
+        self.create_postid_checkbox = QCheckBox()
+        self.create_postid_checkbox.stateChanged.connect(self._create_postid_setting_changed)
+        download_settings_layout.addWidget(self.create_postid_checkbox, 6, 0, 1, 2)
+
         settings_file_layout = QHBoxLayout()
         self.load_settings_button = QPushButton()
         self.save_settings_button = QPushButton()
@@ -227,7 +232,7 @@ class FutureSettingsDialog(QDialog):
         settings_file_layout.addWidget(self.save_settings_button)
         settings_file_layout.addStretch(1)
         
-        download_settings_layout.addLayout(settings_file_layout, 6, 0, 1, 2)
+        download_settings_layout.addLayout(settings_file_layout, 7, 0, 1, 2)
         
         self.load_settings_button.clicked.connect(self._handle_load_settings)
         self.save_settings_button.clicked.connect(self._handle_save_settings)
@@ -357,6 +362,13 @@ class FutureSettingsDialog(QDialog):
         
         self.create_database_checkbox.setText(self._tr("create_database_label", "Create library.db"))
         self.create_database_checkbox.setToolTip(self._tr("create_database_tooltip", "If checked, the app will create and record downloads in library.db. If unchecked, the database feature is disabled."))
+
+        self.create_postid_checkbox.setText(self._tr("create_postid_label", "Create .postid marker files"))
+        self.create_postid_checkbox.setToolTip(self._tr("create_postid_tooltip",
+            "If checked, the app creates hidden .postid_XXXX marker files inside post subfolders\n"
+            "to track which posts have already been downloaded and avoid re-downloading.\n"
+            "Disabling this means the app cannot detect already-downloaded post subfolders.\n"
+            "Existing .postid files can be safely deleted — the only consequence is re-downloading."))
 
         self.save_path_button.setText(self._tr("settings_save_all_button", "Save Path + Cookie + Token"))
         self.save_path_button.setToolTip(self._tr("settings_save_all_tooltip", "Save the current 'Download Location', Cookie, and Discord Token settings for future sessions."))
@@ -509,6 +521,11 @@ class FutureSettingsDialog(QDialog):
         self.create_database_checkbox.setChecked(should_create_db)
         self.create_database_checkbox.blockSignals(False)
 
+        self.create_postid_checkbox.blockSignals(True)
+        should_create_postid = self.parent_app.settings.value(CREATE_POSTID_KEY, True, type=bool)
+        self.create_postid_checkbox.setChecked(should_create_postid)
+        self.create_postid_checkbox.blockSignals(False)
+
     def _creator_json_setting_changed(self, state):
         is_checked = state == Qt.CheckState.Checked
         self.parent_app.settings.setValue(SAVE_CREATOR_JSON_KEY, is_checked)
@@ -523,6 +540,13 @@ class FutureSettingsDialog(QDialog):
         is_checked = state == Qt.CheckState.Checked
         self.parent_app.settings.setValue(CREATE_DATABASE_KEY, is_checked)
         self.parent_app.settings.sync()
+
+    def _create_postid_setting_changed(self, state):
+        is_checked = state == Qt.CheckState.Checked
+        self.parent_app.settings.setValue(CREATE_POSTID_KEY, is_checked)
+        self.parent_app.settings.sync()
+        if hasattr(self.parent_app, 'create_postid_files'):
+            self.parent_app.create_postid_files = is_checked
 
     def _tr(self, key, default_text=""):
         if callable(get_translation) and self.parent_app:

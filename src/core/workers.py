@@ -50,6 +50,14 @@ try:
 except ImportError:
     Document = None
 from PySide6.QtCore import Qt, QThread, Signal, QMutex, QMutexLocker, QObject, QTimer, QSettings, QStandardPaths, QCoreApplication, QUrl, QSize, QProcess
+
+try:
+    from curl_cffi import requests as cffi_requests
+    CURL_CFFI_AVAILABLE = True
+except ImportError:
+    cffi_requests = None
+    CURL_CFFI_AVAILABLE = False
+
 from .api_client import download_from_api, fetch_post_comments, fetch_single_post_data, fetch_post_revisions
 from ..services.multipart_downloader import download_file_in_parts, MULTIPART_DOWNLOADER_AVAILABLE
 from ..services.drive_downloader import (
@@ -158,7 +166,8 @@ class PostProcessorWorker:
                  visual_sort_active=False, 
                  user_data_path=None,
                  export_all_links_mode=False,
-                 retry_404_errors=False
+                 retry_404_errors=False,
+                 create_postid_files=True
                  ):
         # self.db is initialized below based on the api_url
         self.post = post_data
@@ -173,6 +182,7 @@ class PostProcessorWorker:
         self.use_post_subfolders = use_post_subfolders
         self.target_post_id_from_initial_url = target_post_id_from_initial_url
         self.custom_folder_name = custom_folder_name
+        self.create_postid_files = create_postid_files
         self.compress_images = compress_images
         self.download_thumbnails = download_thumbnails
         self.service = service
@@ -397,9 +407,9 @@ class PostProcessorWorker:
             return 0, 1, "", False, FILE_DOWNLOAD_STATUS_SKIPPED, None
         
         file_download_headers = {
-            'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Referer': post_page_url,
-            'Accept': 'text/css'
+            'Accept': '*/*'
         }
 
         cookies_to_use_for_file = None
@@ -755,6 +765,20 @@ class PostProcessorWorker:
                         file_url = new_url
                         response.close()
                         response = requests.get(new_url, headers=file_download_headers, timeout=(30, 300), stream=True, cookies=cookies_to_use_for_file, proxies=self.proxies, verify=False)
+                elif response.status_code == 403 and CURL_CFFI_AVAILABLE:
+                    # Non-kemono/coomer 403: likely Cloudflare TLS fingerprint detection.
+                    # Retry with curl_cffi which impersonates a real Chrome browser.
+                    response.close()
+                    response = cffi_requests.get(
+                        current_url_to_try,
+                        headers=file_download_headers,
+                        timeout=300,
+                        stream=True,
+                        cookies=cookies_to_use_for_file if cookies_to_use_for_file else {},
+                        proxies=self.proxies or {},
+                        impersonate="chrome120",
+                        verify=False
+                    )
                 response.raise_for_status()
                 total_size_bytes = int(response.headers.get('Content-Length', 0))
 
@@ -897,10 +921,36 @@ class PostProcessorWorker:
                     is_permanent_error = True
                     break
             except Exception as e:
-                self.logger(f"   ❌ Unexpected Download Error: {api_original_filename}: {e}\n{traceback.format_exc(limit=2)}")
-                last_exception_for_retry_later = e
-                is_permanent_error = True                
-                break
+                # Check if this is a curl_cffi HTTP error (same shape as requests HTTPError)
+                e_type_name = type(e).__name__
+                e_module = type(e).__module__ or ''
+                if 'curl_cffi' in e_module and 'HTTPError' in e_type_name:
+                    # Extract status code from the error message e.g. "HTTP Error 404: "
+                    import re as _re_err
+                    m = _re_err.search(r'HTTP Error (\d+)', str(e))
+                    status_code = int(m.group(1)) if m else None
+                    if status_code == 403:
+                        self.logger(f"   ⚠️ Download Error (403 Forbidden): {api_original_filename}. Retrying...")
+                        last_exception_for_retry_later = e
+                    elif status_code == 404:
+                        if self.retry_404_errors:
+                            self.logger(f"   ❌ [404 Not Found] '{api_original_filename}'. Flagged as permanent failure.")
+                            last_exception_for_retry_later = e
+                            is_permanent_error = True
+                            break
+                        else:
+                            self.logger(f"   ⏳ [404 Not Found] '{api_original_filename}' is not available on the server. Skipping silently.")
+                            return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
+                    else:
+                        self.logger(f"   ❌ Download Error ({status_code}): {api_original_filename}. Error: {e}")
+                        last_exception_for_retry_later = e
+                        is_permanent_error = True
+                        break
+                else:
+                    self.logger(f"   ❌ Unexpected Download Error: {api_original_filename}: {e}\n{traceback.format_exc(limit=2)}")
+                    last_exception_for_retry_later = e
+                    is_permanent_error = True
+                    break
             finally:
                 if response: response.close()
                 self._emit_signal('file_download_status', False)
@@ -1354,9 +1404,9 @@ class PostProcessorWorker:
                 api_domain = parsed_url.netloc
                 creator_page_url = f"https://{api_domain}/{self.service}/user/{self.user_id}"
                 headers = {
-                    'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     'Referer': creator_page_url,
-                    'Accept': 'text/css'
+                    'Accept': '*/*'
                     }
                 cookies = prepare_cookies_for_request(self.use_cookie, self.cookie_text, self.selected_cookie_file, self.app_base_dir, self.logger, target_domain=api_domain)  
                 full_post_data = fetch_single_post_data(api_domain, self.service, self.user_id, post_id, headers, self.logger, cookies_dict=cookies, proxies=self.proxies)              
@@ -1396,9 +1446,9 @@ class PostProcessorWorker:
                 post_page_url = f"https://{parsed_api_url.netloc}/{self.service}/user/{self.user_id}/post/{post_id}"
 
             headers = {
-                'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Referer': post_page_url,
-                'Accept': 'text/css'
+                'Accept': '*/*'
                 }
             link_pattern = re.compile(r"""<a\s+.*?href=["'](https?://[^"']+)["'][^>]*>(.*?)</a>""", re.IGNORECASE | re.DOTALL)
             effective_unwanted_keywords_for_folder_naming = self.unwanted_keywords.copy()
@@ -1478,9 +1528,9 @@ class PostProcessorWorker:
                 parsed_url = urlparse(self.api_url_input)
                 api_domain = parsed_url.netloc
                 rev_headers = {
-                    'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     'Referer': f'https://{api_domain}/',
-                    'Accept': 'text/css'
+                    'Accept': '*/*'
                 }
                 
                 rev_cookies = None
@@ -2067,8 +2117,9 @@ class PostProcessorWorker:
                     if not os.path.exists(potential_post_subfolder_path):
                         try:
                             os.makedirs(potential_post_subfolder_path, exist_ok=True)
-                            with open(id_file_path, 'w') as f:
-                                f.write(post_id_for_folder)
+                            if self.create_postid_files:
+                                with open(id_file_path, 'w') as f:
+                                    f.write(post_id_for_folder)
                             
                             created_post_subfolder_path = potential_post_subfolder_path
                             final_post_subfolder_name = name_candidate
@@ -2700,7 +2751,8 @@ class DownloadThread(QThread):
                  download_revisions=False,
                  visual_sort_active=False, 
                  user_data_path=None,
-                 add_info_in_pdf=False
+                 add_info_in_pdf=False,
+                 create_postid_files=True
                  ): 
 
         super().__init__()
@@ -2784,6 +2836,7 @@ class DownloadThread(QThread):
         self.visual_sort_active = visual_sort_active  
         self.user_data_path = user_data_path
         self.add_info_in_pdf = add_info_in_pdf
+        self.create_postid_files = create_postid_files
 
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found (DownloadThread).")
@@ -2926,7 +2979,8 @@ class DownloadThread(QThread):
                         'download_revisions': self.download_revisions,
                         'visual_sort_active': self.visual_sort_active, 
                         'user_data_path': self.user_data_path,
-                        'add_info_in_pdf': self.add_info_in_pdf
+                        'add_info_in_pdf': self.add_info_in_pdf,
+                        'create_postid_files': self.create_postid_files
                     }
 
                     post_processing_worker = PostProcessorWorker(**worker_args)

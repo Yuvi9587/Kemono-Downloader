@@ -268,3 +268,32 @@ class PlatformDatabaseManager:
                 return bool(self.cursor.fetchone())
             except Exception:
                 return False
+
+    def delete_creator(self, creator_id):
+        """
+        Completely removes a creator from the database:
+        - Drops their individual file-records table.
+        - Removes their row from creator_mappings.
+        Returns True on success, False if the creator was not found.
+        """
+        with self.db_lock:
+            self.cursor.execute(
+                "SELECT sanitized_table_name FROM creator_mappings WHERE creator_id = ?",
+                (str(creator_id),)
+            )
+            row = self.cursor.fetchone()
+            if not row:
+                return False
+
+            table_name = row[0]
+            try:
+                self.cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+            except Exception:
+                pass  # Table may already be gone
+
+            self.cursor.execute(
+                "DELETE FROM creator_mappings WHERE creator_id = ?",
+                (str(creator_id),)
+            )
+            self.conn.commit()
+            return True

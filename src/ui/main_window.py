@@ -113,6 +113,7 @@ from .classes.nhentai_downloader_thread import NhentaiDownloadThread
 from .classes.downloader_factory import create_downloader_thread
 from .classes.kemono_discord_downloader_thread import KemonoDiscordDownloadThread
 from .classes.hentaifox_downloader_thread import HentaiFoxDownloadThread
+from .classes.cumst_downloader_thread import CumStDownloadThread
 
 _ff_ver = (datetime.date.today().toordinal() - 735506) // 28
 USERAGENT_FIREFOX = (f"Mozilla/5.0 (Windows NT 10.0; Win64; x64; "
@@ -331,6 +332,7 @@ class DownloaderApp (QWidget ):
         self.temp_pdf_content_list = []
         self.last_effective_download_dir = None
         self.save_creator_json_enabled_this_session = True 
+        self.create_postid_files = self.settings.value(CREATE_POSTID_KEY, True, type=bool)
         self.date_prefix_format = self.settings.value(DATE_PREFIX_FORMAT_KEY, "YYYY-MM-DD {post}", type=str)
         self.is_single_post_session = False 
         self.discord_download_scope = 'files' 
@@ -413,7 +415,7 @@ class DownloaderApp (QWidget ):
         self.download_location_label_widget = None
         self.remove_from_filename_label_widget = None
         self.skip_words_label_widget = None
-        self.setWindowTitle("Kemono Downloader v9.0.6")
+        self.setWindowTitle("Kemono Downloader v9.0.7")
         setup_ui(self)
         self._setup_system_tray()
         
@@ -1332,6 +1334,7 @@ class DownloaderApp (QWidget ):
         
         args_template = self.last_start_download_args
         args_template['add_info_in_pdf'] = self.add_info_in_pdf_setting        
+        args_template['create_postid_files'] = self.create_postid_files
         args_template['filter_character_list'] = parsed_filters
         args_template['domain_override'] = domain_override
         
@@ -4481,9 +4484,10 @@ class DownloaderApp (QWidget ):
         is_erome = 'erome.com' in url_text
         is_coomerfans = 'coomerfans.com' in url_text
         is_hotleaks = 'hotleaks.tv' in url_text
+        is_cumst = 'cum.st' in url_text
         
-        is_specialized = service in ['bunkr', 'nhentai', 'hentai2read', 'simpcity', 'deviantart'] or is_saint2 or is_erome or is_coomerfans or is_hotleaks
-        is_specialized_for_disabling = service in ['bunkr', 'nhentai', 'hentai2read', 'deviantart'] or is_saint2 or is_erome or is_coomerfans or is_hotleaks     
+        is_specialized = service in ['bunkr', 'nhentai', 'hentai2read', 'simpcity', 'deviantart'] or is_saint2 or is_erome or is_coomerfans or is_hotleaks or is_cumst
+        is_specialized_for_disabling = service in ['bunkr', 'nhentai', 'hentai2read', 'deviantart'] or is_saint2 or is_erome or is_coomerfans or is_hotleaks or is_cumst     
       
         self._set_ui_for_specialized_downloader(is_specialized_for_disabling)
 
@@ -4548,6 +4552,11 @@ class DownloaderApp (QWidget ):
             self.media_radio_all.setEnabled(False)
             self.media_radio_images.setEnabled(False)
             self.media_radio_videos.setEnabled(False)
+
+        elif is_cumst:
+            self._apply_ui_profile('image_only')
+            if hasattr(self, 'manga_rename_toggle_button') and self.manga_rename_toggle_button:
+                self.manga_rename_toggle_button.setEnabled(False)
 
         elif service in ['mega', 'google drive', 'dropbox', 'gofile']:
             self._apply_ui_profile('file_host')
@@ -5598,6 +5607,7 @@ class DownloaderApp (QWidget ):
             'handle_unknown_mode': handle_unknown_command,
             'retry_404_errors': self.settings.value("auto_sync_retry_404", False, type=bool),
             'add_info_in_pdf': self.add_info_in_pdf_setting,     
+            'create_postid_files': self.create_postid_files,
             'proxies': current_proxies,  
             'download_revisions': self.revisions_checkbox.isChecked() if hasattr(self, 'revisions_checkbox') else False,                
             'visual_sort_active': getattr(self, 'visual_sort_checkbox', None) and self.visual_sort_checkbox.isChecked(),
@@ -5665,7 +5675,7 @@ class DownloaderApp (QWidget ):
                     'processed_post_ids', 'domain_override',
                     'archive_only_mode', 'skip_file_size_mb', 
                     'manga_custom_filename_format','manga_custom_date_format', 'manga_custom_suffix_format', 'sfp_threshold', 'min_files_threshold', 'download_revisions', 'creator_name_cache',
-                    'proxies', 'visual_sort_active', 'user_data_path', 'add_info_in_pdf'
+                    'proxies', 'visual_sort_active', 'user_data_path', 'add_info_in_pdf', 'create_postid_files'
 
                 ]
                 args_template['skip_current_file_flag'] = None
@@ -6048,6 +6058,7 @@ class DownloaderApp (QWidget ):
             'cookie_text': self.cookie_text_input.text(),
             'selected_cookie_file': self.selected_cookie_filepath,
             'add_info_in_pdf': self.add_info_in_pdf_setting,       
+            'create_postid_files': self.create_postid_files,
             'proxies': current_proxies,    
             'download_revisions': self.revisions_checkbox.isChecked() if hasattr(self, 'revisions_checkbox') else False,           
             'visual_sort_active': getattr(self, 'visual_sort_checkbox', None) and self.visual_sort_checkbox.isChecked(),
@@ -6093,6 +6104,7 @@ class DownloaderApp (QWidget ):
             'override_output_dir': None,
             'processed_post_ids': [],
             'add_info_in_pdf': False,
+            'create_postid_files': self.create_postid_files,
             'visual_sort_active': False,
             'user_data_path': getattr(self, 'user_data_path', "")
         }
@@ -7398,6 +7410,7 @@ class DownloaderApp (QWidget ):
             'custom_folder_name': None,
             'num_file_threads': 1,
             'add_info_in_pdf': self.add_info_in_pdf_setting,
+            'create_postid_files': self.create_postid_files,
             'use_cookie': self.use_cookie_checkbox.isChecked(),
             'cookie_text': self.cookie_text_input.text(),
             'selected_cookie_file': self.selected_cookie_filepath,

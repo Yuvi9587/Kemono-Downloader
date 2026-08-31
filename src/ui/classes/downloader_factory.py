@@ -27,6 +27,7 @@ from .hentaifox_downloader_thread import HentaiFoxDownloadThread
 from .rule34_downloader_thread import Rule34DownloadThread
 from .hotleaks_thread import HotleaksThread  
 from .coomerfans_thread import CoomerfansThread
+from .cumst_downloader_thread import CumStDownloadThread
 
 def create_downloader_thread(main_app, api_url, service, id1, id2, effective_output_dir_for_run, export_all_links_mode=False):
     """
@@ -200,6 +201,15 @@ def create_downloader_thread(main_app, api_url, service, id1, id2, effective_out
             main_app=main_app,
             export_all_links_mode=export_all_links_mode
         )
+
+    if 'cum.st' in api_url:
+        main_app.log_signal.emit("🔞 cum.st URL detected. Starting dedicated downloader.")
+        return CumStDownloadThread(
+            url=api_url,
+            save_directory=effective_output_dir_for_run,
+            main_app=main_app,
+            export_all_links_mode=export_all_links_mode
+        )
         
     main_app.log_signal.emit(f"ℹ️ No specialized downloader found for service '{service}' and URL '{api_url[:50]}...'. Using generic downloader.")
-    return None
+    return None
