@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from PySide6.QtCore import QThread, Signal
 
 from ...core.cumst_client import CumStClient
+from ...core.platform_database import PlatformDatabaseManager
 from ...utils.proxy_utils import get_proxies_from_settings
 
 MAX_WORKERS = 3
@@ -37,6 +38,14 @@ class CumStDownloadThread(QThread):
 
         _proxies = get_proxies_from_settings(main_app.settings) if hasattr(main_app, "settings") else None
         self.client = CumStClient(proxies=_proxies)
+
+        # Platform DB for persistent hash-based duplicate detection (rename-proof)
+        _appdata_dir = getattr(main_app, 'app_base_dir', '')
+        if _appdata_dir:
+            _appdata_dir = os.path.join(_appdata_dir, 'appdata')
+            self.platform_db = PlatformDatabaseManager.get_instance('cumst', _appdata_dir)
+        else:
+            self.platform_db = None
 
         self.is_running = True
         self.download_count = 0
@@ -147,9 +156,47 @@ class CumStDownloadThread(QThread):
         
                         if not page_posts:
                             break
-        
+
+                        # --- Smart early-stop: if every file on this page already
+                        #     exists in DB or on disk, all older pages will too — stop fetching. ---
+                        page_file_count = 0
+                        all_page_files_exist = True
+                        for _post in page_posts:
+                            for _att in _post.get("attachments", []):
+                                if _att.get("locked", False):
+                                    continue
+                                _sk = _att.get("storageKey") or _att.get("sha256")
+                                _variants = _att.get("variants", [])
+                                _variant = self.client.get_best_variant(_variants)
+                                if not _sk or not _variant:
+                                    continue
+                                _kind = _att.get("kind", "file").lower()
+                                if self.filter_mode == 'image' and _kind not in _IMAGE_KINDS:
+                                    continue
+                                if self.filter_mode == 'video' and _kind not in _VIDEO_KINDS:
+                                    continue
+                                _fname = _att.get("originalFilename") or f"{_sk}_{_variant['name']}"
+                                page_file_count += 1
+                                # Primary: check DB by hash (rename-proof)
+                                _in_db = self.platform_db and self.platform_db.is_file_downloaded(user_id, _sk)
+                                # Fallback: check disk by filename
+                                _on_disk = os.path.exists(os.path.join(creator_folder, _fname))
+                                if not _in_db and not _on_disk:
+                                    all_page_files_exist = False
+                                    break
+                            if not all_page_files_exist:
+                                break
+
                         all_posts.extend(page_posts)
-                        
+
+                        if page_file_count > 0 and all_page_files_exist:
+                            self.log(
+                                f"   ⏹ All {page_file_count} file(s) on this page already exist "
+                                f"— stopping early (smart sync)."
+                            )
+                            break
+                        # --- End smart early-stop ---
+
                         if offset + len(page_posts) >= total:
                             self.log(f"   ✓ Fetched all {total} posts from {ptype} feed.")
                             break
@@ -197,6 +244,10 @@ class CumStDownloadThread(QThread):
                         "url": cdn_url,
                         "filename": original_filename,
                         "kind": kind,
+                        "storage_key": storage_key,  # API hash — used for DB duplicate detection
+                        "user_id": user_id,
+                        "service": service,
+                        "creator_name": user_id,     # fallback; overridden if creator name is known
                     })
 
             self.log(f"📦 {len(tasks)} file(s) to download.")
@@ -245,9 +296,19 @@ class CumStDownloadThread(QThread):
         filename = task["filename"]
         url = task["url"]
         kind = task["kind"]
+        storage_key = task["storage_key"]   # hash from API — rename-proof
+        post_id = task["post_id"]
         save_path = os.path.join(folder, filename)
 
-        # Skip already downloaded
+        # 1. Check persistent DB by storageKey (rename-proof — works even if user moved/renamed the file)
+        if self.platform_db and storage_key:
+            if self.platform_db.is_file_downloaded(task.get("user_id"), storage_key):
+                self.log(f"   -> Skip (DB hash match): {filename}")
+                with self._count_lock:
+                    self.skip_count += 1
+                return
+
+        # 2. Fallback: skip if file already exists on disk
         if os.path.exists(save_path):
             with self._count_lock:
                 self.skip_count += 1
@@ -311,6 +372,24 @@ class CumStDownloadThread(QThread):
 
             os.replace(tmp_path, save_path)
             self.overall_progress_signal.emit(1, 1)
+
+            # Record to persistent DB using storageKey as hash (from the API — no need to hash the file)
+            if self.platform_db and storage_key:
+                try:
+                    self.platform_db.record_download(
+                        creator_name=task.get("creator_name", task.get("user_id", "unknown")),
+                        file_hash=storage_key,
+                        phash=None,
+                        post_id=str(post_id),
+                        original_filename=filename,
+                        saved_filename=os.path.basename(save_path),
+                        creator_id=task.get("user_id"),
+                        service=task.get("service"),
+                        saved_path=save_path,
+                    )
+                except Exception as _db_err:
+                    self.log(f"   ⚠️ DB record failed: {_db_err}")
+
             with self._count_lock:
                 self.download_count += 1
 

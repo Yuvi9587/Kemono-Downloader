@@ -110,6 +110,8 @@ class AutoSyncManager(QObject):
                                 url = f"https://pawchive.pw/{service}/user/{creator_id}"
                             elif platform_name == 'coomer':
                                 url = f"https://coomer.su/{service}/user/{creator_id}"
+                            elif platform_name == 'cumst':
+                                url = f"https://cum.st/{service}/user/{creator_id}"
                             else:
                                 url = f"https://{platform_name}.su/{service}/user/{creator_id}" # Fallback
                                 
