@@ -41,24 +41,36 @@ class CumStClient:
 
     def parse_url(self, url):
         """
-        Parse a cum.st creator URL and return (service, user_id).
+        Parse a cum.st creator URL and return (service, user_id, post_id).
+        post_id will be None if the URL is for the entire creator.
 
         Supported formats:
           https://cum.st/creators/onlyfans/32696630
           https://cum.st/creators/onlyfans/32696630/post/2607896312
-        Returns (None, None) if parsing fails.
+        Returns (None, None, None) if parsing fails.
         """
-        m = re.search(r'/creators/([^/?#]+)/([^/?#]+)', url)
+        m = re.search(r'/creators/([^/?#]+)/([^/?#]+)(?:/post/([^/?#]+))?', url)
         if m:
-            return m.group(1), m.group(2)
-        return None, None
+            return m.group(1), m.group(2), m.group(3)
+        return None, None, None
 
-    def get_posts_page(self, service, user_id, offset=0, limit=POSTS_PER_PAGE):
+    def get_single_post(self, service, user_id, post_id):
+        """
+        Fetch a specific post from the API.
+        """
+        url = f"{API_BASE}/{service}/user/{user_id}/post/{post_id}"
+        resp = self.session.get(url, timeout=15)
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_posts_page(self, service, user_id, offset=0, limit=POSTS_PER_PAGE, post_type=None):
         """
         Fetch one page of posts from the API.
         Returns (total, posts_list) or raises on HTTP error.
         """
         url = f"{API_BASE}/{service}/user/{user_id}/posts?limit={limit}&offset={offset}"
+        if post_type:
+            url += f"&type={post_type}"
         resp = self.session.get(url, timeout=30)
         resp.raise_for_status()
         data = resp.json()

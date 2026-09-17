@@ -357,6 +357,16 @@ class DownloaderApp (QWidget ):
                 'filters_enabled': False,
                 'force_radio': 'radio_images'
             },
+            'cumst': {
+                # cum.st supports both images (kind='image', variant='original.jpg')
+                # and videos (kind='video', variant='original.mp4').
+                # All three filter radios are valid.
+                'enabled_radios': ['radio_all', 'radio_images', 'radio_videos'],
+                'enabled_checkboxes': [],
+                'advanced_enabled': False,
+                'filters_enabled': False,
+                'force_radio': 'radio_all'
+            },
             'erome': {
                 'enabled_radios': ['radio_all', 'radio_videos', 'radio_images'], 
                 'enabled_checkboxes': [],
@@ -787,9 +797,12 @@ class DownloaderApp (QWidget ):
         if hasattr(thread, 'overall_progress_signal'):
             thread.overall_progress_signal.connect(self.update_progress_display)
         if hasattr(thread, 'finished_signal'):
-            thread.finished_signal.connect(
-                lambda dl, skip, cancelled, names=None: self.download_finished(dl, skip, cancelled, names or [])
+            # Store the lambda so we can disconnect it cleanly in download_finished
+            thread._finished_signal_handler = (
+                lambda dl, skip, cancelled, names=None:
+                self.download_finished(dl, skip, cancelled, names or [])
             )
+            thread.finished_signal.connect(thread._finished_signal_handler)
         if hasattr(thread, 'progress_label_signal'):
             thread.progress_label_signal.connect(self.progress_label.setText)
 
@@ -4554,7 +4567,7 @@ class DownloaderApp (QWidget ):
             self.media_radio_videos.setEnabled(False)
 
         elif is_cumst:
-            self._apply_ui_profile('image_only')
+            self._apply_ui_profile('cumst')
             if hasattr(self, 'manga_rename_toggle_button') and self.manga_rename_toggle_button:
                 self.manga_rename_toggle_button.setEnabled(False)
 
@@ -5040,7 +5053,18 @@ class DownloaderApp (QWidget ):
 
             self.set_ui_enabled(False)
             self.download_thread = specialized_thread
-            
+
+            # Reset download-finish gate so the upcoming finished_signal is processed.
+            # The non-specialized path resets these at lines ~4866/4873, but the
+            # specialized-thread path returns early (below) and skips those resets,
+            # leaving is_finishing=True and finish_lock locked after the first run.
+            self.is_finishing = False
+            # Release the lock if it is still held from a previous finished download
+            try:
+                self.finish_lock.release()
+            except RuntimeError:
+                pass  # was not locked — that is fine
+
             if hasattr(self.download_thread, 'proxies'):
                 self.download_thread.proxies = proxies_to_use
             
@@ -6945,7 +6969,18 @@ class DownloaderApp (QWidget ):
             self.active_retry_futures = []
             self.log_signal.emit("    Retry pool shutdown initiated.")
             
-        self.download_finished(0, 0, True, [])
+        # For specialized QThreads (e.g. CumStDownloadThread, HotleaksThread) we must NOT
+        # call download_finished() here — doing so prematurely clears self.download_thread
+        # and disconnects signals while the thread is still alive, which then causes a
+        # "QThread destroyed while still running" crash when the thread finally stops.
+        # Instead, we rely on the thread's own finished_signal to invoke download_finished().
+        specialized_thread_still_running = (
+            self.download_thread is not None
+            and isinstance(self.download_thread, QThread)
+            and self.download_thread.isRunning()
+        )
+        if not specialized_thread_still_running:
+            self.download_finished(0, 0, True, [])
 
     def _get_domain_for_service(self, service_name: str, source_api: str = None) -> str:
         """Determines the base domain for a given service."""
@@ -7104,7 +7139,17 @@ class DownloaderApp (QWidget ):
                     try:
                         if hasattr(self.download_thread, 'progress_signal'): self.download_thread.progress_signal.disconnect(self.handle_main_log)
                         if hasattr(self.download_thread, 'add_character_prompt_signal'): self.download_thread.add_character_prompt_signal.disconnect(self.add_character_prompt_signal)
-                        if hasattr(self.download_thread, 'finished_signal'): self.download_thread.finished_signal.disconnect(self.download_finished)
+                        # Disconnect finished_signal via stored handler (set by _connect_specialized_thread_signals)
+                        # or via direct reference (set by start_single_threaded_download)
+                        if hasattr(self.download_thread, 'finished_signal'):
+                            handler = getattr(self.download_thread, '_finished_signal_handler', None)
+                            try:
+                                if handler is not None:
+                                    self.download_thread.finished_signal.disconnect(handler)
+                                else:
+                                    self.download_thread.finished_signal.disconnect(self.download_finished)
+                            except (TypeError, RuntimeError):
+                                pass
                         if hasattr(self.download_thread, 'receive_add_character_result'): self.character_prompt_response_signal.disconnect(self.download_thread.receive_add_character_result)
                         if hasattr(self.download_thread, 'external_link_signal'): self.download_thread.external_link_signal.disconnect(self.handle_external_link_signal)
                         if hasattr(self.download_thread, 'file_progress_signal'): self.download_thread.file_progress_signal.disconnect(self.update_file_progress_display)
@@ -7115,6 +7160,13 @@ class DownloaderApp (QWidget ):
                     except (TypeError, RuntimeError) as e:
                         self.log_signal.emit(f"ℹ️ Note during single-thread signal disconnection: {e}")
 
+                    # Ensure the OS thread has actually stopped before Qt destroys the object.
+                    # Without this, deleteLater() can destroy the QThread while the worker
+                    # threads inside it are still running, causing a fatal crash.
+                    if self.download_thread.isRunning():
+                        self.download_thread.quit()
+                        if not self.download_thread.wait(5000):
+                            self.log_signal.emit("⚠️ Download thread did not stop within 5s; proceeding anyway.")
                     self.download_thread.deleteLater()
                     self.download_thread = None
                 else:

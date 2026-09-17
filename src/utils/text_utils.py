@@ -103,7 +103,7 @@ def match_folders_from_title(title, names_to_match, unwanted_keywords):
     Finds ALL non-overlapping characters in the title.
     """
     if not title or not names_to_match:
-        return []
+        return [], 0
 
     cleaned_title = title
     for pat_str in KNOWN_TXT_MATCH_CLEANUP_PATTERNS:
@@ -159,7 +159,7 @@ def match_folders_from_filename_enhanced(filename, names_to_match, unwanted_keyw
     Matches folder names from a filename, collecting ALL non-overlapping characters.
     """
     if not filename or not names_to_match:
-        return []
+        return [], 0
 
     filename_lower = filename.lower()
     alias_map_to_primary = []

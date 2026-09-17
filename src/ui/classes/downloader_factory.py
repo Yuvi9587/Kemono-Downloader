@@ -204,11 +204,13 @@ def create_downloader_thread(main_app, api_url, service, id1, id2, effective_out
 
     if 'cum.st' in api_url:
         main_app.log_signal.emit("🔞 cum.st URL detected. Starting dedicated downloader.")
+        filter_mode = main_app.get_filter_mode() if hasattr(main_app, 'get_filter_mode') else 'all'
         return CumStDownloadThread(
             url=api_url,
             save_directory=effective_output_dir_for_run,
             main_app=main_app,
-            export_all_links_mode=export_all_links_mode
+            export_all_links_mode=export_all_links_mode,
+            filter_mode=filter_mode
         )
         
     main_app.log_signal.emit(f"ℹ️ No specialized downloader found for service '{service}' and URL '{api_url[:50]}...'. Using generic downloader.")

@@ -15,6 +15,10 @@ from ...utils.proxy_utils import get_proxies_from_settings
 
 MAX_WORKERS = 3
 
+# Attachment kinds reported by the cum.st API
+_IMAGE_KINDS = {'image', 'photo', 'gif', 'thumbnail'}
+_VIDEO_KINDS = {'video', 'clip'}
+
 
 class CumStDownloadThread(QThread):
     progress_signal = Signal(str)
@@ -23,12 +27,13 @@ class CumStDownloadThread(QThread):
     finished_signal = Signal(int, int, bool, list)
     error_signal = Signal(str)
 
-    def __init__(self, url, save_directory, main_app, export_all_links_mode=False):
+    def __init__(self, url, save_directory, main_app, export_all_links_mode=False, filter_mode='all'):
         super().__init__(main_app)
         self.url = url
         self.save_directory = save_directory
         self.main_app = main_app
         self.export_all_links_mode = export_all_links_mode
+        self.filter_mode = filter_mode  # 'all' | 'image' | 'video'
 
         _proxies = get_proxies_from_settings(main_app.settings) if hasattr(main_app, "settings") else None
         self.client = CumStClient(proxies=_proxies)
@@ -92,45 +97,70 @@ class CumStDownloadThread(QThread):
 
     def run(self):
         try:
-            service, user_id = self.client.parse_url(self.url)
+            service, user_id, post_id = self.client.parse_url(self.url)
             if not service or not user_id:
                 self.log("❌ cum.st: Could not parse service/user_id from URL.")
                 self.log("   Expected format: https://cum.st/creators/onlyfans/12345678")
                 self.finished_signal.emit(0, 0, False, [])
                 return
 
-            self.log(f"🔞 cum.st — service: {service}, user_id: {user_id}")
+            if post_id:
+                self.log(f"🔞 cum.st — single post: {service}/{user_id}/post/{post_id}")
+            else:
+                self.log(f"🔞 cum.st — service: {service}, user_id: {user_id}")
 
             # Output folder: <save_directory>/<service>/<user_id>/
             creator_folder = os.path.join(self.save_directory, service, user_id)
             os.makedirs(creator_folder, exist_ok=True)
 
-            # --- Collect all posts via paginated API ---
             all_posts = []
-            offset = 0
-            total = None
 
-            while self.is_running:
-                if not self.check_pause_and_cancel():
-                    break
+            if post_id:
                 try:
-                    total, page_posts = self.client.get_posts_page(service, user_id, offset=offset)
+                    post_data = self.client.get_single_post(service, user_id, post_id)
+                    all_posts.append(post_data)
+                    self.log("   Fetched single post successfully.")
                 except Exception as e:
-                    self.log(f"   ❌ API error at offset {offset}: {e}")
-                    break
+                    self.log(f"   ❌ API error fetching post: {e}")
+            else:
+                # --- Collect all posts via paginated API ---
+                if self.filter_mode == 'video':
+                    post_types_to_fetch = ['videos']
+                elif self.filter_mode == 'image':
+                    post_types_to_fetch = ['images']
+                else: # 'all' or fallback
+                    post_types_to_fetch = ['images', 'videos']
 
-                if not page_posts:
-                    break
-
-                all_posts.extend(page_posts)
-                self.log(f"   Fetched {len(all_posts)}/{total} posts…")
-
-                if len(all_posts) >= total:
-                    break
-
-                offset += len(page_posts)
-                if not self._smart_sleep(0.4):
-                    break
+                for ptype in post_types_to_fetch:
+                    self.log(f"   Fetching {ptype} feed...")
+                    offset = 0
+                    total = None
+        
+                    while self.is_running:
+                        if not self.check_pause_and_cancel():
+                            break
+                        try:
+                            total, page_posts = self.client.get_posts_page(service, user_id, offset=offset, post_type=ptype)
+                        except Exception as e:
+                            self.log(f"   ❌ API error fetching {ptype} at offset {offset}: {e}")
+                            break
+        
+                        if not page_posts:
+                            break
+        
+                        all_posts.extend(page_posts)
+                        
+                        if offset + len(page_posts) >= total:
+                            self.log(f"   ✓ Fetched all {total} posts from {ptype} feed.")
+                            break
+                        else:
+                            self.log(f"   Fetched {offset + len(page_posts)}/{total} from {ptype} feed…")
+        
+                        offset += len(page_posts)
+                        if not self._smart_sleep(0.4):
+                            break
+                    if not self.is_running:
+                        break
 
             if not self.is_running:
                 self.log("⚠️ Cancelled during post fetch.")
@@ -151,6 +181,14 @@ class CumStDownloadThread(QThread):
                     variant = self.client.get_best_variant(variants)
                     if not storage_key or not variant:
                         continue
+                    kind = att.get("kind", "file").lower()
+
+                    # Honour the user's media-type filter
+                    if self.filter_mode == 'image' and kind not in _IMAGE_KINDS:
+                        continue
+                    if self.filter_mode == 'video' and kind not in _VIDEO_KINDS:
+                        continue
+
                     variant_name = variant["name"]
                     original_filename = att.get("originalFilename") or f"{storage_key}_{variant_name}"
                     cdn_url = self.client.build_cdn_url(storage_key, variant_name)
@@ -158,10 +196,15 @@ class CumStDownloadThread(QThread):
                         "post_id": post_id,
                         "url": cdn_url,
                         "filename": original_filename,
-                        "kind": att.get("kind", "file"),
+                        "kind": kind,
                     })
 
             self.log(f"📦 {len(tasks)} file(s) to download.")
+
+            if not tasks:
+                self.log("ℹ️ No files matched the current filter.")
+                self.finished_signal.emit(0, 0, False, [])
+                return
 
             # --- Download with thread pool ---
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -170,7 +213,7 @@ class CumStDownloadThread(QThread):
                     for task in tasks
                 }
                 for future in as_completed(futures):
-                    if not self.is_running:
+                    if not self.check_pause_and_cancel():
                         for f in futures:
                             f.cancel()
                         break
@@ -234,12 +277,26 @@ class CumStDownloadThread(QThread):
 
             # Write to temp file first, then rename (atomic)
             tmp_path = save_path + ".tmp"
+            pause_evt = getattr(self.main_app, "pause_event", None)
+            cancel_evt = getattr(self.main_app, "cancellation_event", None)
             with open(tmp_path, "wb") as f:
                 for chunk in resp.iter_content(chunk_size=65536):
-                    if not self.is_running:
+                    # Check cancellation first
+                    if not self.is_running or (cancel_evt and cancel_evt.is_set()):
                         f.close()
-                        os.remove(tmp_path)
+                        if os.path.exists(tmp_path):
+                            os.remove(tmp_path)
                         return
+                    # Block on pause until resumed or cancelled
+                    if pause_evt:
+                        while pause_evt.is_set():
+                            if not self.is_running or (cancel_evt and cancel_evt.is_set()):
+                                self.is_running = False
+                                f.close()
+                                if os.path.exists(tmp_path):
+                                    os.remove(tmp_path)
+                                return
+                            time.sleep(0.3)
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
