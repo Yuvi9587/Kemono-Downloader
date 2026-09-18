@@ -7511,9 +7511,19 @@ class DownloaderApp (QWidget ):
         if 'forced_filename_override' in job_details:
             file_info['_forced_filename_override'] = job_details['forced_filename_override']
 
+        # Resolve creator name NOW so workers.py uses it for the DB record.
+        # workers.py falls back to self.post.get('user') when the name cache misses,
+        # so we must inject the correct name here — otherwise post_title ends up as the DB table name.
+        retry_creator_name = job_details.get('creator_name') or job_details.get('creator')
+        if not retry_creator_name and service and user_id and hasattr(self, 'creator_name_cache'):
+            retry_creator_name = self.creator_name_cache.get((service.lower(), str(user_id)), str(user_id))
+        if not retry_creator_name:
+            retry_creator_name = str(user_id) if user_id else 'unknown_creator'
+
         dummy_post_data = {
             'id': job_details.get('original_post_id_for_log', 'unknown_id'),
             'title': job_details.get('post_title', ''),
+            'user': retry_creator_name,   # ← critical: prevents post title from being used as DB table name
             'file': file_info,
             'attachments': [],
             'content': '',
