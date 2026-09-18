@@ -52,6 +52,11 @@ class CumStClient:
         m = re.search(r'/creators/([^/?#]+)/([^/?#]+)(?:/post/([^/?#]+))?', url)
         if m:
             return m.group(1), m.group(2), m.group(3)
+            
+        m_alt = re.search(r'/([^/?#]+)/user/([^/?#]+)(?:/post/([^/?#]+))?', url)
+        if m_alt:
+            return m_alt.group(1), m_alt.group(2), m_alt.group(3)
+            
         return None, None, None
 
     def get_single_post(self, service, user_id, post_id):
@@ -63,12 +68,25 @@ class CumStClient:
         resp.raise_for_status()
         return resp.json()
 
+    def get_user_profile(self, service, user_id):
+        """
+        Fetch the creator's profile from the API to get their name.
+        Returns a dict of profile info, or None if it fails.
+        """
+        url = f"{API_BASE}/{service}/user/{user_id}/profile"
+        try:
+            resp = self.session.get(url, timeout=15)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception:
+            return None
+
     def get_posts_page(self, service, user_id, offset=0, limit=POSTS_PER_PAGE, post_type=None):
         """
         Fetch one page of posts from the API.
         Returns (total, posts_list) or raises on HTTP error.
         """
-        url = f"{API_BASE}/{service}/user/{user_id}/posts?limit={limit}&offset={offset}"
+        url = f"{API_BASE}/{service}/user/{user_id}/posts?limit={limit}&o={offset}"
         if post_type:
             url += f"&type={post_type}"
         resp = self.session.get(url, timeout=30)

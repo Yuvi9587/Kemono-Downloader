@@ -113,13 +113,22 @@ class CumStDownloadThread(QThread):
                 self.finished_signal.emit(0, 0, False, [])
                 return
 
-            if post_id:
-                self.log(f"🔞 cum.st — single post: {service}/{user_id}/post/{post_id}")
-            else:
-                self.log(f"🔞 cum.st — service: {service}, user_id: {user_id}")
+            # Try to fetch creator profile to get a friendly username
+            creator_name = user_id
+            profile = self.client.get_user_profile(service, user_id)
+            if profile and profile.get("name"):
+                creator_name = profile["name"]
+                # Clean the name to make it safe for filesystem
+                import re
+                creator_name = re.sub(r'[\\/*?:"<>|]', "", creator_name)
 
-            # Output folder: <save_directory>/<service>/<user_id>/
-            creator_folder = os.path.join(self.save_directory, service, user_id)
+            if post_id:
+                self.log(f"🔞 cum.st — single post: {service}/{creator_name}/post/{post_id}")
+            else:
+                self.log(f"🔞 cum.st — service: {service}, creator: {creator_name}")
+
+            # Output folder: <save_directory>/<service>/<creator_name>/
+            creator_folder = os.path.join(self.save_directory, service, creator_name)
             os.makedirs(creator_folder, exist_ok=True)
 
             all_posts = []
@@ -177,10 +186,13 @@ class CumStDownloadThread(QThread):
                                     continue
                                 _fname = _att.get("originalFilename") or f"{_sk}_{_variant['name']}"
                                 page_file_count += 1
-                                # Primary: check DB by hash (rename-proof)
-                                _in_db = self.platform_db and self.platform_db.is_file_downloaded(user_id, _sk)
-                                # Fallback: check disk by filename
                                 _on_disk = os.path.exists(os.path.join(creator_folder, _fname))
+                                # DB match only counts if the file still physically exists on disk
+                                _in_db = (
+                                    self.platform_db
+                                    and _on_disk  # must be on disk too
+                                    and self.platform_db.is_file_downloaded(user_id, _sk)
+                                )
                                 if not _in_db and not _on_disk:
                                     all_page_files_exist = False
                                     break
@@ -227,6 +239,8 @@ class CumStDownloadThread(QThread):
                     variants = att.get("variants", [])
                     variant = self.client.get_best_variant(variants)
                     if not storage_key or not variant:
+                        # Debug: log the raw attachment keys so we can find the correct field name
+                        self.log(f"   ⚠️ Skipped attachment (no storageKey/variant). Keys: {list(att.keys())} | storageKey={att.get('storageKey')} | sha256={att.get('sha256')} | variants={variants!r:.200}")
                         continue
                     kind = att.get("kind", "file").lower()
 
@@ -303,10 +317,14 @@ class CumStDownloadThread(QThread):
         # 1. Check persistent DB by storageKey (rename-proof — works even if user moved/renamed the file)
         if self.platform_db and storage_key:
             if self.platform_db.is_file_downloaded(task.get("user_id"), storage_key):
-                self.log(f"   -> Skip (DB hash match): {filename}")
-                with self._count_lock:
-                    self.skip_count += 1
-                return
+                # DB says downloaded — but verify the file still actually exists on disk.
+                # If the user deleted it, we must re-download rather than ghost-skip.
+                if os.path.exists(save_path):
+                    self.log(f"   -> Skip (DB hash match): {filename}")
+                    with self._count_lock:
+                        self.skip_count += 1
+                    return
+                # File is gone from disk — fall through and re-download it
 
         # 2. Fallback: skip if file already exists on disk
         if os.path.exists(save_path):

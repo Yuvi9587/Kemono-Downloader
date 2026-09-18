@@ -579,8 +579,8 @@ def setup_ui(main_app):
     main_app.main_splitter.addWidget(left_scroll_area)
     main_app.main_splitter.addWidget(right_panel_widget)
     if main_app.width() >= 1920:
-        main_app.main_splitter.setStretchFactor(0, 4)
-        main_app.main_splitter.setStretchFactor(1, 6)
+        main_app.main_splitter.setStretchFactor(0, 7)
+        main_app.main_splitter.setStretchFactor(1, 3)
     else:
         main_app.main_splitter.setStretchFactor(0, 7)
         main_app.main_splitter.setStretchFactor(1, 3)

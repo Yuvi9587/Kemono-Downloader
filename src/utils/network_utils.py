@@ -182,6 +182,16 @@ def extract_post_info(url_string):
     if pixeldrain_match:
         return 'pixeldrain', stripped_url, None
 
+    # cum.st: https://cum.st/creators/{service}/{user_id}[/post/{post_id}]
+    cumst_match = re.search(r'cum\.st/creators/([^/?#]+)/([^/?#]+)(?:/post/([^/?#]+))?', stripped_url)
+    if cumst_match:
+        return cumst_match.group(1), cumst_match.group(2), cumst_match.group(3)
+        
+    # cum.st alternate: https://cum.st/{service}/user/{user_id}[/post/{post_id}]
+    cumst_alt_match = re.search(r'cum\.st/([^/?#]+)/user/([^/?#]+)(?:/post/([^/?#]+))?', stripped_url)
+    if cumst_alt_match:
+        return cumst_alt_match.group(1), cumst_alt_match.group(2), cumst_alt_match.group(3)
+
     discord_channel_match = re.search(r'discord\.com/channels/(@me|\d+)/(\d+)', stripped_url)
     if discord_channel_match:
         server_id, channel_id = discord_channel_match.groups()
@@ -236,6 +246,7 @@ def get_link_platform(url):
         if 'pawchive.st' in domain or 'pawchive.pw' in domain: return 'pawchive'
         if 'hotleaks.tv' in domain or 'hotleaks.vip' in domain: return 'hotleaks'
         if 'coomer.su' in domain or 'coomer.party' in domain or 'coomer.st' in domain: return 'coomer'
+        if 'cum.st' in domain: return 'cumst'
         if 'rule34.xxx' in domain: return 'rule34'
         if 'gelbooru.com' in domain: return 'gelbooru'
         if 'danbooru.donmai.us' in domain: return 'danbooru'
