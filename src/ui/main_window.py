@@ -67,7 +67,7 @@ from ..core.booru_client import fetch_booru_data, BooruClientException
 from ..core.auto_sync_manager import AutoSyncManager
 from .assets import get_app_icon_object
 from ..config.constants import *
-from ..utils.file_utils import KNOWN_NAMES, clean_folder_name
+from ..utils.file_utils import KNOWN_NAMES, clean_folder_name, get_app_base_path
 from ..utils.network_utils import extract_post_info, prepare_cookies_for_request, get_link_platform
 from ..utils.resolution import setup_ui, get_dark_theme, get_dark_theme as get_theme_stylesheet
 from ..utils.command import parse_commands_from_text
@@ -322,6 +322,7 @@ class DownloaderApp (QWidget ):
         self.more_filter_scope = None 
         self.text_export_format = 'pdf'
         self.single_pdf_setting = False
+        self.combined_download_pdf_setting = False  # Combined mode: download files + PDF alongside
         self.keep_duplicates_mode = DUPLICATE_HANDLING_HASH
         self.keep_duplicates_limit = 0 
         self.downloaded_hash_counts = defaultdict(int)
@@ -938,6 +939,7 @@ class DownloaderApp (QWidget ):
         settings['text_export_format'] = self.text_export_format
         settings['single_pdf_setting'] = self.single_pdf_setting
         settings['add_info_in_pdf'] = self.add_info_in_pdf_setting
+        settings['combined_download_pdf'] = getattr(self, 'combined_download_pdf_setting', False)
         settings['keep_duplicates_mode'] = self.keep_duplicates_mode
         settings['keep_duplicates_limit'] = self.keep_duplicates_limit
         settings['user_data_path'] = getattr(self, 'user_data_path', "")        
@@ -2099,7 +2101,7 @@ class DownloaderApp (QWidget ):
             all_messages.sort(key=lambda x: x.get('published', ''))
         except Exception:
             all_messages.reverse()
-        font_base_dir = getattr(sys, '_MEIPASS', self.app_base_dir)
+        font_base_dir = get_app_base_path()
         font_path = os.path.join(font_base_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
 
         success = create_pdf_from_discord_messages(
@@ -3819,65 +3821,95 @@ class DownloaderApp (QWidget ):
         self .new_char_input .clear ()
         return True 
 
-    def _handle_more_options_toggled(self, button, checked):
+    def set_more_mode_checkbox(self, is_checkbox_mode: bool):
         """
-        Launches the advanced configuration dialog for Text and PDF extraction 
-        (e.g., choosing whether to extract Comments or Post Descriptions).
+        Switches the 'More' button between Radio Button mode (Text/PDF only)
+        and Checkbox Button mode (Combined Download: Files + PDF simultaneously).
         """
-        if button == self.radio_more and checked:
-            if getattr(self, '_is_loading_settings', False):
-                return
-            current_scope = self.more_filter_scope or MoreOptionsDialog.SCOPE_CONTENT
-            current_format = self.text_export_format or 'pdf'
-
-            url_text = self.link_input.text().strip() if self.link_input else ""
-            service, _, _ = extract_post_info(url_text)
-            is_simpcity = (service == 'simpcity')
-
-            dialog = MoreOptionsDialog(
-                self,
-                current_scope=current_scope,
-                current_format=current_format,
-                single_pdf_checked=self.single_pdf_setting,
-                add_info_checked=self.add_info_in_pdf_setting,
-                is_simpcity=is_simpcity
-            )
-
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                self.more_filter_scope = dialog.get_selected_scope()
-                self.text_export_format = dialog.get_selected_format()
-                self.single_pdf_setting = dialog.get_single_pdf_state()
-                self.add_info_in_pdf_setting = dialog.get_add_info_state()
-
-                is_any_pdf_mode = (self.text_export_format == 'pdf')
+        self.combined_download_pdf_setting = is_checkbox_mode
+        if is_checkbox_mode:
+            if hasattr(self, 'radio_more') and self.radio_more:
+                self.radio_more.setVisible(False)
+            if hasattr(self, 'checkbox_more') and self.checkbox_more:
+                self.checkbox_more.setVisible(True)
+                self.checkbox_more.setChecked(True)
+                fmt = (self.text_export_format or 'pdf').upper()
+                self.checkbox_more.setText(f"More (+{fmt})")
+            # In checkbox mode, select 'All' in the exclusive radio group so files can be downloaded
+            if hasattr(self, 'radio_group') and self.radio_group:
+                checked_btn = self.radio_group.checkedButton()
+                if checked_btn in (getattr(self, 'radio_more', None), None):
+                    if hasattr(self, 'radio_all') and self.radio_all:
+                        self.radio_all.setChecked(True)
+                        self._handle_filter_mode_change(self.radio_all, True)
+            if hasattr(self, 'use_multithreading_checkbox'):
+                self.use_multithreading_checkbox.setEnabled(True)
+                self._update_multithreading_for_date_mode()
+        else:
+            if hasattr(self, 'checkbox_more') and self.checkbox_more:
+                self.checkbox_more.setVisible(False)
+                self.checkbox_more.setChecked(False)
+            if hasattr(self, 'radio_more') and self.radio_more:
+                self.radio_more.setVisible(True)
+                self.radio_more.setChecked(True)
+                fmt = (self.text_export_format or 'pdf').upper()
                 scope_text = "Comments" if self.more_filter_scope == MoreOptionsDialog.SCOPE_COMMENTS else "Description"
-                
+                self.radio_more.setText(f"{scope_text} ({fmt})")
+
+    def open_more_options_dialog(self):
+        """
+        Opens the More Options dialog to configure text/PDF extraction or combined download.
+        """
+        if getattr(self, '_is_loading_settings', False):
+            return
+        current_scope = self.more_filter_scope or MoreOptionsDialog.SCOPE_CONTENT
+        current_format = self.text_export_format or 'pdf'
+
+        url_text = self.link_input.text().strip() if self.link_input else ""
+        service, _, _ = extract_post_info(url_text)
+        is_simpcity = (service == 'simpcity')
+
+        dialog = MoreOptionsDialog(
+            self,
+            current_scope=current_scope,
+            current_format=current_format,
+            single_pdf_checked=self.single_pdf_setting,
+            add_info_checked=self.add_info_in_pdf_setting,
+            is_simpcity=is_simpcity,
+            combined_mode_checked=self.combined_download_pdf_setting
+        )
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.more_filter_scope = dialog.get_selected_scope()
+            self.text_export_format = dialog.get_selected_format()
+            self.single_pdf_setting = dialog.get_single_pdf_state()
+            self.add_info_in_pdf_setting = dialog.get_add_info_state()
+            is_combined = dialog.get_combined_mode_state()
+
+            is_any_pdf_mode = (self.text_export_format == 'pdf')
+            scope_text = "Comments" if self.more_filter_scope == MoreOptionsDialog.SCOPE_COMMENTS else "Description"
+
+            if is_combined:
+                self.set_more_mode_checkbox(True)
+                fmt = self.text_export_format.upper()
+                self.log_signal.emit(
+                    f"⚡ Combined Download enabled! 'More' changed to Checkbox button. You can now select 'All' to download files and create {fmt} simultaneously."
+                )
+            else:
+                self.set_more_mode_checkbox(False)
                 format_extras = []
                 if self.single_pdf_setting:
                     format_extras.append("Single")
                 if is_any_pdf_mode and self.add_info_in_pdf_setting:
                     format_extras.append("Info")
-                
                 extra_str = f" [{'+'.join(format_extras)}]" if format_extras else ""
-                format_display = f" ({self.text_export_format.upper()}{extra_str})"
-                
-                self.radio_more.setText(f"{scope_text}{format_display}")
+                self.radio_more.setText(f"{scope_text} ({self.text_export_format.upper()}{extra_str})")
 
                 if hasattr(self, 'use_multithreading_checkbox'):
                     self.use_multithreading_checkbox.setEnabled(not is_any_pdf_mode)
                     if is_any_pdf_mode:
                         self.use_multithreading_checkbox.setChecked(False)
                     self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
-
-                if hasattr(self, 'use_subfolders_checkbox'):
-                    self.use_subfolders_checkbox.setEnabled(not self.single_pdf_setting)
-                    if self.single_pdf_setting:
-                        self.use_subfolders_checkbox.setChecked(False)
-
-                if hasattr(self, 'use_subfolder_per_post_checkbox'):
-                    self.use_subfolder_per_post_checkbox.setEnabled(not self.single_pdf_setting)
-                    if self.single_pdf_setting:
-                        self.use_subfolder_per_post_checkbox.setChecked(False)
 
                 self.log_signal.emit(f"ℹ️ 'More' filter set: {scope_text}, Format: {self.text_export_format.upper()}")
                 if is_any_pdf_mode:
@@ -3886,28 +3918,83 @@ class DownloaderApp (QWidget ):
                     self.log_signal.emit(f"   ↳ PDF Options: Single PDF={status_single}, Add Info Page={status_info}")
                     self.log_signal.emit("   ↳ Multithreading disabled for PDF export.")
 
-            else:
+            if hasattr(self, 'use_subfolders_checkbox'):
+                self.use_subfolders_checkbox.setEnabled(not self.single_pdf_setting)
+                if self.single_pdf_setting:
+                    self.use_subfolders_checkbox.setChecked(False)
+
+            if hasattr(self, 'use_subfolder_per_post_checkbox'):
+                self.use_subfolder_per_post_checkbox.setEnabled(not self.single_pdf_setting)
+                if self.single_pdf_setting:
+                    self.use_subfolder_per_post_checkbox.setChecked(False)
+
+        else:
+            if hasattr(self, 'radio_more') and self.radio_more.isChecked() and not self.combined_download_pdf_setting:
                 self.log_signal.emit("ℹ️ 'More' filter selection cancelled. Reverting to 'All'.")
                 if hasattr(self, 'radio_all'):
                     self.radio_all.setChecked(True)
 
-       
+    def _handle_more_options_toggled(self, button, checked):
+        """
+        Launches the advanced configuration dialog for Text and PDF extraction.
+        """
+        if button == self.radio_more and checked:
+            self.open_more_options_dialog()
         elif button != self.radio_more and checked:
-            self.radio_more.setText("More")
-            self.more_filter_scope = None
-            self.single_pdf_setting = False
-            self.add_info_in_pdf_setting = False
-            
-            
-            if hasattr(self, 'use_multithreading_checkbox'):
-                self.use_multithreading_checkbox.setEnabled(True)
-                self._update_multithreading_for_date_mode()
-            
-            if hasattr(self, 'use_subfolders_checkbox'):
-                self.use_subfolders_checkbox.setEnabled(True)
-                
-            if hasattr(self, 'use_subfolder_per_post_checkbox'):
-                self.update_ui_for_subfolders(self.use_subfolders_checkbox.isChecked())
+            is_in_checkbox_mode = getattr(self, 'combined_download_pdf_setting', False) or (hasattr(self, 'checkbox_more') and self.checkbox_more.isVisible())
+            if not is_in_checkbox_mode:
+                self.radio_more.setText("More")
+                self.more_filter_scope = None
+                self.single_pdf_setting = False
+                self.add_info_in_pdf_setting = False
+
+                if hasattr(self, 'use_multithreading_checkbox'):
+                    self.use_multithreading_checkbox.setEnabled(True)
+                    self._update_multithreading_for_date_mode()
+
+                if hasattr(self, 'use_subfolders_checkbox'):
+                    self.use_subfolders_checkbox.setEnabled(True)
+
+                if hasattr(self, 'use_subfolder_per_post_checkbox'):
+                    self.update_ui_for_subfolders(self.use_subfolders_checkbox.isChecked())
+
+    def _handle_checkbox_more_toggled(self, checked):
+        """Handles user clicking the 'More' CheckBox button on the main window."""
+        self.combined_download_pdf_setting = checked
+        fmt = (self.text_export_format or 'pdf').upper()
+        if checked:
+            self.log_signal.emit(f"⚡ Combined Download: ON (downloading files + creating {fmt} alongside).")
+        else:
+            self.log_signal.emit("ℹ️ Combined Download: OFF (downloading files only).")
+
+    def _show_more_options_context_menu(self, pos):
+        """Context menu on right-click for More radio/checkbox button."""
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        config_act = menu.addAction("⚙ Configure More Options...")
+        menu.addSeparator()
+        is_cb_mode = hasattr(self, 'checkbox_more') and self.checkbox_more.isVisible()
+        if is_cb_mode:
+            switch_act = menu.addAction("⚪ Switch to Radio Mode (Text-only export)")
+        else:
+            switch_act = menu.addAction("⚡ Switch to Checkbox Mode (Combined Download)")
+
+        sender = self.sender()
+        target_pos = sender.mapToGlobal(pos) if sender else self.mapToGlobal(pos)
+        chosen = menu.exec(target_pos)
+        if chosen == config_act:
+            self.open_more_options_dialog()
+        elif chosen == switch_act:
+            self.set_more_mode_checkbox(not is_cb_mode)
+
+    def eventFilter(self, watched, event):
+        """Handle double-clicks on checkbox_more to quickly open MoreOptionsDialog."""
+        from PySide6.QtCore import QEvent
+        if hasattr(self, 'checkbox_more') and watched == self.checkbox_more:
+            if event.type() == QEvent.Type.MouseButtonDblClick:
+                self.open_more_options_dialog()
+                return True
+        return super().eventFilter(watched, event)
 
     def delete_selected_character (self ):
         if getattr(self, 'active_known_categories', []):
@@ -4381,6 +4468,7 @@ class DownloaderApp (QWidget ):
             self.character_filter_widget, self.skip_words_input, self.skip_scope_toggle_button,
             self.remove_from_filename_input, self.radio_images, self.radio_videos,
             self.radio_only_archives, self.radio_only_links, self.radio_only_audio, self.radio_more,
+            getattr(self, 'checkbox_more', None),
             self.skip_zip_checkbox, self.download_thumbnails_checkbox, self.compress_images_checkbox,
             self.use_subfolders_checkbox, self.use_subfolder_per_post_checkbox,
             self.scan_content_images_checkbox, self.external_links_checkbox, self.manga_mode_checkbox,
@@ -4431,7 +4519,7 @@ class DownloaderApp (QWidget ):
                 return getattr(self.ui, name)
             return getattr(self, name, None)
 
-        all_radios = ['radio_all', 'radio_videos', 'radio_only_archives', 'radio_only_audio', 'radio_only_links', 'radio_more', 'radio_images']
+        all_radios = ['radio_all', 'radio_videos', 'radio_only_archives', 'radio_only_audio', 'radio_only_links', 'radio_more', 'radio_images', 'checkbox_more']
         for r in all_radios:
             widget = get_widget(r)
             if widget:
@@ -5228,8 +5316,12 @@ class DownloaderApp (QWidget ):
         manga_mode_is_checked = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
 
         backend_filter_mode = self.get_filter_mode()
-        text_only_scope_for_run = self.more_filter_scope if backend_filter_mode == 'text_only' else None
-        export_format_for_run = self.text_export_format if backend_filter_mode == 'text_only' else 'txt'
+        if hasattr(self, 'checkbox_more'):
+            is_combined_mode = bool(not self.checkbox_more.isHidden() and self.checkbox_more.isChecked())
+        else:
+            is_combined_mode = bool(getattr(self, 'combined_download_pdf_setting', False))
+        text_only_scope_for_run = (self.more_filter_scope or 'content') if (backend_filter_mode == 'text_only' or is_combined_mode) else None
+        export_format_for_run = (self.text_export_format or 'pdf') if (backend_filter_mode == 'text_only' or is_combined_mode) else 'txt'
         checked_radio_button = self.radio_group.checkedButton()
         user_selected_filter_text = checked_radio_button.text() if checked_radio_button else "All"
 
@@ -5488,6 +5580,8 @@ class DownloaderApp (QWidget ):
                 f"    Compress Images: {'Enabled' if compress_images else 'Disabled'}",
                 f"    Thumbnails Only: {'Enabled' if download_thumbnails else 'Disabled'}"
             ])
+            if is_combined_mode:
+                log_messages.append(f"    Combined Download: Active (generating {export_format_for_run.upper()} alongside files)")
             log_messages.append(f"    Scan Post Content for Images: {'Enabled' if scan_content_for_images else 'Disabled'}")
         else:
             log_messages.append(f"    Mode: Extracting Links Only")
@@ -5563,9 +5657,10 @@ class DownloaderApp (QWidget ):
             'archive_only_mode': download_commands.get('archive_only', False), 
             'domain_override': domain_override_command, 
             'filter_mode': backend_filter_mode,
+            'combined_download_pdf': is_combined_mode,
             'text_only_scope': text_only_scope_for_run,
             'text_export_format': export_format_for_run,
-            'single_pdf_mode': self.single_pdf_setting and not getattr(self, 'is_export_all_links_session', False),
+            'single_pdf_mode': (self.single_pdf_setting and not is_combined_mode) and not getattr(self, 'is_export_all_links_session', False),
             'skip_zip': effective_skip_zip,
             'use_subfolders': use_subfolders,
             'use_post_subfolders': use_post_subfolders,
@@ -5699,7 +5794,8 @@ class DownloaderApp (QWidget ):
                     'processed_post_ids', 'domain_override',
                     'archive_only_mode', 'skip_file_size_mb', 
                     'manga_custom_filename_format','manga_custom_date_format', 'manga_custom_suffix_format', 'sfp_threshold', 'min_files_threshold', 'download_revisions', 'creator_name_cache',
-                    'proxies', 'visual_sort_active', 'user_data_path', 'add_info_in_pdf', 'create_postid_files'
+                    'proxies', 'visual_sort_active', 'user_data_path', 'add_info_in_pdf', 'create_postid_files',
+                    'combined_download_pdf'
 
                 ]
                 args_template['skip_current_file_flag'] = None
@@ -5757,6 +5853,7 @@ class DownloaderApp (QWidget ):
             self.character_filter_widget, self.skip_words_input, self.skip_scope_toggle_button,
             self.remove_from_filename_input, self.radio_all, self.radio_images, self.radio_videos,
             self.radio_only_archives, self.radio_only_links, self.radio_only_audio, self.radio_more,
+            getattr(self, 'checkbox_more', None),
             self.skip_zip_checkbox, self.download_thumbnails_checkbox, self.compress_images_checkbox,
             self.use_subfolders_checkbox, self.use_subfolder_per_post_checkbox,
             self.scan_content_images_checkbox, self.external_links_checkbox, self.manga_mode_checkbox,
@@ -6296,6 +6393,8 @@ class DownloaderApp (QWidget ):
             self.text_export_format = settings.get('text_export_format', 'pdf')
             self.single_pdf_setting = settings.get('single_pdf_setting', False)
             self.add_info_in_pdf_setting = settings.get('add_info_in_pdf', False)
+            if settings.get('combined_download_pdf', False):
+                self.set_more_mode_checkbox(True)
             
             if self.radio_more.isChecked() and self.more_filter_scope:
                 scope_text = "Comments" if self.more_filter_scope == MoreOptionsDialog.SCOPE_COMMENTS else "Description"
@@ -6569,7 +6668,7 @@ class DownloaderApp (QWidget ):
              
         output_path = os.path.join(base_dir, filename)
 
-        font_base_dir = getattr(sys, '_MEIPASS', self.app_base_dir)
+        font_base_dir = get_app_base_path()
         font_path = os.path.join(font_base_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
         add_info = True 
         if hasattr(self, 'more_options_dialog') and self.more_options_dialog:
@@ -6703,7 +6802,7 @@ class DownloaderApp (QWidget ):
         self .external_links_checkbox ,self .manga_mode_checkbox ,self .manga_rename_toggle_button ,self .use_cookie_checkbox ,self .cookie_text_input ,self .cookie_browse_button ,
         self .multipart_toggle_button ,self .radio_only_audio ,
         self .character_search_input ,self .new_char_input ,self .add_char_button ,self .add_to_filter_button ,self .delete_char_button ,
-        self .reset_button, self.radio_more, self.keep_duplicates_checkbox
+        self .reset_button, self.radio_more, getattr(self, 'checkbox_more', None), self.keep_duplicates_checkbox
         ]
 
         widgets_to_enable_on_pause =self ._get_configurable_widgets_on_pause ()

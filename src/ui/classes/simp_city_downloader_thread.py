@@ -29,7 +29,7 @@ from ...core.simpcity_client import fetch_single_simpcity_page
 from ...services.drive_downloader import (
     download_mega_file as drive_download_mega_file
 )
-from ...utils.file_utils import clean_folder_name, clean_filename, format_custom_suffix, format_custom_date
+from ...utils.file_utils import clean_folder_name, clean_filename, format_custom_suffix, format_custom_date, get_app_base_path
 from ...core.workers import robust_clean_name
 from ...ui.dialogs.SinglePDF import create_individual_pdf, create_single_pdf_from_content
 from ...utils.proxy_utils import get_proxies_from_settings
@@ -421,10 +421,17 @@ class SimpCityDownloadThread(QThread):
         self.should_dl_images = self.parent_app.simpcity_dl_images_cb.isChecked()
         self.should_dl_bunkr = self.parent_app.simpcity_dl_bunkr_cb.isChecked()
         self.external_links_config = getattr(self.parent_app, 'simpcity_external_links_config', None)
-        self.should_extract_text = getattr(self.parent_app, 'radio_more', None) and self.parent_app.radio_more.isChecked()
+        is_radio_more = getattr(self.parent_app, 'radio_more', None) and self.parent_app.radio_more.isChecked()
+        is_checkbox_more = bool(
+            getattr(self.parent_app, 'checkbox_more', None) and
+            not self.parent_app.checkbox_more.isHidden() and
+            self.parent_app.checkbox_more.isChecked()
+        )
+        self.should_extract_text = is_radio_more
+        self.combined_download_pdf = is_checkbox_more
         self.should_create_subfolder_per_post = getattr(self.parent_app, 'use_subfolder_per_post_checkbox', None) and self.parent_app.use_subfolder_per_post_checkbox.isChecked()
         
-        if self.should_extract_text:
+        if self.should_extract_text and not self.combined_download_pdf:
             self.should_dl_pixeldrain = False
             self.should_dl_saint2 = False
             self.should_dl_mega = False
@@ -734,11 +741,7 @@ class SimpCityDownloadThread(QThread):
 
         if format_choice == 'pdf' and single_pdf_mode:
             all_posts_data = []
-            font_path = ""
-            project_root_dir = getattr(self.parent_app, 'app_base_dir', '')
-            if project_root_dir:
-                base_dir = getattr(sys, '_MEIPASS', project_root_dir)
-                font_path = os.path.join(base_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
+            font_path = os.path.join(get_app_base_path(), 'data', 'dejavu-sans', 'DejaVuSans.ttf')
                 
             for post in unique_posts:
                 post_data = {
@@ -801,11 +804,7 @@ class SimpCityDownloadThread(QThread):
 
             try:
                 if format_choice == 'pdf':
-                    font_path = ""
-                    project_root_dir = getattr(self.parent_app, 'app_base_dir', '')
-                    if project_root_dir:
-                        base_dir = getattr(sys, '_MEIPASS', project_root_dir)
-                        font_path = os.path.join(base_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
+                    font_path = os.path.join(get_app_base_path(), 'data', 'dejavu-sans', 'DejaVuSans.ttf')
                     
                     post_data_for_pdf = {
                         'title': post.get('creator_name', 'SimpCity Post'),

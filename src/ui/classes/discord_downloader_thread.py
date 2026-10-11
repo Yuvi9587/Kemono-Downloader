@@ -5,6 +5,7 @@ import requests
 from PySide6.QtCore import QThread, Signal
 
 from ..dialogs.discord_pdf_generator import create_pdf_from_discord_messages
+from ...utils.file_utils import get_app_base_path
 
 _ff_ver = (datetime.date.today().toordinal() - 735506) // 28
 USERAGENT_FIREFOX = (f"Mozilla/5.0 (Windows NT 10.0; Win64; x64; "
@@ -109,7 +110,7 @@ class DiscordDownloadThread(QThread):
         all_messages.reverse()
         
         import sys
-        font_base_dir = getattr(sys, '_MEIPASS', self.app_base_dir)
+        font_base_dir = get_app_base_path()
         font_path = os.path.join(font_base_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
         output_filepath = os.path.join(self.output_dir, f"discord_{self.server_id}_{self.channel_id or 'server'}.pdf")
 

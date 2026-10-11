@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 from datetime import datetime
 from ..config.constants import (
     MAX_FILENAME_COMPONENT_LENGTH, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS,
@@ -7,6 +8,34 @@ from ..config.constants import (
 )
 
 KNOWN_NAMES = []
+
+
+def get_app_base_path():
+    """
+    Returns the correct base directory for loading bundled resources (e.g. fonts,
+    data files) regardless of how the app is being run:
+      - As a plain Python script
+      - As a PyInstaller --onefile exe (sys._MEIPASS is the temp extraction dir)
+      - As a PyInstaller one-folder exe, PyInstaller v5: resources sit next to the .exe
+      - As a PyInstaller one-folder exe, PyInstaller v6+: resources are in _internal/
+    """
+    if getattr(sys, 'frozen', False):
+        # Running as a compiled exe
+        if hasattr(sys, '_MEIPASS'):
+            # --onefile mode OR PyInstaller v6+ one-folder:
+            # resources are extracted to the _MEIPASS temp/internal directory
+            return sys._MEIPASS
+        else:
+            # Older PyInstaller one-folder (v5-): resources sit next to the .exe.
+            # But also check for _internal/ subfolder (PyInstaller v6 one-folder
+            # without _MEIPASS on some builds), just to be safe.
+            exe_dir = os.path.dirname(sys.executable)
+            internal_dir = os.path.join(exe_dir, '_internal')
+            if os.path.isdir(internal_dir):
+                return internal_dir
+            return exe_dir
+    # Plain Python: go up two levels from src/utils/ to reach the project root
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 
 def clean_folder_name(name):

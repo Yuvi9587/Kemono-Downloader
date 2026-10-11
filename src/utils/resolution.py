@@ -196,10 +196,14 @@ def setup_ui(main_app):
     main_app.radio_only_links.setIcon(QIcon(get_asset_path("assets/Svg/link.svg")))
     main_app.radio_only_links.setIconSize(QSize(int(16 * scale), int(16 * scale)))
     main_app.radio_more = QRadioButton("More")
+    main_app.checkbox_more = QCheckBox("More")
+    main_app.checkbox_more.setVisible(False)
+    main_app.checkbox_more.setToolTip("Combined Download: Create PDF while downloading files.\nRight-click or double-click to configure More Options.")
     main_app.radio_all.setChecked(True)
     for btn in [main_app.radio_all, main_app.radio_images, main_app.radio_videos, main_app.radio_only_archives, main_app.radio_only_audio, main_app.radio_only_links, main_app.radio_more]:
         main_app.radio_group.addButton(btn)
         radio_button_layout.addWidget(btn)
+    radio_button_layout.addWidget(main_app.checkbox_more)
     main_app.favorite_mode_checkbox = QCheckBox("Favorite Mode")
     main_app.favorite_mode_checkbox.setIcon(QIcon(get_asset_path("assets/Svg/star.svg")))
     main_app.favorite_mode_checkbox.setIconSize(QSize(int(16 * scale), int(16 * scale)))
@@ -602,6 +606,14 @@ def setup_ui(main_app):
     if hasattr(main_app, 'radio_group') and main_app.radio_group.checkedButton():
         main_app._handle_filter_mode_change(main_app.radio_group.checkedButton(), True)
         main_app.radio_group.buttonToggled.connect(main_app._handle_more_options_toggled)
+    if hasattr(main_app, 'checkbox_more'):
+        main_app.checkbox_more.toggled.connect(main_app._handle_checkbox_more_toggled)
+        main_app.checkbox_more.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        main_app.checkbox_more.customContextMenuRequested.connect(main_app._show_more_options_context_menu)
+        main_app.checkbox_more.installEventFilter(main_app)
+    if hasattr(main_app, 'radio_more'):
+        main_app.radio_more.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        main_app.radio_more.customContextMenuRequested.connect(main_app._show_more_options_context_menu)
     main_app._update_manga_filename_style_button_text()
     main_app._update_skip_scope_button_text()
     main_app._update_char_filter_scope_button_text()

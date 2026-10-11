@@ -65,7 +65,8 @@ from ..services.drive_downloader import (
 )
 from ..utils.file_utils import (
     is_image, is_video, is_zip, is_rar, is_archive, is_audio, KNOWN_NAMES,
-    clean_filename, clean_folder_name, format_custom_suffix, format_custom_date
+    clean_filename, clean_folder_name, format_custom_suffix, format_custom_date,
+    get_app_base_path
 )
 from ..utils.network_utils import prepare_cookies_for_request, get_link_platform
 from ..utils.text_utils import (
@@ -167,7 +168,8 @@ class PostProcessorWorker:
                  user_data_path=None,
                  export_all_links_mode=False,
                  retry_404_errors=False,
-                 create_postid_files=True
+                 create_postid_files=True,
+                 combined_download_pdf=False
                  ):
         # self.db is initialized below based on the api_url
         self.post = post_data
@@ -251,6 +253,7 @@ class PostProcessorWorker:
         self.visual_sort_active = visual_sort_active 
         self.user_data_path = user_data_path
         self.retry_404_errors = retry_404_errors
+        self.combined_download_pdf = combined_download_pdf
         
         if 'kemono' in self.api_url_input.lower():
             self.db = DatabaseManager()
@@ -270,6 +273,140 @@ class PostProcessorWorker:
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found.")
             self.compress_images = False
+
+    def _save_combined_post_document(self, post_save_dir, post_title, post_id, post_page_url, comments_data=None):
+        """
+        In Combined Download mode, generates a PDF (or DOCX/TXT) containing
+        the post description/poll/comments and saves it directly in post_save_dir
+        (e.g. the post's subfolder alongside downloaded files).
+        """
+        if not getattr(self, 'combined_download_pdf', False):
+            return None
+        try:
+            target_dir = post_save_dir or self.override_output_dir or self.download_root or "."
+            os.makedirs(target_dir, exist_ok=True)
+            file_ext = (getattr(self, 'text_export_format', 'pdf') or 'pdf').lower()
+            clean_title = (clean_filename(post_title) or f"post_{post_id}").rstrip('. ')
+            if not clean_title:
+                clean_title = f"post_{post_id}"
+            doc_filename = f"{clean_title}.{file_ext}"
+            final_doc_path = os.path.join(target_dir, doc_filename)
+
+            # Avoid collision
+            base, ext = os.path.splitext(final_doc_path)
+            counter = 1
+            while os.path.exists(final_doc_path):
+                final_doc_path = f"{base}_{counter}{ext}"
+                counter += 1
+
+            service_str = self.service or "kemono"
+            user_id_str = str(self.user_id or "")
+            post_id_str = str(post_id or "")
+            creator_key = (service_str.lower(), user_id_str)
+            creator_name = user_id_str
+            if self.creator_name_cache:
+                creator_name = self.creator_name_cache.get(creator_key, user_id_str)
+
+            # Extract and clean text content
+            raw_content = self.post.get('content', '') or ''
+            cleaned_text = ""
+            if raw_content:
+                text_with_newlines = re.sub(r'(?i)</p>', '\n\n', raw_content)
+                text_with_newlines = re.sub(r'(?i)<br\s*/?>', '\n', text_with_newlines)
+                just_text = re.sub(r'<.*?>', '', text_with_newlines)
+                just_text = html.unescape(just_text)
+                just_text = re.sub(r'\n{3,}', '\n\n', just_text)
+                cleaned_text = just_text.strip().replace('…', '...')
+
+            common_content_data = {
+                'title': post_title,
+                'published': self.post.get('published') or self.post.get('added'),
+                'service': service_str,
+                'user': user_id_str,
+                'id': post_id_str,
+                'tags': self.post.get('tags'),
+                'original_link': post_page_url,
+                'creator_name': creator_name,
+                'poll': self.post.get('poll'),
+                'content': cleaned_text,
+                'content_text_for_pdf': cleaned_text
+            }
+
+            # If scope is comments, fetch comments if needed
+            if getattr(self, 'text_only_scope', None) == 'comments':
+                if not comments_data:
+                    try:
+                        parsed_url = urlparse(self.api_url_input)
+                        api_domain = parsed_url.netloc
+                        creator_page_url = f"https://{api_domain}/{self.service}/user/{self.user_id}"
+                        headers = {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                            'Referer': creator_page_url,
+                            'Accept': '*/*'
+                        }
+                        comments_data = fetch_post_comments(api_domain, self.service, self.user_id, post_id, headers, self.logger, self.cancellation_event, self.pause_event)
+                    except Exception as e:
+                        self.logger(f"   ⚠️ [Combined] Error fetching comments: {e}")
+                if comments_data:
+                    common_content_data['comments_list_for_pdf'] = comments_data
+
+            has_poll = bool(self.post.get('poll'))
+            if not cleaned_text and not has_poll and not comments_data:
+                cleaned_text = "(No text description provided in post)"
+                common_content_data['content'] = cleaned_text
+                common_content_data['content_text_for_pdf'] = cleaned_text
+
+            self.logger(f"   📄 [Combined] Generating {file_ext.upper()} document: '{doc_filename}'...")
+
+            if file_ext == 'pdf':
+                font_path = os.path.join(get_app_base_path(), 'data', 'dejavu-sans', 'DejaVuSans.ttf')
+                success = create_individual_pdf(
+                    post_data=common_content_data,
+                    output_filename=final_doc_path,
+                    font_path=font_path,
+                    add_info_page=self.add_info_in_pdf,
+                    logger=self.logger
+                )
+                if success:
+                    self.logger(f"   ✅ [Combined] Saved PDF: '{os.path.basename(final_doc_path)}' in '{os.path.basename(target_dir)}'")
+                    return final_doc_path
+                else:
+                    self.logger(f"   ❌ [Combined] PDF creation failed for '{post_title[:40]}'")
+                    return None
+            elif file_ext == 'docx':
+                if Document:
+                    document = Document()
+                    if self.add_info_in_pdf:
+                        document.add_heading(post_title, 0)
+                        document.add_paragraph(f"Date: {common_content_data['published']}")
+                        document.add_paragraph(f"Creator: {common_content_data['creator_name']}")
+                        document.add_paragraph(f"URL: {common_content_data['original_link']}")
+                        document.add_page_break()
+                    document.add_paragraph(cleaned_text)
+                    document.save(final_doc_path)
+                    self.logger(f"   ✅ [Combined] Saved DOCX: '{os.path.basename(final_doc_path)}' in '{os.path.basename(target_dir)}'")
+                    return final_doc_path
+                else:
+                    final_doc_path = os.path.splitext(final_doc_path)[0] + ".txt"
+                    with open(final_doc_path, 'w', encoding='utf-8') as f:
+                        f.write(cleaned_text)
+                    self.logger(f"   ✅ [Combined] Saved TXT: '{os.path.basename(final_doc_path)}' in '{os.path.basename(target_dir)}'")
+                    return final_doc_path
+            else: # txt
+                header = ""
+                if self.add_info_in_pdf:
+                    header = (f"Title: {post_title}\n"
+                              f"Date: {common_content_data['published']}\n"
+                              f"Creator: {common_content_data['creator_name']}\n"
+                              f"URL: {common_content_data['original_link']}\n"
+                              f"{'-'*40}\n\n")
+                with open(final_doc_path, 'w', encoding='utf-8') as f:
+                    f.write(header + cleaned_text)
+                self.logger(f"   ✅ [Combined] Saved TXT: '{os.path.basename(final_doc_path)}' in '{os.path.basename(target_dir)}'")
+                return final_doc_path
+        except Exception as e:
+            self.logger(f"   ❌ [Combined] Error generating document: {e}\n{traceback.format_exc()}")
+            return None
 
     def _emit_signal (self ,signal_type_str ,*payload_args ):
         """Helper to emit signal either directly or via queue."""
@@ -1395,6 +1532,7 @@ class PostProcessorWorker:
             content_is_needed = (
                 self.show_external_links or self.extract_links_only or self.scan_content_for_images or
                 (self.filter_mode == 'text_only' and self.text_only_scope == 'content') or
+                getattr(self, 'combined_download_pdf', False) or
                 (self.manga_mode_active and self.manga_filename_style == STYLE_CUSTOM and '{content}' in self.manga_custom_filename_format)
             )
 
@@ -1769,9 +1907,14 @@ class PostProcessorWorker:
                     if not raw_text_content:
                         cleaned_text = ""
                     else:
-                        text_with_newlines = re.sub(r'(?i)</p>|<br\s*/?>', '\n', raw_text_content)
+                        # </p> → double newline (paragraph break); <br> → single newline
+                        text_with_newlines = re.sub(r'(?i)</p>', '\n\n', raw_text_content)
+                        text_with_newlines = re.sub(r'(?i)<br\s*/?>', '\n', text_with_newlines)
                         just_text = re.sub(r'<.*?>', '', text_with_newlines)
-                        cleaned_text = html.unescape(just_text).strip()
+                        just_text = html.unescape(just_text)
+                        # Collapse 3+ consecutive newlines into 2 (max one blank line)
+                        just_text = re.sub(r'\n{3,}', '\n\n', just_text)
+                        cleaned_text = just_text.strip()
                 else: 
                     cleaned_text = raw_text_content
                 
@@ -1800,7 +1943,8 @@ class PostProcessorWorker:
                     'id': post_id_str,
                     'tags': self.post.get('tags'),
                     'original_link': post_page_url,
-                    'creator_name': creator_name
+                    'creator_name': creator_name,
+                    'poll': self.post.get('poll'),
                 }
 
                 if self.single_pdf_mode:
@@ -1811,11 +1955,13 @@ class PostProcessorWorker:
                             return result_tuple
                         common_content_data['comments'] = comments_data
                     else:
-                        if not cleaned_text.strip():
+                        has_poll = bool(self.post.get('poll'))
+                        if not cleaned_text.strip() and not has_poll:
                             result_tuple = (0, 0, [], [], [], None, None)
                             self._emit_signal('worker_finished', result_tuple)
                             return result_tuple
                         common_content_data['content'] = cleaned_text
+                        common_content_data['content_text_for_pdf'] = cleaned_text
 
                     temp_dir = os.path.join(self.app_base_dir, "appdata")
                     os.makedirs(temp_dir, exist_ok=True)
@@ -1856,15 +2002,14 @@ class PostProcessorWorker:
                             counter += 1
 
                         if file_extension == 'pdf':
-                            font_path = ""
-                            if self.project_root_dir:
-                                base_dir = getattr(sys, '_MEIPASS', self.project_root_dir)
-                                font_path = os.path.join(base_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
+                            font_path = os.path.join(get_app_base_path(), 'data', 'dejavu-sans', 'DejaVuSans.ttf')
                             
                             if self.text_only_scope == 'comments':
                                 common_content_data['comments_list_for_pdf'] = comments_data
                             else:
                                 common_content_data['content_text_for_pdf'] = cleaned_text
+                            # Always carry poll data for individual PDFs
+                            common_content_data['poll'] = self.post.get('poll')
 
                             success = create_individual_pdf(
                                 post_data=common_content_data,
@@ -2307,6 +2452,27 @@ class PostProcessorWorker:
 
             if not all_files_from_post_api:
                 self.logger(f"   No files found to download for post {post_id}.")
+                if getattr(self, 'combined_download_pdf', False):
+                    pdf_doc_path = self._save_combined_post_document(
+                        post_save_dir=determined_post_save_path_for_history,
+                        post_title=post_title,
+                        post_id=post_id,
+                        post_page_url=post_page_url
+                    )
+                    if pdf_doc_path:
+                        history_data_for_no_files_post = {
+                            'post_title': post_title,
+                            'post_id': post_id,
+                            'service': self.service,
+                            'user_id': self.user_id,
+                            'top_file_name': os.path.basename(pdf_doc_path),
+                            'num_files': 1,
+                            'upload_date_str': post_data.get('published') or post_data.get('added') or "Unknown",
+                            'download_location': determined_post_save_path_for_history
+                        }
+                        result_tuple = (1, 0, [pdf_doc_path], [], [], history_data_for_no_files_post, None)
+                        self._emit_signal('worker_finished', result_tuple)
+                        return result_tuple
                 if not self.extract_links_only and should_create_post_subfolder:
                     path_to_check_for_emptiness = determined_post_save_path_for_history
                     try:
@@ -2631,6 +2797,15 @@ class PostProcessorWorker:
                 }
 
             if not self.check_cancel():
+                if getattr(self, 'combined_download_pdf', False):
+                    comb_doc_path = self._save_combined_post_document(
+                        post_save_dir=determined_post_save_path_for_history,
+                        post_title=post_title,
+                        post_id=post_id,
+                        post_page_url=post_page_url
+                    )
+                    if comb_doc_path:
+                        total_downloaded_this_post += 1
                 self.logger(f"   Post {post_id} Summary: Downloaded={total_downloaded_this_post}, Skipped Files={total_skipped_this_post}")
 
             if created_post_subfolder_path:
@@ -2752,7 +2927,8 @@ class DownloadThread(QThread):
                  visual_sort_active=False, 
                  user_data_path=None,
                  add_info_in_pdf=False,
-                 create_postid_files=True
+                 create_postid_files=True,
+                 combined_download_pdf=False
                  ): 
 
         super().__init__()
@@ -2837,6 +3013,7 @@ class DownloadThread(QThread):
         self.user_data_path = user_data_path
         self.add_info_in_pdf = add_info_in_pdf
         self.create_postid_files = create_postid_files
+        self.combined_download_pdf = combined_download_pdf
 
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found (DownloadThread).")
@@ -2980,7 +3157,8 @@ class DownloadThread(QThread):
                         'visual_sort_active': self.visual_sort_active, 
                         'user_data_path': self.user_data_path,
                         'add_info_in_pdf': self.add_info_in_pdf,
-                        'create_postid_files': self.create_postid_files
+                        'create_postid_files': self.create_postid_files,
+                        'combined_download_pdf': self.combined_download_pdf
                     }
 
                     post_processing_worker = PostProcessorWorker(**worker_args)

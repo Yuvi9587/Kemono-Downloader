@@ -260,6 +260,7 @@ class BooruDownloadThread(QThread):
                 raw_tags_list = post_data.get('tags', '').lower().split()
                 translated_tags_list = [self.alias_map.get(t, t) for t in raw_tags_list]
                 post_tags_list = [t.replace('_(series)', '') for t in translated_tags_list]
+                post_tags_set = set(post_tags_list)
                 tags_string = " ".join(post_tags_list)
                 
                 is_safe, _, _ = self.is_safe_to_download(tags_string)
@@ -292,7 +293,6 @@ class BooruDownloadThread(QThread):
                 if self.smart_sort and self.known_characters_exact:
                     found_chars = []
                     ignored_chars = {'monochrome', 'anonymous', 'unknown'}
-                    post_tags_set = set(post_tags_list)
                     
                     for t in post_tags_list:
                         if t in ignored_chars: continue
