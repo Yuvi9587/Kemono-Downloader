@@ -16,12 +16,12 @@ class SlideSwitch(QWidget):
 
     def __init__(self, parent=None, checked=False):
         super().__init__(parent)
-        self.setFixedSize(48, 24)
+        self.setFixedSize(40, 20)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._checked = bool(checked)
-        self._thumb_position = 26.0 if checked else 4.0
+        self._thumb_position = 22.0 if checked else 3.0
         self._anim = QPropertyAnimation(self, b"thumb_position", self)
-        self._anim.setDuration(160)
+        self._anim.setDuration(150)
 
     @Property(float)
     def thumb_position(self):
@@ -41,7 +41,7 @@ class SlideSwitch(QWidget):
             self._checked = checked
             self._anim.stop()
             self._anim.setStartValue(self._thumb_position)
-            self._anim.setEndValue(26.0 if checked else 4.0)
+            self._anim.setEndValue(22.0 if checked else 3.0)
             self._anim.start()
             self.toggled.emit(checked)
         self.update()
@@ -59,11 +59,11 @@ class SlideSwitch(QWidget):
         track_color = QColor("#007ACC") if self._checked else QColor("#444444")
         painter.setBrush(QBrush(track_color))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(0, 2, 48, 20, 10, 10)
+        painter.drawRoundedRect(0, 1, 40, 18, 9, 9)
 
         # Thumb
         painter.setBrush(QBrush(QColor("#FFFFFF")))
-        painter.drawEllipse(int(self._thumb_position), 4, 16, 16)
+        painter.drawEllipse(int(self._thumb_position), 3, 14, 14)
         painter.end()
 
 
@@ -83,73 +83,33 @@ class MoreOptionsDialog(QDialog):
         self.parent_app = parent
         self.is_simpcity = is_simpcity
         self.setWindowTitle("More Options")
-        self.setMinimumWidth(380)
+        self.setFixedWidth(340)
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
+        layout.setContentsMargins(14, 12, 14, 12)
 
-        # ── Combined Download Section with Slide Switch ─────────────────────
-        combined_card = QFrame()
-        combined_card.setStyleSheet(
-            "QFrame { background-color: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 6px; }"
-        )
-        combined_card_layout = QVBoxLayout(combined_card)
-        combined_card_layout.setContentsMargins(10, 8, 10, 8)
-        combined_card_layout.setSpacing(6)
-
-        switch_row = QHBoxLayout()
-        self.combined_mode_switch = SlideSwitch(self, checked=combined_mode_checked)
-        self.combined_mode_checkbox = self.combined_mode_switch  # Backward-compatible alias
-
-        switch_label = QLabel("<b>Combined Download</b>")
-        switch_label.setStyleSheet("font-size: 13px; color: #FFFFFF;")
-
-        self.mode_badge = QLabel("Checkbox Mode" if combined_mode_checked else "Radio Mode")
-        self.mode_badge.setStyleSheet(
-            "background-color: #007ACC; color: white; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: bold;"
-            if combined_mode_checked else
-            "background-color: #555555; color: #DDDDDD; padding: 2px 7px; border-radius: 4px; font-size: 11px;"
-        )
-
-        switch_row.addWidget(self.combined_mode_switch)
-        switch_row.addWidget(switch_label)
-        switch_row.addWidget(self.mode_badge)
-        switch_row.addStretch()
-        combined_card_layout.addLayout(switch_row)
-
-        self.combined_description_label = QLabel(
-            "⚡ Switches 'More' to a Checkbox button on the main window so you can select 'All' to download files and create PDF at the same time."
-            if combined_mode_checked else
-            "⚪ 'More' is a Radio button on the main window (Text/PDF extraction only)."
-        )
-        self.combined_description_label.setWordWrap(True)
-        self.combined_description_label.setStyleSheet("color: #AAAAAA; font-size: 11px;")
-        combined_card_layout.addWidget(self.combined_description_label)
-
-        layout.addWidget(combined_card)
-
-        # Separator
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setFrameShadow(QFrame.Sunken)
-        layout.addWidget(sep)
-
-        # ── Scope section ───────────────────────────────────────────────────
-        self.description_label = QLabel("Please choose the scope for the action:")
-        layout.addWidget(self.description_label)
+        # ── Scope section (Compact side-by-side) ────────────────────────────
+        scope_layout = QHBoxLayout()
+        scope_layout.setSpacing(10)
+        self.description_label = QLabel("Scope:")
+        self.description_label.setStyleSheet("font-weight: bold;")
+        scope_layout.addWidget(self.description_label)
 
         self.radio_button_group = QButtonGroup(self)
-        self.radio_content = QRadioButton("Description/Content")
+        self.radio_content = QRadioButton("Description")
         self.radio_comments = QRadioButton("Comments")
         self.radio_button_group.addButton(self.radio_content)
         self.radio_button_group.addButton(self.radio_comments)
-        layout.addWidget(self.radio_content)
-        layout.addWidget(self.radio_comments)
+        scope_layout.addWidget(self.radio_content)
+        scope_layout.addWidget(self.radio_comments)
+        scope_layout.addStretch()
+        layout.addLayout(scope_layout)
 
         if self.is_simpcity:
             self.radio_comments.setVisible(False)
             self.radio_content.setVisible(False)
-            self.description_label.setText("Please choose the export format:")
+            self.description_label.setText("Format:")
 
         if current_scope == self.SCOPE_COMMENTS and not self.is_simpcity:
             self.radio_comments.setChecked(True)
@@ -158,9 +118,12 @@ class MoreOptionsDialog(QDialog):
 
         # ── Export format ───────────────────────────────────────────────────
         export_layout = QHBoxLayout()
+        export_layout.setSpacing(8)
         export_label = QLabel("Export as:")
+        export_label.setStyleSheet("font-weight: bold;")
         self.format_combo = QComboBox()
         self.format_combo.addItems(["PDF", "DOCX", "TXT"])
+        self.format_combo.setFixedWidth(80)
 
         if current_format and current_format.upper() in ["PDF", "DOCX", "TXT"]:
             self.format_combo.setCurrentText(current_format.upper())
@@ -172,23 +135,74 @@ class MoreOptionsDialog(QDialog):
         export_layout.addStretch()
         layout.addLayout(export_layout)
 
-        # ── PDF options ─────────────────────────────────────────────────────
+        # ── PDF options (Compact side-by-side) ───────────────────────────────
+        pdf_options_layout = QHBoxLayout()
+        pdf_options_layout.setSpacing(12)
+
         self.single_pdf_checkbox = QCheckBox("Single PDF")
         self.single_pdf_checkbox.setToolTip(
             "If checked, all text from matching posts will be compiled into one single PDF file."
         )
         self.single_pdf_checkbox.setChecked(single_pdf_checked)
-        layout.addWidget(self.single_pdf_checkbox)
+        pdf_options_layout.addWidget(self.single_pdf_checkbox)
 
-        self.add_info_checkbox = QCheckBox("Add info in PDF")
+        self.add_info_checkbox = QCheckBox("Add Info Page")
         self.add_info_checkbox.setToolTip(
             "If checked, adds a first page with post details (Title, Date, Link, Creator, Tags, etc.)."
         )
         self.add_info_checkbox.setChecked(add_info_checked)
-        layout.addWidget(self.add_info_checkbox)
+        pdf_options_layout.addWidget(self.add_info_checkbox)
+        pdf_options_layout.addStretch()
+        layout.addLayout(pdf_options_layout)
 
         if self.is_simpcity:
             self.add_info_checkbox.setVisible(False)
+
+        # Separator
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setFrameShadow(QFrame.Sunken)
+        layout.addWidget(sep)
+
+        # ── Combined Download Section with Slide Switch (Below settings) ────
+        combined_card = QFrame()
+        combined_card.setStyleSheet(
+            "QFrame { background-color: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 4px; }"
+        )
+        combined_card_layout = QVBoxLayout(combined_card)
+        combined_card_layout.setContentsMargins(8, 6, 8, 6)
+        combined_card_layout.setSpacing(4)
+
+        switch_row = QHBoxLayout()
+        switch_row.setSpacing(8)
+        self.combined_mode_switch = SlideSwitch(self, checked=combined_mode_checked)
+        self.combined_mode_checkbox = self.combined_mode_switch  # Backward-compatible alias
+
+        switch_label = QLabel("<b>Combined Download</b>")
+        switch_label.setStyleSheet("font-size: 12px; color: #FFFFFF;")
+
+        self.mode_badge = QLabel("Checkbox Mode" if combined_mode_checked else "Radio Mode")
+        self.mode_badge.setStyleSheet(
+            "background-color: #007ACC; color: white; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: bold;"
+            if combined_mode_checked else
+            "background-color: #555555; color: #CCCCCC; padding: 1px 6px; border-radius: 3px; font-size: 10px;"
+        )
+
+        switch_row.addWidget(self.combined_mode_switch)
+        switch_row.addWidget(switch_label)
+        switch_row.addWidget(self.mode_badge)
+        switch_row.addStretch()
+        combined_card_layout.addLayout(switch_row)
+
+        self.combined_description_label = QLabel(
+            "Download files + generate document simultaneously"
+            if combined_mode_checked else
+            "Export text only (downloading files disabled)"
+        )
+        self.combined_description_label.setStyleSheet("color: #888888; font-size: 10.5px;")
+        combined_card_layout.addWidget(self.combined_description_label)
+
+        layout.addWidget(combined_card)
 
         # ── Wire signals ────────────────────────────────────────────────────
         self.format_combo.currentTextChanged.connect(self.update_checkbox_states)
@@ -209,19 +223,19 @@ class MoreOptionsDialog(QDialog):
 
     def _on_combined_mode_toggled(self, enabled: bool):
         """When Combined Mode is on, disable Single PDF (not applicable)."""
-        # In combined mode the PDF is always per-post, so Single PDF makes no sense.
         if hasattr(self, 'mode_badge'):
             self.mode_badge.setText("Checkbox Mode" if enabled else "Radio Mode")
             self.mode_badge.setStyleSheet(
-                "background-color: #007ACC; color: white; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: bold;"
+                "background-color: #007ACC; color: white; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: bold;"
                 if enabled else
-                "background-color: #555555; color: #DDDDDD; padding: 2px 7px; border-radius: 4px; font-size: 11px;"
+                "background-color: #555555; color: #CCCCCC; padding: 1px 6px; border-radius: 3px; font-size: 10px;"
             )
         if hasattr(self, 'combined_description_label'):
+            fmt = (self.format_combo.currentText() if hasattr(self, 'format_combo') else 'PDF').upper()
             self.combined_description_label.setText(
-                "⚡ Switches 'More' to a Checkbox button on the main window so you can select 'All' to download files and create PDF at the same time."
+                f"Download files + generate {fmt} simultaneously"
                 if enabled else
-                "⚪ 'More' is a Radio button on the main window (Text/PDF extraction only)."
+                "Export text only (downloading files disabled)"
             )
 
         if enabled:
@@ -229,11 +243,7 @@ class MoreOptionsDialog(QDialog):
             self.single_pdf_checkbox.setEnabled(False)
             self.radio_comments.setEnabled(False)
             self.radio_content.setChecked(True)
-            self.description_label.setText(
-                "PDF description will be saved inside each post's subfolder alongside downloaded files:"
-            )
         else:
-            self.description_label.setText("Please choose the scope for the action:")
             self.radio_comments.setEnabled(True)
             self.update_checkbox_states(self.format_combo.currentText())
 

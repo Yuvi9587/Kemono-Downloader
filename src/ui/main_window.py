@@ -3363,7 +3363,8 @@ class DownloaderApp (QWidget ):
                 self.thread_count_input.setEnabled(is_multithreading_checked)
                 self.thread_count_label.setEnabled(is_multithreading_checked)
 
-        if button != self.radio_more and checked:
+        is_in_checkbox_mode = getattr(self, 'combined_download_pdf_setting', False) or (hasattr(self, 'checkbox_more') and not self.checkbox_more.isHidden())
+        if button != self.radio_more and checked and not is_in_checkbox_mode:
             self.radio_more.setText("More")
             self.more_filter_scope = None
             self.single_pdf_setting = False
@@ -3862,86 +3863,107 @@ class DownloaderApp (QWidget ):
         """
         if getattr(self, '_is_loading_settings', False):
             return
-        current_scope = self.more_filter_scope or MoreOptionsDialog.SCOPE_CONTENT
-        current_format = self.text_export_format or 'pdf'
+        if getattr(self, '_is_opening_more_dialog', False):
+            return
+        self._is_opening_more_dialog = True
+        try:
+            current_scope = self.more_filter_scope or MoreOptionsDialog.SCOPE_CONTENT
+            current_format = self.text_export_format or 'pdf'
 
-        url_text = self.link_input.text().strip() if self.link_input else ""
-        service, _, _ = extract_post_info(url_text)
-        is_simpcity = (service == 'simpcity')
+            url_text = self.link_input.text().strip() if self.link_input else ""
+            service, _, _ = extract_post_info(url_text)
+            is_simpcity = (service == 'simpcity')
+            is_combined_initial = bool(
+                getattr(self, 'combined_download_pdf_setting', False) or
+                (hasattr(self, 'checkbox_more') and not self.checkbox_more.isHidden())
+            )
 
-        dialog = MoreOptionsDialog(
-            self,
-            current_scope=current_scope,
-            current_format=current_format,
-            single_pdf_checked=self.single_pdf_setting,
-            add_info_checked=self.add_info_in_pdf_setting,
-            is_simpcity=is_simpcity,
-            combined_mode_checked=self.combined_download_pdf_setting
-        )
+            dialog = MoreOptionsDialog(
+                self,
+                current_scope=current_scope,
+                current_format=current_format,
+                single_pdf_checked=self.single_pdf_setting,
+                add_info_checked=self.add_info_in_pdf_setting,
+                is_simpcity=is_simpcity,
+                combined_mode_checked=is_combined_initial
+            )
 
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.more_filter_scope = dialog.get_selected_scope()
-            self.text_export_format = dialog.get_selected_format()
-            self.single_pdf_setting = dialog.get_single_pdf_state()
-            self.add_info_in_pdf_setting = dialog.get_add_info_state()
-            is_combined = dialog.get_combined_mode_state()
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.more_filter_scope = dialog.get_selected_scope()
+                self.text_export_format = dialog.get_selected_format()
+                self.single_pdf_setting = dialog.get_single_pdf_state()
+                self.add_info_in_pdf_setting = dialog.get_add_info_state()
+                is_combined = dialog.get_combined_mode_state()
 
-            is_any_pdf_mode = (self.text_export_format == 'pdf')
-            scope_text = "Comments" if self.more_filter_scope == MoreOptionsDialog.SCOPE_COMMENTS else "Description"
+                is_any_pdf_mode = (self.text_export_format == 'pdf')
+                scope_text = "Comments" if self.more_filter_scope == MoreOptionsDialog.SCOPE_COMMENTS else "Description"
 
-            if is_combined:
-                self.set_more_mode_checkbox(True)
-                fmt = self.text_export_format.upper()
-                self.log_signal.emit(
-                    f"⚡ Combined Download enabled! 'More' changed to Checkbox button. You can now select 'All' to download files and create {fmt} simultaneously."
-                )
-            else:
-                self.set_more_mode_checkbox(False)
-                format_extras = []
-                if self.single_pdf_setting:
-                    format_extras.append("Single")
-                if is_any_pdf_mode and self.add_info_in_pdf_setting:
-                    format_extras.append("Info")
-                extra_str = f" [{'+'.join(format_extras)}]" if format_extras else ""
-                self.radio_more.setText(f"{scope_text} ({self.text_export_format.upper()}{extra_str})")
+                if is_combined:
+                    self.set_more_mode_checkbox(True)
+                    fmt = self.text_export_format.upper()
+                    self.log_signal.emit(
+                        f"⚡ Combined Download enabled! 'More' changed to Checkbox button. You can now select 'All' to download files and create {fmt} simultaneously."
+                    )
+                else:
+                    self.set_more_mode_checkbox(False)
+                    format_extras = []
+                    if self.single_pdf_setting:
+                        format_extras.append("Single")
+                    if is_any_pdf_mode and self.add_info_in_pdf_setting:
+                        format_extras.append("Info")
+                    extra_str = f" [{'+'.join(format_extras)}]" if format_extras else ""
+                    self.radio_more.setText(f"{scope_text} ({self.text_export_format.upper()}{extra_str})")
 
-                if hasattr(self, 'use_multithreading_checkbox'):
-                    self.use_multithreading_checkbox.setEnabled(not is_any_pdf_mode)
+                    if hasattr(self, 'use_multithreading_checkbox'):
+                        self.use_multithreading_checkbox.setEnabled(not is_any_pdf_mode)
+                        if is_any_pdf_mode:
+                            self.use_multithreading_checkbox.setChecked(False)
+                        self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
+
+                    self.log_signal.emit(f"ℹ️ 'More' filter set: {scope_text}, Format: {self.text_export_format.upper()}")
                     if is_any_pdf_mode:
-                        self.use_multithreading_checkbox.setChecked(False)
-                    self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
+                        status_single = "Enabled" if self.single_pdf_setting else "Disabled"
+                        status_info = "Enabled" if self.add_info_in_pdf_setting else "Disabled"
+                        self.log_signal.emit(f"   ↳ PDF Options: Single PDF={status_single}, Add Info Page={status_info}")
+                        self.log_signal.emit("   ↳ Multithreading disabled for PDF export.")
 
-                self.log_signal.emit(f"ℹ️ 'More' filter set: {scope_text}, Format: {self.text_export_format.upper()}")
-                if is_any_pdf_mode:
-                    status_single = "Enabled" if self.single_pdf_setting else "Disabled"
-                    status_info = "Enabled" if self.add_info_in_pdf_setting else "Disabled"
-                    self.log_signal.emit(f"   ↳ PDF Options: Single PDF={status_single}, Add Info Page={status_info}")
-                    self.log_signal.emit("   ↳ Multithreading disabled for PDF export.")
+                if hasattr(self, 'use_subfolders_checkbox'):
+                    self.use_subfolders_checkbox.setEnabled(not self.single_pdf_setting)
+                    if self.single_pdf_setting:
+                        self.use_subfolders_checkbox.setChecked(False)
 
-            if hasattr(self, 'use_subfolders_checkbox'):
-                self.use_subfolders_checkbox.setEnabled(not self.single_pdf_setting)
-                if self.single_pdf_setting:
-                    self.use_subfolders_checkbox.setChecked(False)
+                if hasattr(self, 'use_subfolder_per_post_checkbox'):
+                    self.use_subfolder_per_post_checkbox.setEnabled(not self.single_pdf_setting)
+                    if self.single_pdf_setting:
+                        self.use_subfolder_per_post_checkbox.setChecked(False)
 
-            if hasattr(self, 'use_subfolder_per_post_checkbox'):
-                self.use_subfolder_per_post_checkbox.setEnabled(not self.single_pdf_setting)
-                if self.single_pdf_setting:
-                    self.use_subfolder_per_post_checkbox.setChecked(False)
+            else:
+                if hasattr(self, 'checkbox_more') and not self.checkbox_more.isHidden():
+                    self.checkbox_more.setChecked(True)
+                    self.combined_download_pdf_setting = True
+                elif hasattr(self, 'radio_more') and self.radio_more.isChecked() and not self.more_filter_scope:
+                    self.log_signal.emit("ℹ️ 'More' filter selection cancelled. Reverting to 'All'.")
+                    if hasattr(self, 'radio_all'):
+                        self.radio_all.setChecked(True)
+        finally:
+            self._is_opening_more_dialog = False
 
-        else:
-            if hasattr(self, 'radio_more') and self.radio_more.isChecked() and not self.combined_download_pdf_setting:
-                self.log_signal.emit("ℹ️ 'More' filter selection cancelled. Reverting to 'All'.")
-                if hasattr(self, 'radio_all'):
-                    self.radio_all.setChecked(True)
+    def _handle_more_button_clicked(self):
+        """
+        Single-click handler for both 'More' radio button and 'More' checkbox button.
+        Always opens the MoreOptionsDialog once.
+        """
+        if hasattr(self, 'checkbox_more') and not self.checkbox_more.isHidden():
+            self.checkbox_more.setChecked(True)
+            self.combined_download_pdf_setting = True
+        self.open_more_options_dialog()
 
     def _handle_more_options_toggled(self, button, checked):
         """
-        Launches the advanced configuration dialog for Text and PDF extraction.
+        Handles radio group toggles when selecting other buttons (All, Images, etc.).
         """
-        if button == self.radio_more and checked:
-            self.open_more_options_dialog()
-        elif button != self.radio_more and checked:
-            is_in_checkbox_mode = getattr(self, 'combined_download_pdf_setting', False) or (hasattr(self, 'checkbox_more') and self.checkbox_more.isVisible())
+        if button != self.radio_more and checked:
+            is_in_checkbox_mode = getattr(self, 'combined_download_pdf_setting', False) or (hasattr(self, 'checkbox_more') and not self.checkbox_more.isHidden())
             if not is_in_checkbox_mode:
                 self.radio_more.setText("More")
                 self.more_filter_scope = None

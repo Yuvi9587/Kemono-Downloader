@@ -608,10 +608,12 @@ def setup_ui(main_app):
         main_app.radio_group.buttonToggled.connect(main_app._handle_more_options_toggled)
     if hasattr(main_app, 'checkbox_more'):
         main_app.checkbox_more.toggled.connect(main_app._handle_checkbox_more_toggled)
+        main_app.checkbox_more.clicked.connect(main_app._handle_more_button_clicked)
         main_app.checkbox_more.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         main_app.checkbox_more.customContextMenuRequested.connect(main_app._show_more_options_context_menu)
         main_app.checkbox_more.installEventFilter(main_app)
     if hasattr(main_app, 'radio_more'):
+        main_app.radio_more.clicked.connect(main_app._handle_more_button_clicked)
         main_app.radio_more.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         main_app.radio_more.customContextMenuRequested.connect(main_app._show_more_options_context_menu)
     main_app._update_manga_filename_style_button_text()
