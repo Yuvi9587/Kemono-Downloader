@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QRadioButton, QDialogButtonBox, QButtonGroup, QLabel,
     QComboBox, QHBoxLayout, QCheckBox, QFrame, QWidget
 )
-from PySide6.QtCore import Qt, QPropertyAnimation, Property, Signal
+from PySide6.QtCore import Qt, QPropertyAnimation, Property, Signal, QEvent
 from PySide6.QtGui import QPainter, QColor, QBrush, QPen
 from ...utils.resolution import get_dark_theme
 
@@ -46,7 +46,15 @@ class SlideSwitch(QWidget):
             self.toggled.emit(checked)
         self.update()
 
+    def changeEvent(self, event):
+        if event.type() == QEvent.Type.EnabledChange:
+            self.setCursor(Qt.CursorShape.PointingHandCursor if self.isEnabled() else Qt.CursorShape.ForbiddenCursor)
+            self.update()
+        super().changeEvent(event)
+
     def mousePressEvent(self, event):
+        if not self.isEnabled():
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             self.setChecked(not self._checked)
         super().mousePressEvent(event)
@@ -55,14 +63,24 @@ class SlideSwitch(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
+        is_enabled = self.isEnabled()
+        if not is_enabled:
+            track_color = QColor("#2A2A2A")
+            thumb_color = QColor("#555555")
+        elif self._checked:
+            track_color = QColor("#007ACC")
+            thumb_color = QColor("#FFFFFF")
+        else:
+            track_color = QColor("#444444")
+            thumb_color = QColor("#FFFFFF")
+
         # Track background
-        track_color = QColor("#007ACC") if self._checked else QColor("#444444")
         painter.setBrush(QBrush(track_color))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(0, 1, 40, 18, 9, 9)
 
         # Thumb
-        painter.setBrush(QBrush(QColor("#FFFFFF")))
+        painter.setBrush(QBrush(thumb_color))
         painter.drawEllipse(int(self._thumb_position), 3, 14, 14)
         painter.end()
 
@@ -83,11 +101,11 @@ class MoreOptionsDialog(QDialog):
         self.parent_app = parent
         self.is_simpcity = is_simpcity
         self.setWindowTitle("More Options")
-        self.setFixedWidth(340)
+        self.setFixedWidth(310)
 
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
-        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setContentsMargins(14, 10, 14, 10)
 
         # ── Scope section (Compact side-by-side) ────────────────────────────
         scope_layout = QHBoxLayout()
@@ -164,45 +182,19 @@ class MoreOptionsDialog(QDialog):
         sep.setFrameShadow(QFrame.Sunken)
         layout.addWidget(sep)
 
-        # ── Combined Download Section with Slide Switch (Below settings) ────
-        combined_card = QFrame()
-        combined_card.setStyleSheet(
-            "QFrame { background-color: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 4px; }"
-        )
-        combined_card_layout = QVBoxLayout(combined_card)
-        combined_card_layout.setContentsMargins(8, 6, 8, 6)
-        combined_card_layout.setSpacing(4)
-
+        # ── Combined Download Toggle (Simple & clean) ───────────────────────
         switch_row = QHBoxLayout()
         switch_row.setSpacing(8)
         self.combined_mode_switch = SlideSwitch(self, checked=combined_mode_checked)
         self.combined_mode_checkbox = self.combined_mode_switch  # Backward-compatible alias
 
-        switch_label = QLabel("<b>Combined Download</b>")
-        switch_label.setStyleSheet("font-size: 12px; color: #FFFFFF;")
-
-        self.mode_badge = QLabel("Checkbox Mode" if combined_mode_checked else "Radio Mode")
-        self.mode_badge.setStyleSheet(
-            "background-color: #007ACC; color: white; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: bold;"
-            if combined_mode_checked else
-            "background-color: #555555; color: #CCCCCC; padding: 1px 6px; border-radius: 3px; font-size: 10px;"
-        )
+        self.switch_label = QLabel("Combined Download")
+        self.switch_label.setStyleSheet("font-size: 12px; color: #E0E0E0;")
 
         switch_row.addWidget(self.combined_mode_switch)
-        switch_row.addWidget(switch_label)
-        switch_row.addWidget(self.mode_badge)
+        switch_row.addWidget(self.switch_label)
         switch_row.addStretch()
-        combined_card_layout.addLayout(switch_row)
-
-        self.combined_description_label = QLabel(
-            "Download files + generate document simultaneously"
-            if combined_mode_checked else
-            "Export text only (downloading files disabled)"
-        )
-        self.combined_description_label.setStyleSheet("color: #888888; font-size: 10.5px;")
-        combined_card_layout.addWidget(self.combined_description_label)
-
-        layout.addWidget(combined_card)
+        layout.addLayout(switch_row)
 
         # ── Wire signals ────────────────────────────────────────────────────
         self.format_combo.currentTextChanged.connect(self.update_checkbox_states)
@@ -223,21 +215,6 @@ class MoreOptionsDialog(QDialog):
 
     def _on_combined_mode_toggled(self, enabled: bool):
         """When Combined Mode is on, disable Single PDF (not applicable)."""
-        if hasattr(self, 'mode_badge'):
-            self.mode_badge.setText("Checkbox Mode" if enabled else "Radio Mode")
-            self.mode_badge.setStyleSheet(
-                "background-color: #007ACC; color: white; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: bold;"
-                if enabled else
-                "background-color: #555555; color: #CCCCCC; padding: 1px 6px; border-radius: 3px; font-size: 10px;"
-            )
-        if hasattr(self, 'combined_description_label'):
-            fmt = (self.format_combo.currentText() if hasattr(self, 'format_combo') else 'PDF').upper()
-            self.combined_description_label.setText(
-                f"Download files + generate {fmt} simultaneously"
-                if enabled else
-                "Export text only (downloading files disabled)"
-            )
-
         if enabled:
             self.single_pdf_checkbox.setChecked(False)
             self.single_pdf_checkbox.setEnabled(False)
@@ -245,12 +222,42 @@ class MoreOptionsDialog(QDialog):
             self.radio_content.setChecked(True)
         else:
             self.radio_comments.setEnabled(True)
-            self.update_checkbox_states(self.format_combo.currentText())
+            is_pdf = (self.format_combo.currentText().upper() == "PDF")
+            self.single_pdf_checkbox.setEnabled(is_pdf)
 
     def update_checkbox_states(self, text):
-        """Enable PDF-specific checkboxes only if the format is PDF."""
+        """Enable PDF-specific checkboxes and combined mode only if the format is PDF."""
         is_pdf = (text.upper() == "PDF")
-        combined_on = self.combined_mode_checkbox.isChecked()
+
+        # Turn off and lock Combined Download if format is not PDF
+        if hasattr(self, 'combined_mode_switch'):
+            if not is_pdf:
+                if self.combined_mode_switch.isChecked():
+                    self.combined_mode_switch.setChecked(False)
+                self.combined_mode_switch.setEnabled(False)
+                self.combined_mode_switch.setToolTip(
+                    "Combined Download is only available for PDF format."
+                )
+            else:
+                self.combined_mode_switch.setEnabled(True)
+                self.combined_mode_switch.setToolTip(
+                    "Enable to download files and generate documents simultaneously (switches 'More' to checkbox mode)."
+                )
+
+        if hasattr(self, 'switch_label'):
+            self.switch_label.setEnabled(is_pdf)
+            if is_pdf:
+                self.switch_label.setStyleSheet("font-size: 12px; color: #E0E0E0;")
+                self.switch_label.setToolTip(
+                    "Enable to download files and generate documents simultaneously (switches 'More' to checkbox mode)."
+                )
+            else:
+                self.switch_label.setStyleSheet("font-size: 12px; color: #666666;")
+                self.switch_label.setToolTip(
+                    "Combined Download is only available for PDF format."
+                )
+
+        combined_on = self.combined_mode_checkbox.isChecked() if hasattr(self, 'combined_mode_checkbox') else False
 
         self.single_pdf_checkbox.setEnabled(is_pdf and not combined_on)
         self.add_info_checkbox.setEnabled(is_pdf and not self.is_simpcity)
@@ -263,7 +270,7 @@ class MoreOptionsDialog(QDialog):
 
     def get_combined_mode_state(self) -> bool:
         """Returns True if Combined Mode (download + PDF) is active."""
-        return self.combined_mode_checkbox.isChecked()
+        return self.combined_mode_checkbox.isChecked() and self.combined_mode_checkbox.isEnabled()
 
     def get_selected_scope(self):
         if self.is_simpcity:
