@@ -36,7 +36,7 @@ You will need Python 3.6 or newer installed on your system.
 
 ### 1. Install Dependencies
 ```bash
-pip install PyQt5 requests packaging cloudscraper bs4 pycryptodome
+pip install PyQt5 requests packaging cloudscraper bs4 pycryptodome curl_cffi
 ```
 Optional dependencies (for features like PDF generation and image compression):
 ```bash
