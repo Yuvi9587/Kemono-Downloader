@@ -242,7 +242,7 @@ class DeviantArtDownloadThread(QThread):
             
             timeout_val = (30, 120) if self.proxies else 30
             
-            with requests.get(file_url, stream=True, timeout=timeout_val, proxies=self.proxies, verify=False) as r:
+            with requests.get(file_url, stream=True, timeout=timeout_val, proxies=self.proxies) as r:
                 r.raise_for_status()
                 
                 with open(filepath, 'wb') as f:
