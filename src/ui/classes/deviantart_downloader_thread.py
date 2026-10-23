@@ -100,13 +100,6 @@ class DeviantArtDownloadThread(QThread):
         finally:
             self.finished_signal.emit(self.download_count, self.skip_count, self.cancellation_event.is_set(), [])
 
-    def _check_pause_cancel(self):
-        if self.cancellation_event.is_set(): return True
-        while self.pause_event.is_set():
-            time.sleep(0.5)
-            if self.cancellation_event.is_set(): return True
-        return False
-
     def _process_single_post(self, url):
         self.progress_signal.emit(f"   Fetching deviation info...")
         uuid = self.client.get_deviation_uuid(url)
