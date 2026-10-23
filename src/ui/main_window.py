@@ -4005,6 +4005,50 @@ class DownloaderApp (QWidget ):
         self._update_manga_filename_style_button_text()
         self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)
         
+    def _handle_favorite_mode_toggle (self ,checked ):
+        if not self .url_or_placeholder_stack or not self .bottom_action_buttons_stack :
+            return
+
+        self .url_or_placeholder_stack .setCurrentIndex (1 if checked else 0 )
+        self .bottom_action_buttons_stack .setCurrentIndex (1 if checked else 0 )
+
+        if checked :
+            if self .link_input :
+                self .link_input .clear ()
+                self .link_input .setEnabled (False )
+
+            self .update_custom_folder_visibility ()
+            self .update_page_range_enabled_state ()
+            if self .manga_mode_checkbox :
+                pass
+            if hasattr (self ,'use_cookie_checkbox'):
+                self .use_cookie_checkbox .setChecked (True )
+                self .use_cookie_checkbox .setEnabled (False )
+            if hasattr (self ,'use_cookie_checkbox'):
+                self ._update_cookie_input_visibility (True )
+            self .update_ui_for_manga_mode (False )
+
+            if hasattr (self ,'favorite_mode_artists_button'):
+                self .favorite_mode_artists_button .setEnabled (True )
+            if hasattr (self ,'favorite_mode_posts_button'):
+                self .favorite_mode_posts_button .setEnabled (True )
+
+        else :
+            if self .link_input :self .link_input .setEnabled (True )
+            self .update_page_range_enabled_state ()
+            self .update_custom_folder_visibility ()
+            self .update_ui_for_manga_mode (self .manga_mode_checkbox .isChecked ()if self .manga_mode_checkbox else False )
+
+            if hasattr (self ,'use_cookie_checkbox'):
+                self .use_cookie_checkbox .setEnabled (True )
+            if hasattr (self ,'use_cookie_checkbox'):
+                self ._update_cookie_input_visibility (self .use_cookie_checkbox .isChecked ())
+
+            if hasattr (self ,'favorite_mode_artists_button'):
+                self .favorite_mode_artists_button .setEnabled (False )
+            if hasattr (self ,'favorite_mode_posts_button'):
+                self .favorite_mode_posts_button .setEnabled (False )
+
     def update_ui_for_manga_mode (self ,checked ):
         """
         Adjusts the UI when Renaming Mode (Manga Mode) is toggled.
