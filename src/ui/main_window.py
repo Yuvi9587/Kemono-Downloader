@@ -19,6 +19,7 @@ import itertools
 import uuid
 import shiboken6
 from urllib.parse import urlparse, parse_qs
+from ..utils.qt_helpers import safe_disconnect
 from collections import deque, defaultdict, Counter
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor, CancelledError
@@ -967,11 +968,9 @@ class DownloaderApp (QWidget ):
         if getattr(self, 'is_silent_background_sync', False):
             return
             
-        try:
-            self.download_btn.clicked.disconnect()
-            self.pause_btn.clicked.disconnect()
-            self.cancel_btn.clicked.disconnect()
-        except TypeError: pass
+        safe_disconnect(self.download_btn.clicked)
+        safe_disconnect(self.pause_btn.clicked)
+        safe_disconnect(self.cancel_btn.clicked)
 
         is_download_active = self._is_download_active()
         fetch_first_enabled = self.settings.value(FETCH_FIRST_KEY, False, type=bool)
@@ -1189,11 +1188,8 @@ class DownloaderApp (QWidget ):
         self.pause_btn.setEnabled(True)
         self.cancel_btn.setEnabled(True)
         self.cancel_btn.setText("Cancel & Reset UI")
-        try:
-            self.cancel_btn.clicked.disconnect()
-            self.pause_btn.clicked.disconnect()
-        except TypeError:
-            pass
+        safe_disconnect(self.cancel_btn.clicked)
+        safe_disconnect(self.pause_btn.clicked)
         self.cancel_btn.clicked.connect(self.cancel_download_button_action)
         self.pause_btn.clicked.connect(self._handle_pause_resume_action)
 

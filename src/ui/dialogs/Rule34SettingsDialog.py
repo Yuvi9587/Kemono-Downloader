@@ -5,6 +5,7 @@ import re
 import json
 import sqlite3
 from ..assets import get_asset_path, get_asset_html_path
+from ...utils.qt_helpers import safe_disconnect
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QPushButton, QCheckBox, QSpinBox, QComboBox, QGroupBox, 
@@ -920,10 +921,7 @@ class Rule34SettingsDialog(QDialog):
             completer.setCaseSensitivity(Qt.CaseInsensitive)
             completer.setMaxVisibleItems(15) 
             completer.setWrapAround(False) 
-            try:
-                line_edit.textEdited.disconnect()
-            except TypeError:
-                pass
+            safe_disconnect(line_edit.textEdited)
             line_edit.setCompleter(completer)
             line_edit.textEdited.connect(lambda text, le=line_edit, c=completer: self.on_text_edited(text, le, c))
             return completer
