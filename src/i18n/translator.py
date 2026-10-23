@@ -1,3 +1,5 @@
+import os
+
 translations = {}
 
 translations ["zh_TW"]={    
@@ -3249,6 +3251,12 @@ translations ["ja"]={
     "help_guide_step9_content": "<html><head/><body>\n<h3>アプリケーションで使用されるキーファイル</h3>\n<ul>\n<li><b><code>Known.txt</code>:</b>\n<ul>\n<li>アプリケーションディレクトリ(<code>.exe</code>または<code>main.py</code>がある場所)にあります。</li>\n<li>'名前/タイトルでフォルダを分ける'が有効になっている場合の自動フォルダ構成のために、既知のシリーズ、キャラクター、またはシリーズタイトルのリストを保存します。</li>\n<li><b>形式:</b>\n<ul>\n<li>各行は1つのエントリです。</li>\n<li><b>単純な名前:</b> 例: <code>My Awesome Series</code>。一致するコンテンツは、\"My Awesome Series\"という名前のフォルダに保存されます。</li>\n<li><b>グループ化されたエイリアス:</b> 例: <code>(Character A, Char A, Alt Name A)</code>。\"Character A\"、\"Char A\"、または\"Alt Name A\"に一致するコンテンツはすべて、(クリーンアップ後)\"Character A Char A Alt Name A\"という名前の単一のフォルダに保存されます。括弧内のすべての用語は、そのフォルダのエイリアスになります。</li>\n</ul>\n</li>\n<li><b>使用法:</b> 投稿がアクティブな'キャラクターでフィルター'入力に一致しない場合のフォルダ命名のフォールバックとして機能します。UIを介して単純なエントリを管理したり、複雑なエイリアスのファイルを直接編集したりできます。アプリは起動時または次回の使用時に再読み込みします。</li>\n</ul>\n</li>\n<li><b><code>cookies.txt</code>(オプション):</b>\n<ul>\n<li>'Cookieを使用'機能を使用していて、直接Cookie文字列を提供しないか、特定のファイルを参照しない場合、アプリはそのディレクトリで<code>cookies.txt</code>という名前のファイルを探します。</li>\n<li><b>形式:</b> Netscape Cookieファイル形式である必要があります。</li>\n<li><b>使用法:</b> ダウンローダーがブラウザのログインセッションを使用して、Kemono/Coomerでログインの背後にある可能性のあるコンテンツにアクセスできるようにします。</li>\n</ul>\n</li>\n</ul>\n<h3>初回ユーザー向けツアー</h3>\n<ul>\n<li>最初の起動時(またはリセットされた場合)、主な機能を案内するウェルカムツアーダイアログが表示されます。スキップするか、\"このツアーを二度と表示しない\"を選択できます。</li>\n</ul>\n<p><em>多くのUI要素には、マウスを合わせると表示されるツールチップもあり、簡単なヒントを提供します。</em></p>\n</body></html>"
 }
 
+def _warn_missing(message):
+    """Missing-key noise is off by default; set KD_TRANSLATION_WARNINGS=1 to audit coverage."""
+    if os.environ.get("KD_TRANSLATION_WARNINGS") == "1":
+        print(message)
+
+
 def get_translation (language_code ,key ,default_text =""):
     """
     Retrieves a translation for a given key and language.
@@ -3263,12 +3271,13 @@ def get_translation (language_code ,key ,default_text =""):
 
     en_translations =translations .get ("en")
     if en_translations and key in en_translations :
-        print (f"Warning: Translation key '{key }' not found for language '{language_code }'. Falling back to English.")
+        if language_code != "en":
+            _warn_missing (f"Warning: Translation key '{key }' not found for language '{language_code }'. Falling back to English.")
         return en_translations [key ]
 
 
-    print (f"Warning: Translation key '{key }' not found for language '{language_code }' or English. Using default: '{default_text }'.")
-    return default_text 
+    _warn_missing (f"Warning: Translation key '{key }' not found for language '{language_code }' or English. Using default: '{default_text }'.")
+    return default_text
 
 from ..ui.assets import get_asset_path
 import re
