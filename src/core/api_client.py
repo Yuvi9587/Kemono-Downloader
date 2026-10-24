@@ -4,9 +4,6 @@ from urllib.parse import urlparse
 import json
 import requests
 import cloudscraper 
-import ssl
-from requests.adapters import HTTPAdapter
-from urllib3.poolmanager import PoolManager
 
 from ..utils.network_utils import extract_post_info, prepare_cookies_for_request
 from ..config.constants import (
@@ -16,23 +13,6 @@ from ..config.constants import (
 )
 
 _last_429_warning_time = 0
-
-class CustomSSLAdapter(HTTPAdapter):
-    """
-    A custom HTTPAdapter that forces check_hostname=False when using SSL.
-    This prevents the 'Cannot set verify_mode to CERT_NONE' error.
-    """
-    def init_poolmanager(self, connections, maxsize, block=False):
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        
-        self.poolmanager = PoolManager(
-            num_pools=connections,
-            maxsize=maxsize,
-            block=block,
-            ssl_context=ctx
-        )
 
 def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_event=None, pause_event=None, cookies_dict=None, proxies=None):
     """
@@ -65,7 +45,7 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
         request_timeout = (30, 120) if proxies else (15, 60)
         
         try:
-            with requests.get(paginated_url, headers=headers, timeout=request_timeout, cookies=cookies_dict, proxies=proxies, verify=False) as response:
+            with requests.get(paginated_url, headers=headers, timeout=request_timeout, cookies=cookies_dict, proxies=proxies) as response:
               
                 response.raise_for_status()
                 response.encoding = 'utf-8'  
@@ -79,9 +59,9 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
                 logger("   ❌ Access Denied (403 Forbidden) on the first page.")
                 logger("      This is likely a rate limit or a Cloudflare block.")
                 logger("      💡 SOLUTION: Wait a while, use a VPN, or provide a valid session cookie.")
-                return []
+                raise RuntimeError(f"HTTP_403_FORBIDDEN: {offset}")
 
-            if e.response is not None and e.response.status_code == 400:
+            if e.response is not None and e.response.status_code == 400 and offset > 0:
                 logger(f"   ✅ Reached end of posts (API returned 400 Bad Request for offset {offset}).")
                 return []
 
@@ -122,12 +102,10 @@ def fetch_single_post_data(api_domain, service, user_id, post_id, headers, logge
         try:
             scraper = cloudscraper.create_scraper()
             
-            adapter = CustomSSLAdapter()
-            scraper.mount("https://", adapter)
 
             request_timeout = (30, 300) if proxies else (15, 300)
+            response = scraper.get(post_api_url, headers=headers, timeout=request_timeout, cookies=cookies_dict, proxies=proxies)
             
-            response = scraper.get(post_api_url, headers=headers, timeout=request_timeout, cookies=cookies_dict, proxies=proxies, verify=False)
         
             
             if response.status_code == 429:
@@ -180,10 +158,9 @@ def fetch_post_comments(api_domain, service, user_id, post_id, headers, logger, 
     
     try:
         request_timeout = (30, 60) if proxies else (10, 30)
-        
-        with requests.get(comments_api_url, headers=headers, timeout=request_timeout, cookies=cookies_dict, proxies=proxies, verify=False) as response:
+        with requests.get(comments_api_url, headers=headers, timeout=request_timeout, cookies=cookies_dict, proxies=proxies) as response:
             response.raise_for_status()
-            response.encoding = 'utf-8'          
+            response.encoding = 'utf-8'
             return response.json()
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"Error fetching comments for post {post_id}: {e}")
@@ -199,7 +176,7 @@ def fetch_post_revisions(api_domain, service, user_id, post_id, headers, logger,
 
     try:
         request_timeout = (10, 30)
-        response = requests.get(url, headers=headers, timeout=request_timeout, cookies=cookies_dict, proxies=proxies, verify=False)
+        response = requests.get(url, headers=headers, timeout=request_timeout, cookies=cookies_dict, proxies=proxies)
         
         if response.status_code == 404:
             return []
@@ -266,7 +243,7 @@ def download_from_api(
         try:
             request_timeout = (30, 60) if proxies else (10, 30)
             
-            with requests.get(direct_post_api_url, headers=headers, timeout=request_timeout, cookies=cookies_for_api, proxies=proxies, verify=False) as direct_response:
+            with requests.get(direct_post_api_url, headers=headers, timeout=request_timeout, cookies=cookies_for_api, proxies=proxies) as direct_response:
                 direct_response.raise_for_status()
                 direct_response.encoding = 'utf-8' 
                 direct_post_data = direct_response.json()
