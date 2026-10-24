@@ -7,6 +7,8 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QProgressBar,
                              QLineEdit)
 from PySide6.QtCore import Qt, QThread, Signal, QSettings
 
+from ...utils.qt_helpers import safe_disconnect
+
 class UpdateCheckerThread(QThread):
     """Background thread to silently check if a new fallback.csv exists."""
     update_available_signal = Signal(bool, str)
@@ -562,8 +564,7 @@ class VisualSortSetupDialog(QDialog):
         self.worker.status_signal.connect(self.status_label.setText)
         self.worker.progress_signal.connect(self.progress_bar.setValue)
         
-        try: self.worker.finished_signal.disconnect() 
-        except TypeError: pass
+        safe_disconnect(self.worker.finished_signal)
         self.worker.finished_signal.connect(self._on_download_finished)
         self.worker.start()
 
@@ -603,8 +604,7 @@ class VisualSortSetupDialog(QDialog):
         self.worker.status_signal.connect(self.status_label.setText)
         self.worker.progress_signal.connect(self.progress_bar.setValue)
         
-        try: self.worker.finished_signal.disconnect() 
-        except TypeError: pass
+        safe_disconnect(self.worker.finished_signal)
         self.worker.finished_signal.connect(self._on_download_finished)
         self.worker.start()
 
