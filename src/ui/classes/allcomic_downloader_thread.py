@@ -148,7 +148,7 @@ class AllcomicDownloadThread(QThread):
                         try:
                             self.progress_signal.emit(f"   Downloading ({i+1}/{total_files_in_chapter}): '{filename}' (Attempt {attempt + 1})...")
                             
-                            response = scraper.get(img_url, stream=True, headers=headers, timeout=img_timeout, proxies=self.proxies)
+                            response = scraper.get(img_url, stream=True, headers=headers, timeout=img_timeout, proxies=self.proxies, verify=False)
                             response.raise_for_status()
 
                             total_size = int(response.headers.get('content-length', 0))

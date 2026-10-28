@@ -17,7 +17,7 @@ def fetch_nhentai_gallery(gallery_id, logger=print, proxies=None):
     req_timeout = (30, 120) if proxies else 20
 
     try:
-        response = requests.get(api_url, headers=headers, timeout=req_timeout, proxies=proxies)
+        response = requests.get(api_url, headers=headers, timeout=req_timeout, proxies=proxies, verify=False)
         
         if response.status_code == 404:
             logger(f"   ❌ Gallery not found (404): ID {gallery_id}")

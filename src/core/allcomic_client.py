@@ -23,7 +23,7 @@ def get_chapter_list(scraper, series_url, logger_func, check_pause_func=None, pr
             return []
 
         try:
-            response = scraper.get(series_url, headers=headers, timeout=req_timeout, proxies=proxies)
+            response = scraper.get(series_url, headers=headers, timeout=req_timeout, proxies=proxies, verify=False)
             response.raise_for_status()
             logger_func(f"   [AllComic] Successfully connected to series page on attempt {attempt + 1}.")
             break 
@@ -83,7 +83,7 @@ def fetch_chapter_data(scraper, chapter_url, logger_func, check_pause_func=None,
             return None, None, None
 
         try:
-            response = scraper.get(chapter_url, headers=headers, timeout=req_timeout, proxies=proxies)
+            response = scraper.get(chapter_url, headers=headers, timeout=req_timeout, proxies=proxies, verify=False)
             response.raise_for_status()
             break
         except requests.RequestException as e:

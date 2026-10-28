@@ -138,7 +138,7 @@ class NhentaiDownloadThread(QThread):
                         'Referer': f'https://nhentai.net/g/{gallery_id}/'
                     }
 
-                    response = scraper.get(full_url, headers=headers, timeout=img_timeout, stream=True, proxies=self.proxies)
+                    response = scraper.get(full_url, headers=headers, timeout=img_timeout, stream=True, proxies=self.proxies, verify=False)
                     
                     if response.status_code == 200:
                         total_size = int(response.headers.get('content-length', 0))
