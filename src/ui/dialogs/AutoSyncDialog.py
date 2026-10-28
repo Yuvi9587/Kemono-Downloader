@@ -704,7 +704,7 @@ class AutoSyncDialog(QDialog):
             line_edit = QLineEdit(current_out_dir)
             
             btn = QPushButton()
-            btn.setIcon(QIcon(get_asset_path("assets/Svg/folder.svg")))
+            btn.setIcon(QIcon(get_asset_path("assets/svg/folder.svg")))
             btn.setFixedSize(24, 24)
             btn.setToolTip("Browse for new download location")
             
