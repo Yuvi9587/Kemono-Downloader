@@ -470,7 +470,7 @@ class PostProcessorWorker:
             new_url = parsed_url._replace(netloc=new_domain).geturl()
             
             try:
-                with requests.head(new_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5, allow_redirects=True, proxies=self.proxies, verify=False) as resp:
+                with requests.head(new_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5, allow_redirects=True, proxies=self.proxies) as resp:
                     if resp.status_code == 200:
                         return new_url
             except requests.RequestException:
@@ -556,7 +556,7 @@ class PostProcessorWorker:
         if self.skip_file_size_mb is not None:
             api_original_filename_for_size_check = file_info.get('_original_name_for_log', file_info.get('name'))
             try:
-                with requests.head(file_url, headers=file_download_headers, timeout=15, cookies=cookies_to_use_for_file, allow_redirects=True, proxies=self.proxies, verify=False) as head_response:
+                with requests.head(file_url, headers=file_download_headers, timeout=15, cookies=cookies_to_use_for_file, allow_redirects=True, proxies=self.proxies) as head_response:
                     head_response.raise_for_status()
                     content_length = head_response.headers.get('Content-Length')
                     if content_length:
@@ -893,7 +893,7 @@ class PostProcessorWorker:
                     time.sleep(retry_delay * (2 ** (attempt_num_single_stream - 1)))
                 self._emit_signal('file_download_status', True)
                 current_url_to_try = file_url
-                response = requests.get(current_url_to_try, headers=file_download_headers, timeout=(30, 300), stream=True, cookies=cookies_to_use_for_file, proxies=self.proxies, verify=False)
+                response = requests.get(current_url_to_try, headers=file_download_headers, timeout=(30, 300), stream=True, cookies=cookies_to_use_for_file, proxies=self.proxies)
                 if response.status_code == 403 and ('kemono.' in current_url_to_try or 'coomer.' in current_url_to_try):
                     self.logger(f"   ⚠️ Got 403 Forbidden for '{api_original_filename}'. Attempting subdomain rotation...")
                     new_url = self._find_valid_subdomain(current_url_to_try)
@@ -901,7 +901,7 @@ class PostProcessorWorker:
                         self.logger(f"   Retrying with new URL: {new_url}")
                         file_url = new_url
                         response.close()
-                        response = requests.get(new_url, headers=file_download_headers, timeout=(30, 300), stream=True, cookies=cookies_to_use_for_file, proxies=self.proxies, verify=False)
+                        response = requests.get(new_url, headers=file_download_headers, timeout=(30, 300), stream=True, cookies=cookies_to_use_for_file, proxies=self.proxies)
                 elif response.status_code == 403 and CURL_CFFI_AVAILABLE:
                     # Non-kemono/coomer 403: likely Cloudflare TLS fingerprint detection.
                     # Retry with curl_cffi which impersonates a real Chrome browser.
@@ -914,7 +914,7 @@ class PostProcessorWorker:
                         cookies=cookies_to_use_for_file if cookies_to_use_for_file else {},
                         proxies=self.proxies or {},
                         impersonate="chrome120",
-                        verify=False
+                        verify=True
                     )
                 response.raise_for_status()
                 total_size_bytes = int(response.headers.get('Content-Length', 0))
@@ -1019,7 +1019,7 @@ class PostProcessorWorker:
                     self.logger(f"   ⚠️ [Pawchive] 'file.pawchive' unreachable for '{api_original_filename}'. Trying fallback 'fox.pawchive'...")
                     try:
                         if response: response.close()
-                        response = requests.get(fallback_url, headers=file_download_headers, timeout=(30, 300), stream=True, cookies=cookies_to_use_for_file, proxies=self.proxies, verify=False)
+                        response = requests.get(fallback_url, headers=file_download_headers, timeout=(30, 300), stream=True, cookies=cookies_to_use_for_file, proxies=self.proxies)
                         response.raise_for_status()
                         # Fallback succeeded — update file_url so subsequent retries also use fox.
                         file_url = fallback_url

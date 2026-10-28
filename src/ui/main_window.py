@@ -435,6 +435,8 @@ class DownloaderApp (QWidget ):
         self.active_sync_log_dialog = None  # Set when AutoSyncDialog is open
         self.auto_sync_manager = AutoSyncManager(self)
         
+        from .job_queue_controller import JobQueueController
+        self.job_queue_controller = JobQueueController(self)
         self._connect_signals()
 
         if self.main_log_output: self.main_log_output.document().setMaximumBlockCount(10000)
@@ -472,183 +474,10 @@ class DownloaderApp (QWidget ):
             self.future_settings_button.setStyleSheet("background-color: rgba(0, 255, 0, 0.1); border-radius: 5px;")
             
     def add_current_settings_to_queue(self):
-        """
-        Takes the current URL and UI settings, packages them into a dictionary, 
-        and saves them as a JSON job file to be executed later in batch mode.
-        """
-        
-        def get_creator_specific_path(base_dir, folder_name):
-            if not folder_name: 
-                return base_dir
-            safe_name = clean_folder_name(folder_name)
-           
-            if base_dir.replace('\\', '/').rstrip('/').endswith(safe_name):
-                return base_dir
-            return os.path.join(base_dir, safe_name)
-        if self.favorite_download_queue:
-            count = 0
-            base_settings = self._get_current_ui_settings_as_dict()
-            items_to_process = list(self.favorite_download_queue)
-            
-            for item in items_to_process:
-                real_url = item.get('url')
-                name = item.get('name', 'Unknown')
-                
-                if not real_url: continue
-
-                job_settings = base_settings.copy()
-                job_settings['api_url'] = real_url 
-                
-                job_settings['output_dir'] = get_creator_specific_path(job_settings['output_dir'], name)
-
-                if self._save_single_job_file(job_settings, name_hint=name):
-                    count += 1
-            
-            if count > 0:
-                self.log_signal.emit(f"✅ Added {count} jobs to queue from selection.")
-                self.link_input.clear()
-                self.favorite_download_queue.clear()
-                QMessageBox.information(self, "Queue", f"{count} jobs successfully added to queue!")
-            else:
-                QMessageBox.warning(self, "Queue Error", "Failed to add selected items to queue.")
-            return
-
-   
-        url = self.link_input.text().strip()
-        if not url:
-            QMessageBox.warning(self, "Input Error", "Cannot add to queue: URL is empty.")
-            return
-
-        settings = self._get_current_ui_settings_as_dict()
-        settings['api_url'] = url 
-        
-       
-        service, user_id, post_id = extract_post_info(url)
-        name_hint = "Job"
-        
-        if service and user_id:
-            
-            cache_key = (service.lower(), str(user_id))
-            cached_name = self.creator_name_cache.get(cache_key)
-            
-            if cached_name:
-                
-                name_hint = cached_name
-                settings['output_dir'] = get_creator_specific_path(settings['output_dir'], cached_name)
-            else:
-                if post_id:
-                    folder_name = str(post_id)
-                else:
-                    folder_name = str(user_id)
-                
-                name_hint = folder_name
-                settings['output_dir'] = get_creator_specific_path(settings['output_dir'], folder_name)
-
-        if self._save_single_job_file(settings, name_hint=name_hint):
-            self.log_signal.emit(f"✅ Job added to queue: {url}")
-            self.link_input.clear()
-            QMessageBox.information(self, "Queue", "Job successfully added to queue!")
-
-    def _save_single_job_file(self, settings_dict, name_hint="job"):
-        """
-        Generates a unique filename and safely writes a job settings dictionary 
-        to the disk inside the 'appdata/jobs' folder.
-        """
-        timestamp = int(time.time())
-        unique_id = uuid.uuid4().hex[:6]
-        
-        safe_name = "".join(c for c in name_hint if c.isalnum() or c in (' ', '_', '-')).strip()
-        if not safe_name: 
-            safe_name = "job"
-        
-        filename = f"job_{timestamp}_{safe_name}_{unique_id}.json"
-        filepath = os.path.join(self.jobs_dir, filename)
-
-        try:
-            with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(settings_dict, f, indent=2)
-            return True
-        except Exception as e:
-            self.log_signal.emit(f"❌ Failed to save job file '{filename}': {e}")
-            return False
+        return self.job_queue_controller.add_current_settings_to_queue()
 
     def execute_job_queue(self):
-        """
-        Triggered by the 'Execute Queue' button. 
-        Locks the UI, scans the jobs folder for pending JSON files, and kicks off the processing loop.
-        """
-        job_files = sorted(glob.glob(os.path.join(self.jobs_dir, "job_*.json")))
-        
-        if not job_files:
-            QMessageBox.information(self, "Queue Empty", "No job files found in appdata/jobs.")
-            return
-
-      
-        self.permanently_failed_files_for_dialog.clear()
-        self._update_error_button_count()
-
-        self.log_signal.emit("=" * 40)
-        self.log_signal.emit(f"🚀 Starting execution of {len(job_files)} queued jobs.")
-        self.is_running_job_queue = True
-        self.download_btn.setEnabled(False)
-        self.add_queue_btn.setEnabled(False)
-        
-        self._process_next_queued_job()
-
-    def _process_next_queued_job(self):
-
-        """
-        Pops the oldest job file from the queue, loads its settings into the UI, 
-        and automatically clicks the 'Start Download' button for it.
-        """
-
-        if self.cancellation_event.is_set():
-            self.is_running_job_queue = False
-            self.log_signal.emit("🛑 Queue execution cancelled.")
-            self._update_button_states_and_connections()
-            return
-
-        job_files = sorted(glob.glob(os.path.join(self.jobs_dir, "job_*.json")))
-        
-        if not job_files:
-            self.is_running_job_queue = False
-            self.current_job_file = None
-            self.log_signal.emit("🏁 All queued jobs finished!")
-            self.link_input.clear()
-            QMessageBox.information(self, "Queue Finished", "All queued jobs have been processed.")
-            self._update_button_states_and_connections()
-            return
-
-        next_job_path = job_files[0]
-        self.current_job_file = next_job_path
-        
-        self.log_signal.emit(f"📂 Loading job: {os.path.basename(next_job_path)}")
-        
-        try:
-            with open(next_job_path, 'r', encoding='utf-8') as f:
-                settings = json.load(f)
-            
-            target_dir = settings.get('output_dir', '')
-            if target_dir:
-                try:
-                    os.makedirs(target_dir, exist_ok=True)
-                except Exception as e:
-                    self.log_signal.emit(f"⚠️ Warning: Could not pre-create directory '{target_dir}': {e}")
-
-            self._load_ui_from_settings_dict(settings)
-            QCoreApplication.processEvents()
-            
-            self.start_download()
-            
-        except Exception as e:
-            self.log_signal.emit(f"❌ Error loading/starting job '{next_job_path}': {e}")
-            failed_path = next_job_path + ".failed"
-            try:
-                os.rename(next_job_path, failed_path)
-            except OSError:
-                pass
-            # Fix: Use QTimer instead of direct recursion to prevent stack overflow on many bad jobs
-            QTimer.singleShot(100, self._process_next_queued_job)
+        return self.job_queue_controller.execute_job_queue()
 
     def _run_discord_file_download_thread(self, session, server_id, channel_id, token, output_dir, message_limit=None):
         """
@@ -2580,15 +2409,6 @@ class DownloaderApp (QWidget ):
         dialog = DownloadHistoryDialog(last_3_downloaded, first_processed, self)
         dialog .exec_ ()
 
-    def _handle_actual_file_downloaded (self ,file_details_dict ):
-        """Handles a successfully downloaded file for the 'last 3 downloaded' history."""
-        if not file_details_dict :
-            return 
-        file_details_dict ['download_timestamp']=time .time ()
-        creator_key =(file_details_dict .get ('service','').lower (),str (file_details_dict .get ('user_id','')))
-        file_details_dict ['creator_display_name']=self .creator_name_cache .get (creator_key ,file_details_dict .get ('folder_context_name','Unknown Creator/Series'))
-        self .last_downloaded_files_details .append (file_details_dict )
-
 
     def _handle_file_successfully_downloaded (self ,history_entry_dict ):
         """Handles a successfully downloaded file for history logging."""
@@ -2615,18 +2435,6 @@ class DownloaderApp (QWidget ):
         self .last_downloaded_files_details .append (file_details_dict )
 
 
-    def _handle_favorite_mode_toggle (self ,checked ):
-        """
-        Swaps the main UI layout. Hides the standard URL input bar and replaces it 
-        with the 'Favorite Artists' and 'Favorite Posts' buttons.
-        """
-        if not self .url_or_placeholder_stack or not self .bottom_action_buttons_stack :
-            return 
-
-            self ._handle_favorite_mode_toggle (self .favorite_mode_checkbox .isChecked ())
-        self ._update_favorite_scope_button_text ()
-        if hasattr (self ,'link_input'):
-            self .last_link_input_text_for_queue_sync =self .link_input .text ()
 
     def _update_download_extracted_links_button_state (self ):
         if hasattr (self ,'download_extracted_links_button')and self .download_extracted_links_button :
@@ -3136,67 +2944,6 @@ class DownloaderApp (QWidget ):
         link_data =self .external_link_queue .popleft ()
 
         QTimer .singleShot (0 ,lambda data =link_data :self ._display_and_schedule_next (data ))
-
-    def _display_and_schedule_next(self, link_data):
-        """
-        Pops a single extracted link from the queue, formats it nicely, prints it to the log, 
-        and then schedules the next link. Processing them one by one prevents UI freezing.
-        """
-        post_title, link_text, link_url, platform, decryption_key = link_data
-        is_only_links_mode = self.radio_only_links and self.radio_only_links.isChecked()
-
-        cleaned_link_text = link_text.strip()
-        display_text = ""
-        if cleaned_link_text and cleaned_link_text.lower() != platform.lower() and cleaned_link_text != link_url:
-            display_text = cleaned_link_text
-        else:
-            try:
-                path = urlparse(link_url).path
-                filename = os.path.basename(path)
-                if filename:
-                    display_text = filename
-            except Exception:
-                pass
-        if not display_text:
-            display_text = link_url
-
-        if len(display_text) > 50:
-            display_text = display_text[:50].strip() + "..."
-
-        platform_display = platform.capitalize()
-        plain_link_info_line = f"  {platform_display} - {link_url} - ({display_text})"
-        if decryption_key:
-            plain_link_info_line += f" (Decryption Key: {decryption_key})"
-
-        if is_only_links_mode:
-            if post_title != self._current_link_post_title:
-                if self._current_link_post_title is not None:
-                    separator_html = f'{HTML_PREFIX}<hr style="border: 1px solid #444;">'
-                    self.log_signal.emit(separator_html)
-
-                title_html = f'<p style="font-size: 11pt; color: #87CEEB; margin-top: 2px; margin-bottom: 2px;"><b>{html.escape(post_title)}</b></p>'
-                self.log_signal.emit(HTML_PREFIX + title_html)
-                self._current_link_post_title = post_title
-
-            self.main_log_output.append(plain_link_info_line)
-
-        elif self.show_external_links:
-            if self.external_log_output and self.external_log_output.isVisible():
-                if post_title != self._current_link_post_title:
-                    if self._current_link_post_title is not None:
-                        self.external_log_output.append("-" * 45)
-                    
-                    self.external_log_output.append(f"📌 {post_title}")
-                    self._current_link_post_title = post_title
-                
-                self.external_log_output.append(plain_link_info_line)
-                
-                scrollbar = self.external_log_output.verticalScrollBar()
-                if scrollbar.value() >= scrollbar.maximum() - 50:
-                    scrollbar.setValue(scrollbar.maximum())
-
-        self._is_processing_external_link_queue = False
-        self._try_process_next_external_link()
 
     def _append_to_external_log (self ,formatted_link_text ,separator ):
         if not (self .external_log_output and self .external_log_output .isVisible ()):
@@ -4260,7 +4007,7 @@ class DownloaderApp (QWidget ):
         
     def _handle_favorite_mode_toggle (self ,checked ):
         if not self .url_or_placeholder_stack or not self .bottom_action_buttons_stack :
-            return 
+            return
 
         self .url_or_placeholder_stack .setCurrentIndex (1 if checked else 0 )
         self .bottom_action_buttons_stack .setCurrentIndex (1 if checked else 0 )
@@ -4269,7 +4016,6 @@ class DownloaderApp (QWidget ):
             if self .link_input :
                 self .link_input .clear ()
                 self .link_input .setEnabled (False )
-
 
             self .update_custom_folder_visibility ()
             self .update_page_range_enabled_state ()
@@ -7207,7 +6953,7 @@ class DownloaderApp (QWidget ):
                 self.finish_lock.release()
                 lock_held = False
                 
-                QTimer.singleShot(100, self._process_next_queued_job)
+                QTimer.singleShot(100, self.job_queue_controller._process_next_queued_job)
                 return
 
             if self.is_processing_favorites_queue:
