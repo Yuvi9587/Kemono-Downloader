@@ -136,9 +136,10 @@ class DatabaseManager:
     def check_exists(self, file_hash):
         if not getattr(self, 'enabled', True):
             return False
-        cursor = self.conn.cursor()
-        cursor.execute('SELECT 1 FROM Images WHERE hash = ?', (file_hash,))
-        return cursor.fetchone() is not None
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT 1 FROM Images WHERE hash = ?', (file_hash,))
+            return cursor.fetchone() is not None
 
     def record_download(self, file_path, file_name, file_hash=None, tags_list=None, phash=None):
         if not getattr(self, 'enabled', True):
@@ -224,9 +225,10 @@ class DatabaseManager:
     def check_manga_exists(self, gallery_id):
         if not getattr(self, 'enabled', True):
             return False
-        cursor = self.conn.cursor()
-        cursor.execute('SELECT 1 FROM MangaGalleries WHERE gallery_id = ?', (gallery_id,))
-        return cursor.fetchone() is not None
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT 1 FROM MangaGalleries WHERE gallery_id = ?', (gallery_id,))
+            return cursor.fetchone() is not None
 
     def record_manga_download(self, gallery_id, site, title, folder_path, artist=None, tags_list=None):
         if not getattr(self, 'enabled', True):

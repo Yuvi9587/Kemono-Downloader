@@ -89,6 +89,11 @@ def main():
         except Exception:
             pass  # Non-Windows platforms silently skip this.
 
+        # The app enforces Fusion below; drop any inherited QT_STYLE_OVERRIDE
+        # (e.g. KDE's Darkly) so Qt doesn't warn about an unavailable style.
+        if "QT_STYLE_OVERRIDE" in os.environ:
+            del os.environ["QT_STYLE_OVERRIDE"]
+
         qt_app = QApplication(sys.argv)
         qt_app.setStyle("Fusion")
 

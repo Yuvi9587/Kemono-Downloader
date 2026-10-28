@@ -17,7 +17,7 @@ Kemono Downloader is a Python-based desktop tool built with PyQt5 that helps you
 - **Session Management:** Pause and resume downloads.
 - **Filtering:** Filter downloads by file type (images, videos, etc.), minimum file size, or specific keywords.
 - **Organization:** Automatically save files into folders organized by creator or post.
-- **Manga Mode:** Download and rename images chronologically for easier reading.
+- **Renaming Mode:** Download and rename images chronologically for easier reading.
 - **Export Links:** Extract direct file URLs into a text file instead of downloading them.
 
 ## Supported Sites
@@ -36,7 +36,7 @@ You will need Python 3.6 or newer installed on your system.
 
 ### 1. Install Dependencies
 ```bash
-pip install PyQt5 requests packaging cloudscraper bs4 pycryptodome
+pip install PyQt5 requests packaging cloudscraper bs4 pycryptodome curl_cffi
 ```
 Optional dependencies (for features like PDF generation and image compression):
 ```bash

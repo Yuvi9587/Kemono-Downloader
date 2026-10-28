@@ -435,6 +435,8 @@ class DownloaderApp (QWidget ):
         self.active_sync_log_dialog = None  # Set when AutoSyncDialog is open
         self.auto_sync_manager = AutoSyncManager(self)
         
+        from .job_queue_controller import JobQueueController
+        self.job_queue_controller = JobQueueController(self)
         self._connect_signals()
 
         if self.main_log_output: self.main_log_output.document().setMaximumBlockCount(10000)
@@ -472,183 +474,10 @@ class DownloaderApp (QWidget ):
             self.future_settings_button.setStyleSheet("background-color: rgba(0, 255, 0, 0.1); border-radius: 5px;")
             
     def add_current_settings_to_queue(self):
-        """
-        Takes the current URL and UI settings, packages them into a dictionary, 
-        and saves them as a JSON job file to be executed later in batch mode.
-        """
-        
-        def get_creator_specific_path(base_dir, folder_name):
-            if not folder_name: 
-                return base_dir
-            safe_name = clean_folder_name(folder_name)
-           
-            if base_dir.replace('\\', '/').rstrip('/').endswith(safe_name):
-                return base_dir
-            return os.path.join(base_dir, safe_name)
-        if self.favorite_download_queue:
-            count = 0
-            base_settings = self._get_current_ui_settings_as_dict()
-            items_to_process = list(self.favorite_download_queue)
-            
-            for item in items_to_process:
-                real_url = item.get('url')
-                name = item.get('name', 'Unknown')
-                
-                if not real_url: continue
-
-                job_settings = base_settings.copy()
-                job_settings['api_url'] = real_url 
-                
-                job_settings['output_dir'] = get_creator_specific_path(job_settings['output_dir'], name)
-
-                if self._save_single_job_file(job_settings, name_hint=name):
-                    count += 1
-            
-            if count > 0:
-                self.log_signal.emit(f"✅ Added {count} jobs to queue from selection.")
-                self.link_input.clear()
-                self.favorite_download_queue.clear()
-                QMessageBox.information(self, "Queue", f"{count} jobs successfully added to queue!")
-            else:
-                QMessageBox.warning(self, "Queue Error", "Failed to add selected items to queue.")
-            return
-
-   
-        url = self.link_input.text().strip()
-        if not url:
-            QMessageBox.warning(self, "Input Error", "Cannot add to queue: URL is empty.")
-            return
-
-        settings = self._get_current_ui_settings_as_dict()
-        settings['api_url'] = url 
-        
-       
-        service, user_id, post_id = extract_post_info(url)
-        name_hint = "Job"
-        
-        if service and user_id:
-            
-            cache_key = (service.lower(), str(user_id))
-            cached_name = self.creator_name_cache.get(cache_key)
-            
-            if cached_name:
-                
-                name_hint = cached_name
-                settings['output_dir'] = get_creator_specific_path(settings['output_dir'], cached_name)
-            else:
-                if post_id:
-                    folder_name = str(post_id)
-                else:
-                    folder_name = str(user_id)
-                
-                name_hint = folder_name
-                settings['output_dir'] = get_creator_specific_path(settings['output_dir'], folder_name)
-
-        if self._save_single_job_file(settings, name_hint=name_hint):
-            self.log_signal.emit(f"✅ Job added to queue: {url}")
-            self.link_input.clear()
-            QMessageBox.information(self, "Queue", "Job successfully added to queue!")
-
-    def _save_single_job_file(self, settings_dict, name_hint="job"):
-        """
-        Generates a unique filename and safely writes a job settings dictionary 
-        to the disk inside the 'appdata/jobs' folder.
-        """
-        timestamp = int(time.time())
-        unique_id = uuid.uuid4().hex[:6]
-        
-        safe_name = "".join(c for c in name_hint if c.isalnum() or c in (' ', '_', '-')).strip()
-        if not safe_name: 
-            safe_name = "job"
-        
-        filename = f"job_{timestamp}_{safe_name}_{unique_id}.json"
-        filepath = os.path.join(self.jobs_dir, filename)
-
-        try:
-            with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(settings_dict, f, indent=2)
-            return True
-        except Exception as e:
-            self.log_signal.emit(f"❌ Failed to save job file '{filename}': {e}")
-            return False
+        return self.job_queue_controller.add_current_settings_to_queue()
 
     def execute_job_queue(self):
-        """
-        Triggered by the 'Execute Queue' button. 
-        Locks the UI, scans the jobs folder for pending JSON files, and kicks off the processing loop.
-        """
-        job_files = sorted(glob.glob(os.path.join(self.jobs_dir, "job_*.json")))
-        
-        if not job_files:
-            QMessageBox.information(self, "Queue Empty", "No job files found in appdata/jobs.")
-            return
-
-      
-        self.permanently_failed_files_for_dialog.clear()
-        self._update_error_button_count()
-
-        self.log_signal.emit("=" * 40)
-        self.log_signal.emit(f"🚀 Starting execution of {len(job_files)} queued jobs.")
-        self.is_running_job_queue = True
-        self.download_btn.setEnabled(False)
-        self.add_queue_btn.setEnabled(False)
-        
-        self._process_next_queued_job()
-
-    def _process_next_queued_job(self):
-
-        """
-        Pops the oldest job file from the queue, loads its settings into the UI, 
-        and automatically clicks the 'Start Download' button for it.
-        """
-
-        if self.cancellation_event.is_set():
-            self.is_running_job_queue = False
-            self.log_signal.emit("🛑 Queue execution cancelled.")
-            self._update_button_states_and_connections()
-            return
-
-        job_files = sorted(glob.glob(os.path.join(self.jobs_dir, "job_*.json")))
-        
-        if not job_files:
-            self.is_running_job_queue = False
-            self.current_job_file = None
-            self.log_signal.emit("🏁 All queued jobs finished!")
-            self.link_input.clear()
-            QMessageBox.information(self, "Queue Finished", "All queued jobs have been processed.")
-            self._update_button_states_and_connections()
-            return
-
-        next_job_path = job_files[0]
-        self.current_job_file = next_job_path
-        
-        self.log_signal.emit(f"📂 Loading job: {os.path.basename(next_job_path)}")
-        
-        try:
-            with open(next_job_path, 'r', encoding='utf-8') as f:
-                settings = json.load(f)
-            
-            target_dir = settings.get('output_dir', '')
-            if target_dir:
-                try:
-                    os.makedirs(target_dir, exist_ok=True)
-                except Exception as e:
-                    self.log_signal.emit(f"⚠️ Warning: Could not pre-create directory '{target_dir}': {e}")
-
-            self._load_ui_from_settings_dict(settings)
-            QCoreApplication.processEvents()
-            
-            self.start_download()
-            
-        except Exception as e:
-            self.log_signal.emit(f"❌ Error loading/starting job '{next_job_path}': {e}")
-            failed_path = next_job_path + ".failed"
-            try:
-                os.rename(next_job_path, failed_path)
-            except OSError:
-                pass
-            # Fix: Use QTimer instead of direct recursion to prevent stack overflow on many bad jobs
-            QTimer.singleShot(100, self._process_next_queued_job)
+        return self.job_queue_controller.execute_job_queue()
 
     def _run_discord_file_download_thread(self, session, server_id, channel_id, token, output_dir, message_limit=None):
         """
@@ -1164,7 +993,7 @@ class DownloaderApp (QWidget ):
         if self.is_ready_to_download_fetched:
             num_posts = len(self.fetched_posts_for_download)
             self.download_btn.setText(f"Start Download ({num_posts} Posts)")
-            self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
+            self.download_btn.setIcon(QIcon(get_asset_path("assets/svg/download.svg")))
             self.download_btn.setEnabled(True)
             self.download_btn.clicked.connect(self.start_download)
             self.pause_btn.setEnabled(False)
@@ -1176,7 +1005,7 @@ class DownloaderApp (QWidget ):
         elif self.is_ready_to_download_batch_update:
             num_posts = len(self.fetched_posts_for_batch_update)
             self.download_btn.setText(f"Start Download ({num_posts} New Posts)")
-            self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
+            self.download_btn.setIcon(QIcon(get_asset_path("assets/svg/download.svg")))
             self.download_btn.setEnabled(True)
             self.download_btn.clicked.connect(self.start_download)
             self.pause_btn.setEnabled(False)
@@ -1188,13 +1017,13 @@ class DownloaderApp (QWidget ):
         if self.active_update_profile and self.new_posts_for_update and not is_download_active:
             num_new = len(self.new_posts_for_update)
             self.download_btn.setText(self._tr("start_download_new_button_text", f"Start Download ({num_new} new)"))
-            self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
+            self.download_btn.setIcon(QIcon(get_asset_path("assets/svg/download.svg")))
             self.download_btn.setEnabled(True)
             self.download_btn.clicked.connect(self.start_download)
             self.download_btn.setToolTip(self._tr("start_download_new_tooltip", "Click to download the new posts found."))
 
             self.pause_btn.setText(self._tr("pause_download_button_text", "Pause Download"))
-            self.pause_btn.setIcon(QIcon(get_asset_path("assets/Svg/pause.svg")))
+            self.pause_btn.setIcon(QIcon(get_asset_path("assets/svg/pause.svg")))
             self.pause_btn.setEnabled(False)
 
             self.cancel_btn.setText(self._tr("clear_selection_button_text", "Clear Selection"))
@@ -1209,7 +1038,7 @@ class DownloaderApp (QWidget ):
             self.download_btn.setToolTip(self._tr("check_for_updates_tooltip", "Click to check for new posts from this creator."))
 
             self.pause_btn.setText(self._tr("pause_download_button_text", "Pause Download"))
-            self.pause_btn.setIcon(QIcon(get_asset_path("assets/Svg/pause.svg")))
+            self.pause_btn.setIcon(QIcon(get_asset_path("assets/svg/pause.svg")))
             self.pause_btn.setEnabled(False)
 
             self.cancel_btn.setText(self._tr("clear_selection_button_text", "Clear Selection"))
@@ -1219,13 +1048,13 @@ class DownloaderApp (QWidget ):
 
         elif self.is_restore_pending:
             self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
-            self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
+            self.download_btn.setIcon(QIcon(get_asset_path("assets/svg/download.svg")))
             self.download_btn.setEnabled(True)
             self.download_btn.clicked.connect(self.start_download)
             self.download_btn.setToolTip(self._tr("start_download_discard_tooltip", "Click to start a new download, discarding the previous session."))
 
             self.pause_btn.setText(self._tr("restore_download_button_text", "Restore Download"))
-            self.pause_btn.setIcon(QIcon(get_asset_path("assets/Svg/resume.svg")))
+            self.pause_btn.setIcon(QIcon(get_asset_path("assets/svg/resume.svg")))
             self.pause_btn.setEnabled(True)
             self.pause_btn.clicked.connect(self.restore_download)
             self.pause_btn.setToolTip(self._tr("restore_download_button_tooltip", "Click to restore the interrupted download."))
@@ -1244,19 +1073,19 @@ class DownloaderApp (QWidget ):
                 if self.is_ready_to_download_fetched:
                     num_posts = len(self.fetched_posts_for_download)
                     self.download_btn.setText(f"Start Download ({num_posts} Posts)")
-                    self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
+                    self.download_btn.setIcon(QIcon(get_asset_path("assets/svg/download.svg")))
                     self.download_btn.setEnabled(True)
                 else:
                     if hasattr(self, 'is_running_job_queue') and self.is_running_job_queue:
                          self.download_btn.setText("🔄 Processing Queue...")
                     else:
                          self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
-                         self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
+                         self.download_btn.setIcon(QIcon(get_asset_path("assets/svg/download.svg")))
                     
                     self.download_btn.setEnabled(False)
                 
                 self.pause_btn.setText(self._tr("resume_download_button_text", "Resume Download") if self.is_paused else self._tr("pause_download_button_text", "Pause Download"))
-                self.pause_btn.setIcon(QIcon(get_asset_path("assets/Svg/resume.svg")) if self.is_paused else QIcon(get_asset_path("assets/Svg/pause.svg")))
+                self.pause_btn.setIcon(QIcon(get_asset_path("assets/svg/resume.svg")) if self.is_paused else QIcon(get_asset_path("assets/svg/pause.svg")))
                 self.pause_btn.setEnabled(True)
                 self.pause_btn.clicked.connect(self._handle_pause_resume_action)
 
@@ -1267,7 +1096,7 @@ class DownloaderApp (QWidget ):
         else:
             if is_queue_command:
                 self.download_btn.setText("Execute Queue")
-                self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/resume.svg")))
+                self.download_btn.setIcon(QIcon(get_asset_path("assets/svg/resume.svg")))
                 self.download_btn.setEnabled(True)
                 if hasattr(self, 'execute_job_queue'):
                     self.download_btn.clicked.connect(self.execute_job_queue)
@@ -1279,13 +1108,13 @@ class DownloaderApp (QWidget ):
                     self.download_btn.setText("📄 Fetch Pages")
                 else:
                     self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
-                    self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
+                    self.download_btn.setIcon(QIcon(get_asset_path("assets/svg/download.svg")))
                 
                 self.download_btn.setEnabled(True)
                 self.download_btn.clicked.connect(self.start_download)
 
             self.pause_btn.setText(self._tr("pause_download_button_text", "Pause Download"))
-            self.pause_btn.setIcon(QIcon(get_asset_path("assets/Svg/pause.svg")))
+            self.pause_btn.setIcon(QIcon(get_asset_path("assets/svg/pause.svg")))
             self.pause_btn.setEnabled(False)
             self.cancel_btn.setText(self._tr("cancel_button_text", "Cancel & Reset UI"))
             self.cancel_btn.setEnabled(False)
@@ -1361,7 +1190,7 @@ class DownloaderApp (QWidget ):
         
         self.set_ui_enabled(False)
         self.download_btn.setText("Downloading...")
-        self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
+        self.download_btn.setIcon(QIcon(get_asset_path("assets/svg/download.svg")))
         self.download_btn.setEnabled(False)
         self.pause_btn.setEnabled(True)
         self.cancel_btn.setEnabled(True)
@@ -1425,11 +1254,11 @@ class DownloaderApp (QWidget ):
         if self .url_label_widget :
             self .url_label_widget .setText (self ._tr ("creator_post_url_label","URL:"))
         if self .download_location_label_widget :
-            self .download_location_label_widget .setText (self ._tr ("download_location_label",f"<img src='{get_asset_html_path('assets/Svg/folder.svg')}' width='13' height='13' align='top'> Download Location:"))
+            self .download_location_label_widget .setText (self ._tr ("download_location_label",f"<img src='{get_asset_html_path('assets/svg/folder.svg')}' width='13' height='13' align='top'> Download Location:"))
         if hasattr (self ,'character_label')and self .character_label :
-            self .character_label .setText (self ._tr ("filter_by_character_label",f"<img src='{get_asset_html_path('assets/Svg/target.svg')}' width='13' height='13' align='top'> Filter by Character(s) (comma-separated):"))
+            self .character_label .setText (self ._tr ("filter_by_character_label",f"<img src='{get_asset_html_path('assets/svg/target.svg')}' width='13' height='13' align='top'> Filter by Character(s) (comma-separated):"))
         if self .skip_words_label_widget :
-            self .skip_words_label_widget .setText (self ._tr ("skip_with_words_label",f"<img src='{get_asset_html_path('assets/Svg/block.svg')}' width='13' height='13' align='top'> Skip with Words (comma-separated):"))
+            self .skip_words_label_widget .setText (self ._tr ("skip_with_words_label",f"<img src='{get_asset_html_path('assets/svg/block.svg')}' width='13' height='13' align='top'> Skip with Words (comma-separated):"))
         if self .remove_from_filename_label_widget :
             self .remove_from_filename_label_widget .setText (self ._tr ("remove_words_from_name_label","✂️ Remove Words from name:"))
         if hasattr (self ,'radio_all'):self .radio_all .setText (self ._tr ("filter_all_radio","All"))
@@ -1466,7 +1295,7 @@ class DownloaderApp (QWidget ):
         current_download_is_active =self ._is_download_active ()if hasattr (self ,'_is_download_active')else False 
         self .set_ui_enabled (not current_download_is_active )
 
-        if hasattr (self ,'known_chars_label'):self .known_chars_label .setText (self ._tr ("known_chars_label_text",f"<img src='{get_asset_html_path('assets/Svg/mask.svg')}' width='13' height='13' align='top'> Known Shows/Characters (for Folder Names):"))
+        if hasattr (self ,'known_chars_label'):self .known_chars_label .setText (self ._tr ("known_chars_label_text",f"<img src='{get_asset_html_path('assets/svg/mask.svg')}' width='13' height='13' align='top'> Known Shows/Characters (for Folder Names):"))
         if hasattr (self ,'open_known_txt_button'):self .open_known_txt_button .setText (self ._tr ("open_known_txt_button_text","Open Known.txt"));self .open_known_txt_button .setToolTip (self ._tr ("open_known_txt_button_tooltip","Open the 'Known.txt' file..."))
         if hasattr (self ,'add_char_button'):self .add_char_button .setText (self ._tr ("add_char_button_text","Add"));self .add_char_button .setToolTip (self ._tr ("add_char_button_tooltip","Add the name from the input field..."))
         if hasattr (self ,'add_to_filter_button'):self .add_to_filter_button .setText (self ._tr ("add_to_filter_button_text","Add to Filter"));self .add_to_filter_button .setToolTip (self ._tr ("add_to_filter_button_tooltip","Select names from 'Known Shows/Characters' list..."))
@@ -1476,7 +1305,7 @@ class DownloaderApp (QWidget ):
 
         if hasattr (self ,'cancel_btn'):self .cancel_btn .setToolTip (self ._tr ("cancel_button_tooltip","Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory)."))
         if hasattr (self ,'error_btn'):self .error_btn .setText (self ._tr ("error_button_text","Error"));self .error_btn .setToolTip (self ._tr ("error_button_tooltip","View files skipped due to errors and optionally retry them."))
-        if hasattr (self ,'progress_log_label'):self .progress_log_label .setText (self ._tr ("progress_log_label_text",f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
+        if hasattr (self ,'progress_log_label'):self .progress_log_label .setText (self ._tr ("progress_log_label_text",f"<img src='{get_asset_html_path('assets/svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
         if hasattr (self ,'reset_button'):self .reset_button .setText (self ._tr ("reset_button_text","🔄 Reset"));self .reset_button .setToolTip (self ._tr ("reset_button_tooltip","Reset all inputs and logs to default state (only when idle)."))
         self ._update_multipart_toggle_button_text ()
         if hasattr (self ,'progress_label')and not self ._is_download_active ():self .progress_label .setText (self ._tr ("progress_idle_text","Progress: Idle"))
@@ -1492,7 +1321,7 @@ class DownloaderApp (QWidget ):
             self .end_page_input .setPlaceholderText (self ._tr ("end_page_input_placeholder","End"))
             self .end_page_input .setToolTip (self ._tr ("end_page_input_tooltip","For creator URLs: Specify the ending page number..."))
         if hasattr (self ,'fav_mode_active_label'):
-            self .fav_mode_active_label .setText (self ._tr ("fav_mode_active_label_text",f"<img src='{get_asset_html_path('assets/Svg/star.svg')}' width='13' height='13' align='top'> Favorite Mode is active..."))
+            self .fav_mode_active_label .setText (self ._tr ("fav_mode_active_label_text",f"<img src='{get_asset_html_path('assets/svg/star.svg')}' width='13' height='13' align='top'> Favorite Mode is active..."))
         if hasattr (self ,'cookie_browse_button'):
             self .cookie_browse_button .setToolTip (self ._tr ("cookie_browse_button_tooltip","Browse for a cookie file..."))
         if hasattr(self, 'rule34_settings_btn'):
@@ -2483,7 +2312,7 @@ class DownloaderApp (QWidget ):
 
     def _load_persistent_history (self ):
         """Loads download history from a persistent file."""
-        self .log_signal .emit (f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Attempting to load history from: {self .persistent_history_file }")
+        self .log_signal .emit (f"<img src='{get_asset_html_path('assets/svg/scroll.svg')}' width='13' height='13' align='top'> Attempting to load history from: {self .persistent_history_file }")
         if os .path .exists (self .persistent_history_file ):
             try :
                 with open (self .persistent_history_file ,'r',encoding ='utf-8')as f :
@@ -2520,7 +2349,7 @@ class DownloaderApp (QWidget ):
 
     def _save_persistent_history(self):
         """Saves download history to a persistent file."""
-        self.log_signal.emit(f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Attempting to save history to: {self.persistent_history_file}")
+        self.log_signal.emit(f"<img src='{get_asset_html_path('assets/svg/scroll.svg')}' width='13' height='13' align='top'> Attempting to save history to: {self.persistent_history_file}")
         try:
             history_dir = os.path.dirname(self.persistent_history_file)
             self.log_signal.emit(f"   History directory: {history_dir}")
@@ -2591,15 +2420,6 @@ class DownloaderApp (QWidget ):
         dialog = DownloadHistoryDialog(last_3_downloaded, first_processed, self)
         dialog .exec_ ()
 
-    def _handle_actual_file_downloaded (self ,file_details_dict ):
-        """Handles a successfully downloaded file for the 'last 3 downloaded' history."""
-        if not file_details_dict :
-            return 
-        file_details_dict ['download_timestamp']=time .time ()
-        creator_key =(file_details_dict .get ('service','').lower (),str (file_details_dict .get ('user_id','')))
-        file_details_dict ['creator_display_name']=self .creator_name_cache .get (creator_key ,file_details_dict .get ('folder_context_name','Unknown Creator/Series'))
-        self .last_downloaded_files_details .append (file_details_dict )
-
 
     def _handle_file_successfully_downloaded (self ,history_entry_dict ):
         """Handles a successfully downloaded file for history logging."""
@@ -2626,18 +2446,6 @@ class DownloaderApp (QWidget ):
         self .last_downloaded_files_details .append (file_details_dict )
 
 
-    def _handle_favorite_mode_toggle (self ,checked ):
-        """
-        Swaps the main UI layout. Hides the standard URL input bar and replaces it 
-        with the 'Favorite Artists' and 'Favorite Posts' buttons.
-        """
-        if not self .url_or_placeholder_stack or not self .bottom_action_buttons_stack :
-            return 
-
-            self ._handle_favorite_mode_toggle (self .favorite_mode_checkbox .isChecked ())
-        self ._update_favorite_scope_button_text ()
-        if hasattr (self ,'link_input'):
-            self .last_link_input_text_for_queue_sync =self .link_input .text ()
 
     def _update_download_extracted_links_button_state (self ):
         if hasattr (self ,'download_extracted_links_button')and self .download_extracted_links_button :
@@ -3149,67 +2957,6 @@ class DownloaderApp (QWidget ):
 
         QTimer .singleShot (0 ,lambda data =link_data :self ._display_and_schedule_next (data ))
 
-    def _display_and_schedule_next(self, link_data):
-        """
-        Pops a single extracted link from the queue, formats it nicely, prints it to the log, 
-        and then schedules the next link. Processing them one by one prevents UI freezing.
-        """
-        post_title, link_text, link_url, platform, decryption_key = link_data
-        is_only_links_mode = self.radio_only_links and self.radio_only_links.isChecked()
-
-        cleaned_link_text = link_text.strip()
-        display_text = ""
-        if cleaned_link_text and cleaned_link_text.lower() != platform.lower() and cleaned_link_text != link_url:
-            display_text = cleaned_link_text
-        else:
-            try:
-                path = urlparse(link_url).path
-                filename = os.path.basename(path)
-                if filename:
-                    display_text = filename
-            except Exception:
-                pass
-        if not display_text:
-            display_text = link_url
-
-        if len(display_text) > 50:
-            display_text = display_text[:50].strip() + "..."
-
-        platform_display = platform.capitalize()
-        plain_link_info_line = f"  {platform_display} - {link_url} - ({display_text})"
-        if decryption_key:
-            plain_link_info_line += f" (Decryption Key: {decryption_key})"
-
-        if is_only_links_mode:
-            if post_title != self._current_link_post_title:
-                if self._current_link_post_title is not None:
-                    separator_html = f'{HTML_PREFIX}<hr style="border: 1px solid #444;">'
-                    self.log_signal.emit(separator_html)
-
-                title_html = f'<p style="font-size: 11pt; color: #87CEEB; margin-top: 2px; margin-bottom: 2px;"><b>{html.escape(post_title)}</b></p>'
-                self.log_signal.emit(HTML_PREFIX + title_html)
-                self._current_link_post_title = post_title
-
-            self.main_log_output.append(plain_link_info_line)
-
-        elif self.show_external_links:
-            if self.external_log_output and self.external_log_output.isVisible():
-                if post_title != self._current_link_post_title:
-                    if self._current_link_post_title is not None:
-                        self.external_log_output.append("-" * 45)
-                    
-                    self.external_log_output.append(f"📌 {post_title}")
-                    self._current_link_post_title = post_title
-                
-                self.external_log_output.append(plain_link_info_line)
-                
-                scrollbar = self.external_log_output.verticalScrollBar()
-                if scrollbar.value() >= scrollbar.maximum() - 50:
-                    scrollbar.setValue(scrollbar.maximum())
-
-        self._is_processing_external_link_queue = False
-        self._try_process_next_external_link()
-
     def _append_to_external_log (self ,formatted_link_text ,separator ):
         if not (self .external_log_output and self .external_log_output .isVisible ()):
             return 
@@ -3408,10 +3155,10 @@ class DownloaderApp (QWidget ):
 
             if is_only_links:
                 self.download_btn.setText(self._tr("extract_links_button_text", "Extract Links"))
-                self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/link.svg")))
+                self.download_btn.setIcon(QIcon(get_asset_path("assets/svg/link.svg")))
             else:
                 self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
-                self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
+                self.download_btn.setIcon(QIcon(get_asset_path("assets/svg/download.svg")))
         if not is_only_links and self.link_search_input: self.link_search_input.clear()
 
         file_download_mode_active = not is_only_links
@@ -3438,9 +3185,9 @@ class DownloaderApp (QWidget ):
                 self.external_links_checkbox.setChecked(False)
 
         if is_only_links:
-            self.progress_log_label.setText(f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Extracted Links Log:")
+            self.progress_log_label.setText(f"<img src='{get_asset_html_path('assets/svg/scroll.svg')}' width='13' height='13' align='top'> Extracted Links Log:")
         else:
-            self.progress_log_label.setText(self._tr("progress_log_label_text", f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
+            self.progress_log_label.setText(self._tr("progress_log_label_text", f"<img src='{get_asset_html_path('assets/svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
         
         self.update_external_links_setting(self.external_links_checkbox.isChecked() if self.external_links_checkbox else False)
         
@@ -4272,7 +4019,7 @@ class DownloaderApp (QWidget ):
         
     def _handle_favorite_mode_toggle (self ,checked ):
         if not self .url_or_placeholder_stack or not self .bottom_action_buttons_stack :
-            return 
+            return
 
         self .url_or_placeholder_stack .setCurrentIndex (1 if checked else 0 )
         self .bottom_action_buttons_stack .setCurrentIndex (1 if checked else 0 )
@@ -4281,7 +4028,6 @@ class DownloaderApp (QWidget ):
             if self .link_input :
                 self .link_input .clear ()
                 self .link_input .setEnabled (False )
-
 
             self .update_custom_folder_visibility ()
             self .update_page_range_enabled_state ()
@@ -4728,7 +4474,7 @@ class DownloaderApp (QWidget ):
         elif not is_specialized:
             if hasattr(self, 'download_btn'):
                  self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
-                 self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
+                 self.download_btn.setIcon(QIcon(get_asset_path("assets/svg/download.svg")))
 
         # Apply SimpCity-specific overrides last to ensure they aren't undone by generic UI profiles
         if hasattr(self, 'use_cookie_checkbox'):
@@ -4743,7 +4489,7 @@ class DownloaderApp (QWidget ):
         if self.discord_download_scope == 'files':
             self.discord_scope_toggle_button.setText("Scope: Files")
             self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
-            self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
+            self.download_btn.setIcon(QIcon(get_asset_path("assets/svg/download.svg")))
         else:
              self.discord_scope_toggle_button.setText("Scope: Messages")
              self.download_btn.setText("📄 Save Messages as PDF")
@@ -5897,9 +5643,9 @@ class DownloaderApp (QWidget ):
         ]
 
         if service in ['bunkr', 'nhentai']:
-            self.progress_log_label.setText(f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:")
+            self.progress_log_label.setText(f"<img src='{get_asset_html_path('assets/svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:")
             self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
-            self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
+            self.download_btn.setIcon(QIcon(get_asset_path("assets/svg/download.svg")))
             
             for widget in widgets_to_manage:
                 if widget:
@@ -5931,7 +5677,7 @@ class DownloaderApp (QWidget ):
             self._update_discord_scope_button_text()
         else:
             self.download_btn.setText(self._tr("start_download_button_text", "Start Download"))
-            self.download_btn.setIcon(QIcon(get_asset_path("assets/Svg/download.svg")))
+            self.download_btn.setIcon(QIcon(get_asset_path("assets/svg/download.svg")))
 
         is_manga_checked = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
         is_subfolder_checked = self.use_subfolders_checkbox.isChecked() if self.use_subfolders_checkbox else False
@@ -6912,11 +6658,11 @@ class DownloaderApp (QWidget ):
             self .pause_btn .setEnabled (download_is_active_or_paused and not getattr(self, 'is_silent_background_sync', False))
             if download_is_active_or_paused :
                 self .pause_btn .setText (self ._tr ("resume_download_button_text","Resume Download")if self .is_paused else self ._tr ("pause_download_button_text","Pause Download"))
-                self.pause_btn.setIcon(QIcon(get_asset_path("assets/Svg/resume.svg")) if self.is_paused else QIcon(get_asset_path("assets/Svg/pause.svg")))
+                self.pause_btn.setIcon(QIcon(get_asset_path("assets/svg/resume.svg")) if self.is_paused else QIcon(get_asset_path("assets/svg/pause.svg")))
                 self .pause_btn .setToolTip (self ._tr ("resume_download_button_tooltip","Click to resume the download.")if self .is_paused else self ._tr ("pause_download_button_tooltip","Click to pause the download."))
             else :
                 self .pause_btn .setText (self ._tr ("pause_download_button_text","Pause Download"))
-                self.pause_btn.setIcon(QIcon(get_asset_path("assets/Svg/pause.svg")))
+                self.pause_btn.setIcon(QIcon(get_asset_path("assets/svg/pause.svg")))
                 self .pause_btn .setToolTip (self ._tr ("pause_download_button_tooltip","Click to pause the ongoing download process."))
                 self .is_paused =False 
         if self .cancel_btn :self .cancel_btn .setText (self ._tr ("cancel_button_text","❌ Cancel & Reset UI"))
@@ -7219,7 +6965,7 @@ class DownloaderApp (QWidget ):
                 self.finish_lock.release()
                 lock_held = False
                 
-                QTimer.singleShot(100, self._process_next_queued_job)
+                QTimer.singleShot(100, self.job_queue_controller._process_next_queued_job)
                 return
 
             if self.is_processing_favorites_queue:
@@ -7837,14 +7583,14 @@ class DownloaderApp (QWidget ):
             if self .log_verbosity_toggle_button :
                 self .log_verbosity_toggle_button .setIcon (QIcon (self .CLOSED_EYE_ICON_PATH ))
                 self .log_verbosity_toggle_button .setToolTip ("Current View: Missed Character Log. Click to switch to Progress Log.")
-            if self .progress_log_label :self .progress_log_label .setText (self ._tr ("missed_character_log_label_text",f"<img src='{get_asset_html_path('assets/Svg/block.svg')}' width='13' height='13' align='top'> Missed Character Log:"))
+            if self .progress_log_label :self .progress_log_label .setText (self ._tr ("missed_character_log_label_text",f"<img src='{get_asset_html_path('assets/svg/block.svg')}' width='13' height='13' align='top'> Missed Character Log:"))
         else :
             self .current_log_view ='progress'
             if self .log_view_stack :self .log_view_stack .setCurrentIndex (0 )
             if self .log_verbosity_toggle_button :
                 self .log_verbosity_toggle_button .setIcon (QIcon (self .EYE_ICON_PATH ))
                 self .log_verbosity_toggle_button .setToolTip ("Current View: Progress Log. Click to switch to Missed Character Log.")
-            if self .progress_log_label :self .progress_log_label .setText (self ._tr ("progress_log_label_text",f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
+            if self .progress_log_label :self .progress_log_label .setText (self ._tr ("progress_log_label_text",f"<img src='{get_asset_html_path('assets/svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
 
     def reset_application_state(self):
         """
@@ -7887,7 +7633,7 @@ class DownloaderApp (QWidget ):
         if self.log_view_stack:
             self.log_view_stack.setCurrentIndex(0)
         if self.progress_log_label:
-            self.progress_log_label.setText(self._tr("progress_log_label_text", f"<img src='{get_asset_html_path('assets/Svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
+            self.progress_log_label.setText(self._tr("progress_log_label_text", f"<img src='{get_asset_html_path('assets/svg/scroll.svg')}' width='13' height='13' align='top'> Progress Log:"))
         if self.log_verbosity_toggle_button:
             self.log_verbosity_toggle_button.setIcon(QIcon(self.EYE_ICON_PATH))
             self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
