@@ -523,7 +523,9 @@ class PostProcessorWorker:
             url_hash = os.path.basename(parsed_url_for_hash.path).split('.')[0]
             
             # 1. Check SQLite Database (Cross-session, persistent)
-            if getattr(self, 'platform_db', None) and url_hash:
+            # Only apply the DB skip check when using the default hash-deduplication mode.
+            # If the user has enabled "Keep Duplicates", we must not block downloads here.
+            if self.keep_duplicates_mode == DUPLICATE_HANDLING_HASH and getattr(self, 'platform_db', None) and url_hash:
                 if self.platform_db.is_file_downloaded(self.user_id, url_hash):
                     self.logger(f"   -> Skip (Database Match): File hash '{url_hash}' already recorded in database. Skipping download.")
                     return 0, 1, file_info.get('name'), False, FILE_DOWNLOAD_STATUS_SKIPPED, None

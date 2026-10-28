@@ -10,17 +10,6 @@ class DatabaseManager:
 
     def __init__(self):
         import sys 
-        try:
-            from ..config.constants import CONFIG_ORGANIZATION_NAME, CONFIG_APP_NAME_MAIN, CREATE_DATABASE_KEY
-            settings = QSettings(CONFIG_ORGANIZATION_NAME, CONFIG_APP_NAME_MAIN)
-            self.enabled = settings.value(CREATE_DATABASE_KEY, True, type=bool)
-        except ImportError:
-            self.enabled = True
-            
-        self.lock = DatabaseManager._shared_lock
-        if not self.enabled:
-            return
-            
         if getattr(sys, 'frozen', False):
             app_root = os.path.dirname(sys.executable)
         else:
@@ -28,7 +17,23 @@ class DatabaseManager:
             
         self.db_dir = os.path.join(app_root, "appdata")
         os.makedirs(self.db_dir, exist_ok=True)
-        
+
+        try:
+            from ..config.constants import CREATE_DATABASE_KEY
+            ini_path = os.path.join(self.db_dir, "config.ini")
+            if os.path.exists(ini_path):
+                settings = QSettings(ini_path, QSettings.IniFormat)
+            else:
+                from ..config.constants import CONFIG_ORGANIZATION_NAME, CONFIG_APP_NAME_MAIN
+                settings = QSettings(CONFIG_ORGANIZATION_NAME, CONFIG_APP_NAME_MAIN)
+            self.enabled = settings.value(CREATE_DATABASE_KEY, True, type=bool)
+        except Exception:
+            self.enabled = True
+            
+        self.lock = DatabaseManager._shared_lock
+        if not self.enabled:
+            return
+            
         self.db_path = os.path.join(self.db_dir, 'library.db')
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=20.0)
         with self.lock:

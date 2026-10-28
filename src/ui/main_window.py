@@ -1331,14 +1331,20 @@ class DownloaderApp (QWidget ):
         self.log_signal.emit("   Press the 'Start Download' button to begin Stage 2: Downloading files.")
         self.progress_label.setText(f"Found {len(self.fetched_posts_for_download)} posts. Ready to download.")
         
-        self._update_button_states_and_connections()
         self.set_ui_enabled(True)
+        self._update_button_states_and_connections()
 
     def _start_download_of_fetched_posts(self):
         """
         Initiates the download of the posts that were previously fetched.
         """
         self.is_ready_to_download_fetched = False
+        self.is_finishing = False
+        try:
+            self.finish_lock.release()
+        except RuntimeError:
+            pass
+
         self.log_signal.emit("=" * 40)
         self.log_signal.emit(f"🚀 Starting Stage 2: Downloading files for {len(self.fetched_posts_for_download)} fetched posts.")
         self.log_signal.emit("   💡 If you disconnected your VPN, downloads will now use your regular connection.")
@@ -1376,13 +1382,18 @@ class DownloaderApp (QWidget ):
         self.early_stop_event.clear()
         self.total_posts_to_process = len(self.fetched_posts_for_download)
         self.processed_posts_count = 0
+        self.download_counter = 0
+        self.skip_counter = 0
+        self.all_kept_original_filenames = []
+        self.active_futures = []
         self.overall_progress_signal.emit(self.total_posts_to_process, 0)
 
         ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:PostProcessorWorker.__init__.__code__.co_argcount]
+        num_file_dl_threads = args_template.get('num_file_threads_for_worker', 1)
 
         for post_data in self.fetched_posts_for_download:
             self._submit_post_to_worker_pool(
-                post_data, args_template, 1, self.worker_to_gui_queue, ppw_expected_keys, {}
+                post_data, args_template, num_file_dl_threads, self.worker_to_gui_queue, ppw_expected_keys, {}
             )
 
         self.fetched_posts_for_download = []
@@ -2775,6 +2786,7 @@ class DownloaderApp (QWidget ):
         
         dialog = FutureSettingsDialog(self)
         dialog.exec()
+        self._update_button_states_and_connections()
 
     def _show_rule34_settings_dialog(self):
         """Opens the dedicated settings dialog for Rule34 downloads."""

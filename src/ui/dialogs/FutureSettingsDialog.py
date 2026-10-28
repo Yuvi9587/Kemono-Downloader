@@ -527,22 +527,24 @@ class FutureSettingsDialog(QDialog):
         self.create_postid_checkbox.blockSignals(False)
 
     def _creator_json_setting_changed(self, state):
-        is_checked = state == Qt.CheckState.Checked
+        is_checked = self.save_creator_json_checkbox.isChecked()
         self.parent_app.settings.setValue(SAVE_CREATOR_JSON_KEY, is_checked)
         self.parent_app.settings.sync()
 
     def _fetch_first_setting_changed(self, state):
-        is_checked = state == Qt.CheckState.Checked
+        is_checked = self.fetch_first_checkbox.isChecked()
         self.parent_app.settings.setValue(FETCH_FIRST_KEY, is_checked)
         self.parent_app.settings.sync()
+        if hasattr(self.parent_app, '_update_button_states_and_connections'):
+            self.parent_app._update_button_states_and_connections()
 
     def _create_database_setting_changed(self, state):
-        is_checked = state == Qt.CheckState.Checked
+        is_checked = self.create_database_checkbox.isChecked()
         self.parent_app.settings.setValue(CREATE_DATABASE_KEY, is_checked)
         self.parent_app.settings.sync()
 
     def _create_postid_setting_changed(self, state):
-        is_checked = state == Qt.CheckState.Checked
+        is_checked = self.create_postid_checkbox.isChecked()
         self.parent_app.settings.setValue(CREATE_POSTID_KEY, is_checked)
         self.parent_app.settings.sync()
         if hasattr(self.parent_app, 'create_postid_files'):
