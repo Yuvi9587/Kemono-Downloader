@@ -69,6 +69,12 @@ class PlatformDatabaseManager:
                 
             self.conn.commit()
 
+    @staticmethod
+    def quote_identifier(name: str) -> str:
+        """Quotes a SQLite identifier safely using double quotes."""
+        escaped = str(name).replace('"', '""')
+        return f'"{escaped}"'
+
     def _sanitize_name(self, name):
         """
         Converts a creator's name into a safe SQLite table name.
@@ -86,6 +92,10 @@ class PlatformDatabaseManager:
         # Ensure it doesn't start with a number (SQLite restriction)
         if safe_name[0].isdigit():
             safe_name = f"c_{safe_name}"
+
+        # SQLite reserves the sqlite_ prefix for internal tables even when quoted
+        if safe_name.startswith("sqlite_"):
+            safe_name = f"c_{safe_name}"
             
         return safe_name
 
@@ -95,6 +105,7 @@ class PlatformDatabaseManager:
         Returns the sanitized table name to use for inserts.
         """
         sanitized_name = self._sanitize_name(original_creator_name)
+        quoted_sanitized_name = self.quote_identifier(sanitized_name)
         
         with self.db_lock:
             if creator_id and service:
@@ -110,9 +121,10 @@ class PlatformDatabaseManager:
                     sync_settings = row[2]
                     
                     if old_table_name != sanitized_name:
+                        quoted_old_table = self.quote_identifier(old_table_name)
                         # Create the new table if it doesn't exist so we can merge data into it
                         self.cursor.execute(f'''
-                            CREATE TABLE IF NOT EXISTS {sanitized_name} (
+                            CREATE TABLE IF NOT EXISTS {quoted_sanitized_name} (
                                 hash TEXT, phash TEXT, post_id TEXT, original_filename TEXT, 
                                 saved_filename TEXT, creator_id TEXT, saved_path TEXT
                             )
@@ -121,17 +133,17 @@ class PlatformDatabaseManager:
                         # Merge files from old table to new table (ignore duplicates)
                         try:
                             self.cursor.execute(f'''
-                                INSERT INTO {sanitized_name} (hash, phash, post_id, original_filename, saved_filename, creator_id, saved_path)
+                                INSERT INTO {quoted_sanitized_name} (hash, phash, post_id, original_filename, saved_filename, creator_id, saved_path)
                                 SELECT hash, phash, post_id, original_filename, saved_filename, creator_id, saved_path 
-                                FROM {old_table_name} 
-                                WHERE hash NOT IN (SELECT hash FROM {sanitized_name})
+                                FROM {quoted_old_table} 
+                                WHERE hash NOT IN (SELECT hash FROM {quoted_sanitized_name})
                             ''')
                         except sqlite3.OperationalError:
                             pass # old table might not have saved_path, or might not exist
                             
                         # Delete the old table
                         try:
-                            self.cursor.execute(f"DROP TABLE IF EXISTS {old_table_name}")
+                            self.cursor.execute(f"DROP TABLE IF EXISTS {quoted_old_table}")
                         except sqlite3.OperationalError:
                             pass
                             
@@ -170,7 +182,7 @@ class PlatformDatabaseManager:
 
             # Create creator-specific table if it doesn't exist
             self.cursor.execute(f'''
-                CREATE TABLE IF NOT EXISTS {sanitized_name} (
+                CREATE TABLE IF NOT EXISTS {quoted_sanitized_name} (
                     hash TEXT,
                     phash TEXT,
                     post_id TEXT,
@@ -183,7 +195,7 @@ class PlatformDatabaseManager:
             
             # Add saved_path to existing tables if missing (migration)
             try:
-                self.cursor.execute(f"ALTER TABLE {sanitized_name} ADD COLUMN saved_path TEXT")
+                self.cursor.execute(f"ALTER TABLE {quoted_sanitized_name} ADD COLUMN saved_path TEXT")
             except sqlite3.OperationalError:
                 pass # Column already exists
                 
@@ -195,10 +207,11 @@ class PlatformDatabaseManager:
         Records a successfully downloaded file into the creator's specific table.
         """
         sanitized_name = self.ensure_creator_table(creator_name, creator_id, service)
+        quoted_sanitized_name = self.quote_identifier(sanitized_name)
         
         with self.db_lock:
             self.cursor.execute(f'''
-                INSERT INTO {sanitized_name} 
+                INSERT INTO {quoted_sanitized_name} 
                 (hash, phash, post_id, original_filename, saved_filename, creator_id, saved_path)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             ''', (file_hash, phash, post_id, original_filename, saved_filename, creator_id, saved_path))
@@ -263,8 +276,9 @@ class PlatformDatabaseManager:
                 return False
                 
             table_name = row[0]
+            quoted_table = self.quote_identifier(table_name)
             try:
-                self.cursor.execute(f"SELECT 1 FROM {table_name} WHERE hash = ?", (file_hash,))
+                self.cursor.execute(f"SELECT 1 FROM {quoted_table} WHERE hash = ?", (file_hash,))
                 return bool(self.cursor.fetchone())
             except Exception:
                 return False
@@ -286,8 +300,9 @@ class PlatformDatabaseManager:
                 return False
 
             table_name = row[0]
+            quoted_table = self.quote_identifier(table_name)
             try:
-                self.cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+                self.cursor.execute(f"DROP TABLE IF EXISTS {quoted_table}")
             except Exception:
                 pass  # Table may already be gone
 
