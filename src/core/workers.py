@@ -1303,12 +1303,15 @@ class PostProcessorWorker:
                             pass
                     
                     if getattr(self, 'db', None):
-                        self.db.record_tagless_download(
-                            file_path=actual_final_path,
-                            file_name=final_filename_saved_for_return,
-                            file_hash=calculated_file_hash, 
-                            phash=calculated_phash
-                        )
+                        try:
+                            self.db.record_tagless_download(
+                                file_path=actual_final_path,
+                                file_name=final_filename_saved_for_return,
+                                file_hash=calculated_file_hash, 
+                                phash=calculated_phash
+                            )
+                        except Exception as db_err:
+                            self.logger(f"   ⚠️ Library DB record failed: {db_err}")
                         
                     if getattr(self, 'platform_db', None):
                         creator_name = None
@@ -1323,17 +1326,20 @@ class PostProcessorWorker:
                             _url_hash_for_db = os.path.basename(_parsed.path).split('.')[0]
                         except Exception:
                             _url_hash_for_db = calculated_file_hash
-                        self.platform_db.record_download(
-                            creator_name=creator_name,
-                            file_hash=_url_hash_for_db or calculated_file_hash,
-                            phash=calculated_phash,
-                            post_id=str(original_post_id_for_log),
-                            original_filename=api_original_filename,
-                            saved_filename=final_filename_saved_for_return,
-                            creator_id=str(self.user_id),
-                            service=getattr(self, 'service', None),
-                            saved_path=actual_final_path
-                        )
+                        try:
+                            self.platform_db.record_download(
+                                creator_name=creator_name,
+                                file_hash=_url_hash_for_db or calculated_file_hash,
+                                phash=calculated_phash,
+                                post_id=str(original_post_id_for_log),
+                                original_filename=api_original_filename,
+                                saved_filename=final_filename_saved_for_return,
+                                creator_id=str(self.user_id),
+                                service=getattr(self, 'service', None),
+                                saved_path=actual_final_path
+                            )
+                        except Exception as db_err:
+                            self.logger(f"   ⚠️ Platform DB record failed: {db_err}")
 
                 downloaded_file_details = {
                     'disk_filename': final_filename_saved_for_return,

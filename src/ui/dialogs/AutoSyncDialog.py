@@ -62,7 +62,8 @@ class RepairWorker(QThread):
                     
                     # We need to make sure the table has the saved_path column, otherwise skip or handle
                     try:
-                        db_manager.cursor.execute(f"SELECT hash, original_filename, saved_filename, saved_path FROM {table_name}")
+                        quoted_table = PlatformDatabaseManager.quote_identifier(table_name)
+                        db_manager.cursor.execute(f"SELECT hash, original_filename, saved_filename, saved_path FROM {quoted_table}")
                         rows = db_manager.cursor.fetchall()
                         for row in rows:
                             file_hash, orig_name, saved_name, saved_path = row
@@ -158,7 +159,8 @@ class RepairWorker(QThread):
                                     old_output_dir = candidate.get('old_output_dir')
                                     
                                     db_manager = PlatformDatabaseManager.get_instance(platform_name, self.appdata_dir)
-                                    db_manager.cursor.execute(f"UPDATE {table} SET saved_path = ? WHERE hash = ?", (full_path, file_hash))
+                                    quoted_table = PlatformDatabaseManager.quote_identifier(table)
+                                    db_manager.cursor.execute(f"UPDATE {quoted_table} SET saved_path = ? WHERE hash = ?", (full_path, file_hash))
                                     db_manager.conn.commit()
                                     
                                     # Deduce new base folder if we have a valid relative path
@@ -194,7 +196,8 @@ class RepairWorker(QThread):
                     file_hash = entry['hash']
                     
                     db_manager = PlatformDatabaseManager.get_instance(platform_name, self.appdata_dir)
-                    db_manager.cursor.execute(f"DELETE FROM {table} WHERE hash = ?", (file_hash,))
+                    quoted_table = PlatformDatabaseManager.quote_identifier(table)
+                    db_manager.cursor.execute(f"DELETE FROM {quoted_table} WHERE hash = ?", (file_hash,))
                     db_manager.conn.commit()
                     deleted_count += 1
                 except Exception as e:
